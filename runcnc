@@ -1,0 +1,150 @@
+#!/bin/bash
+
+# ---------------------------------------------------------------------------
+#  Intel Concurrent Collections for Haskell
+#  Copyright (c) 2010, Intel Corporation.
+# 
+#  This program is free software; you can redistribute it and/or modify it
+#  under the terms and conditions of the GNU Lesser General Public License,
+#  version 2.1, as published by the Free Software Foundation.
+# 
+#  This program is distributed in the hope it will be useful, but WITHOUT
+#  ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+#  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for
+#  more details.
+# 
+#  You should have received a copy of the GNU Lesser General Public License along with
+#  this program; if not, write to the Free Software Foundation, Inc., 
+#  51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
+# ---------------------------------------------------------------------------
+
+
+
+
+# This is a script used for running an CnC Haskell program.
+# It responds to a bunch of environment variables that choose configuration to use.
+
+# This script responds to a number of ENVIRONMENT VARIABLES:
+# --------------------------------------------------------------------------------
+#   NUMTHREADS     -- if this is "0" the program is compiled without threading
+
+#   CNC_VARIANT    -- which implementation?  "pure" or "io"
+#   CNC_SCHEDULER  -- which (numbered) scheduler, 1-N?
+#   FLAGS          -- flags for ghc
+#   GHC            -- command to call ghc compiler
+#   INTERACTIVE    -- set to non-empty value to call ghci instead of ghc
+# --------------------------------------------------------------------------------
+
+#source "$HASKELLCNC/default_opt_settings.sh"
+DEFAULT_SETTINGS_FILE=`dirname $0`/default_opt_settings.sh
+source $DEFAULT_SETTINGS_FILE
+# if [ -z ]
+
+
+FILE=$1
+BIN=`echo $1 | sed 's/\.hs//'`.exe
+shift
+
+if [ "$GHC" == "" ];  then 
+ GHC=ghc
+fi
+
+if [ "$INTERACTIVE" == "" ];
+then CMD="$GHC --make";
+else CMD=ghci
+fi
+
+# [2010.02.16] Strangely enabling -fglasgow-exts causes CncPure.hs to NOT compile correctly.  Parse error.
+#EXTENSIONS="-fglasgow-exts"
+# -feager-blackholing
+TEMPEXT="-XFlexibleContexts -XTypeSynonymInstances"
+EXTENSIONS=" -XExistentialQuantification -XScopedTypeVariables -XBangPatterns -XNamedFieldPuns -XRecordWildCards -XFlexibleInstances -XDeriveDataTypeable $TEMPEXT"
+# MagicHash 
+
+# If the user has not set $HASKELLCNC we try the current directory.
+if [ "$HASKELLCNC" == "" ];  then 
+if [ -e "./Intel/Cnc.hs" ]; then
+  echo ' *** WARNING: Guessing $HASKELLCNC is current directory.'
+  export HASKELLCNC=`pwd`
+else
+  echo "ERROR: Environment variable HASKELLCNC must be set to installation directory!"
+  exit 1
+fi
+fi
+
+# We need to include the install dir in the search path for GHC and
+# for the C preprocessor.
+FLAGS="$GHC_DEFAULT_FLAGS $EXTENSIONS -I""$HASKELLCNC -i""$HASKELLCNC"
+
+# This is an undocumented environment variable dependence -- NORUN
+# disables execution and causes this script to compile-only.
+if [ "$NORUN" == "" ]; then  
+  EXTRAGHCARGS=
+else
+  # In NORUN mode extra arguments are meant for GHC, not the final application.
+  EXTRAGHCARGS=$*
+fi
+
+# && [ "$NUMTHREADS" != "" ];
+if [ "$NUMTHREADS" != "0" ]   
+then 
+  FLAGS="$FLAGS -threaded"
+  EXTRA_RUN_ARGS=" +RTS $GHC_DEFAULT_RTS -N$NUMTHREADS -RTS"
+else
+  # This is annoying, the thread-related flags must be removed from
+  # the defaults if we're not in threaded mode:
+  FILTERED_RTS=`echo $GHC_DEFAULT_RTS | sed 's/-qa//'` 
+  EXTRA_RUN_ARGS=" +RTS $FILTERED_RTS -RTS "
+fi
+
+# CnC implementation variant.  Translate string setting to numeric one.
+if   [ "$CNC_VARIANT" == "pure" ]; then 
+ echo "Using CNC_VARIANT='pure'"
+ FLAGS="$FLAGS -DCNC_VARIANT=1"
+elif [ "$CNC_VARIANT" == "io" ] || [ "$CNC_VARIANT" == "normal" ] ; then
+ echo "Using CNC_VARIANT='io'"
+ FLAGS="$FLAGS -DCNC_VARIANT=2"
+
+elif [ "$CNC_VARIANT" == "" ]; then
+ echo " *** "
+ echo " *** \$CNC_VARIANT unset (should be 'pure' or 'io')!"
+ echo " ***   Defaulting to 'io'..."
+ echo " *** "
+ CNC_VARIANT="io"
+ FLAGS="$FLAGS -DCNC_VARIANT=2" 
+
+elif [ "$CNC_VARIANT" == "separatemodule_io" ]; then
+ FLAGS="$FLAGS -DCNC_VARIANT=0" 
+
+else 
+  echo "ERROR: unknown CNC_VARIANT: $CNC_VARIANT"
+  exit 2
+fi
+
+# Scheduler:
+if [ "$CNC_SCHEDULER" == "" ];
+then 
+   if [ "$CNC_VARIANT" == "pure" ]; then
+     FLAGS="$FLAGS -DCNC_SCHEDULER=2"
+     echo " *** WARNING - defaulting CNC_SCHEDULER to '2' (pure)"
+   else
+     FLAGS="$FLAGS -DCNC_SCHEDULER=6"
+     echo " *** WARNING - defaulting CNC_SCHEDULER to '6' (io)"
+   fi
+else FLAGS="$FLAGS -DCNC_SCHEDULER=$CNC_SCHEDULER"
+fi
+
+echo "  [Compiling $FILE to $BIN, $CNC_VARIANT $CNC_SCHEDULER ]"
+echo $CMD $FLAGS -cpp  "$FILE" -o "$BIN" -fforce-recomp $EXTRAGHCARGS
+if   $CMD $FLAGS -cpp  "$FILE" -o "$BIN" -fforce-recomp $EXTRAGHCARGS
+  #if ghc  -cpp -O2 $FILE -o 
+  then 
+    if [ "$NORUN" == "" ]; then  
+      echo; echo "  [Executing: time ./$BIN $* $EXTRA_RUN_ARGS;]"
+      echo "----------------------------------------"
+      exec time ./$BIN $* $EXTRA_RUN_ARGS; 
+      #  exec time memprof ./$BIN $* 
+  fi
+  else exit 33
+fi
+

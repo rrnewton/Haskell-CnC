@@ -1,0 +1,12 @@
+Name:           haskell-cnc
+Version:        0.1
+License-file:   LICENSE
+Author:			Ryan Newton <rrnewton@gmail.com>
+Maintainer:		Ryan Newton <rrnewton@gmail.com>
+
+
+-- Needed for the scaling.hs plotting script:
+--   HSH, gnuplot
+library
+  build-depends:  base, judy
+  exposed-modules:  Intel.Cnc Intel.CncUtil Intel.CncPure
