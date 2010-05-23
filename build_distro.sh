@@ -2,7 +2,7 @@
 
 EXAMPLES="hello_world.hs mandel.hs primes.hs primes2.hs sched_tree.hs threadring_onestep.hs threadring.hs embarrassingly_par.hs fib.hs nbody.hs"
 
-OTHER="Intel/Cnc.hs Intel/CncPure.hs Intel/CncUtil.hs  haskell_cnc.h lgpl-license-2.1.txt  README.txt Makefile install_environment_vars.sh default_opt_settings.sh ntimes ntimes_minmedmax runcnc run_all_tests.sh timeout scaling.hs"
+OTHER="Intel/Cnc.hs Intel/CncPure.hs Intel/CncUtil.hs  haskell_cnc.h LICENSE  README.txt Makefile install_environment_vars.sh default_opt_settings.sh ntimes ntimes_minmedmax runcnc run_all_tests.sh timeout scaling.hs Setup.hs haskell-cnc.cabal"
 
 DATE=`date +"%Y.%m.%d"`
 DISTRO="./distro_$DATE"

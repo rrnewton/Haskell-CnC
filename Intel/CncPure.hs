@@ -86,6 +86,12 @@ memoize = False
 #endif
 
 
+#ifndef CNC_SCHEDULER
+#warning  "Cnc.hs -- CNC_SCHEDULER unset, defaulting to scheduler 2 "
+#define CNC_SCHEDULER 2
+#endif
+
+
 #if CNC_SCHEDULER == 1
 scheduler = simpleScheduler
 #elif CNC_SCHEDULER == 2
@@ -662,7 +668,7 @@ distScheduler graph inittags world =
 		     in	threadloop world (mirrorWorld world) 
 		                   (thirds ch) (thirds myinbound) [] tags)
 		$ zip chans
-		-- $ zip (List.groupBy (\ (a,b,_) (x,_) -> a==x) chans)
+		--  zip (List.groupBy (\ (a,b,_) (x,_) -> a==x) chans)
 		$ splitN _NUMTHREADS inittags
        -- Finally, return the quiescent world:
        --readIORef global_world

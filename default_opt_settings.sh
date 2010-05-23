@@ -6,7 +6,8 @@
 
 # -fvia-C
 #GHC_DEFAULT_FLAGS=" -fasm -O2"
-GHC_DEFAULT_FLAGS=" -rtsopts -O2"
+#GHC_DEFAULT_FLAGS=" -rtsopts -O2"
+GHC_DEFAULT_FLAGS=" -O2"
 
  # Affinity is pretty much always good.
 GHC_DEFAULT_RTS="  -qa " 

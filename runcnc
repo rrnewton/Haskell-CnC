@@ -123,14 +123,16 @@ fi
 
 # Scheduler:
 if [ "$CNC_SCHEDULER" == "" ];
-then 
-   if [ "$CNC_VARIANT" == "pure" ]; then
-     FLAGS="$FLAGS -DCNC_SCHEDULER=2"
-     echo " *** WARNING - defaulting CNC_SCHEDULER to '2' (pure)"
-   else
-     FLAGS="$FLAGS -DCNC_SCHEDULER=6"
-     echo " *** WARNING - defaulting CNC_SCHEDULER to '6' (io)"
-   fi
+then echo
+# [2010.05.19] For cabal builds its easier if the default is set in the code itself.
+#
+   # if [ "$CNC_VARIANT" == "pure" ]; then
+   #   FLAGS="$FLAGS -DCNC_SCHEDULER=2"
+   #   echo " *** WARNING - defaulting CNC_SCHEDULER to '2' (pure)"
+   # else
+   #   FLAGS="$FLAGS -DCNC_SCHEDULER=6"
+   #   echo " *** WARNING - defaulting CNC_SCHEDULER to '6' (io)"
+   # fi
 else FLAGS="$FLAGS -DCNC_SCHEDULER=$CNC_SCHEDULER"
 fi
 

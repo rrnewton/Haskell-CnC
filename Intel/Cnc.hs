@@ -47,9 +47,23 @@
 -- probability of duplicating stolen work.
 -- #define REPEAT_PUT_ALLOWED
 
+{-|
+  This module implements the Intel Concurrent Collections (CnC) programming model.
 
+  Note that the module @Intel.CncPure@ is an alternative implementation that exposes the same interface as this module.
+ -}
 #ifndef INCLUDEMETHOD
-module Intel.Cnc where
+module Intel.Cnc (
+
+                  -- | The @GraphCode@ and @StepCode@ monads represent
+                  -- | computations for constructing CnC graphs and
+                  -- | which execute inside CnC graphs, respectively.
+		  Step, 
+		  -- StepCode(..), GraphCode,
+		  newItemCol, newTagCol, prescribe, 
+		  putt, put, get
+		 )
+where
 #else
 #warning "Loading imperative, IO-based CnC implementation."
 #endif
@@ -78,7 +92,8 @@ import GHC.Exts
 import Intel.CncUtil as GM
 
 import Data.Typeable
-import Control.Exception
+--import Control.Exception
+import Control.Exception.Extensible
 
 ------------------------------------------------------------
 -- Configuration Toggles:
@@ -136,7 +151,8 @@ assureMvar col tag =
 mmToList col = 
     do map <- readIORef col 
        return (GM.toList map)
-#define ITEMPREREQS (Ord tag, Eq tag, GMapKey tag, Show tag)
+-- #define ITEMPREREQS (Ord tag, Eq tag, GMapKey tag, Show tag)
+#define ITEMPREREQS (GMapKey tag)
 
 #else
 -- A Data.Map based version:
@@ -188,17 +204,23 @@ type GraphCode = IO
 
 -- Basically just a table for memoization:
 
+-- |Attach a computation step to a feed of control tags.  This adds a new node in the computation graph.
 prescribe   :: TagCol tag -> Step tag -> GraphCode ()
 
-putt :: Ord a           => TagCol  a   -> a           -> StepCode ()
-put  :: ITEMPREREQS     => ItemCol tag b -> tag -> b  -> StepCode ()
-get  :: ITEMPREREQS     => ItemCol tag b -> tag       -> StepCode b
+-- |Put-Tag.  Push a control tag out into the computation graph.
+putt :: Ord tag         => TagCol  tag     -> tag         -> StepCode ()
+-- |Put an item.  Subsequently, any steps waiting on the item may subsequently execute.
+put  :: ITEMPREREQS     => ItemCol tag val -> tag -> val  -> StepCode ()
+-- |Get an item.  Synchronous read-data operation.
+get  :: ITEMPREREQS     => ItemCol tag val -> tag         -> StepCode val
 
 initialize :: StepCode a -> GraphCode a
 finalize   :: StepCode a -> GraphCode a
 
+-- |Construct a new tag collection.
 newTagCol  :: GraphCode (TagCol tag)
-newItemCol :: ITEMPREREQS => GraphCode (ItemCol tag b)
+-- |Construct a new item collection.
+newItemCol :: ITEMPREREQS => GraphCode (ItemCol tag val)
 
 
 class Hashable a where
@@ -609,6 +631,7 @@ type WaitingSteps = [StepCode8 ()]
 
 data EscapeStep = EscapeStep  deriving (Show, Typeable)
 instance Exception EscapeStep
+--instance GHC.Exception.Exception EscapeStep
 
 --------------------------------------------------------------------------------
 -- Misc utility functions used by the version 8 API functions:
@@ -826,7 +849,13 @@ itemsToList8 (ItemCol8 icol) =
 -- Pick an implementation:
 -- (This has grown more complex with differences in the types used between schedulers.)
 
-cncVariant="io/" ++ show CNC_SCHEDULER
+#ifndef CNC_SCHEDULER
+#warning  "Cnc.hs -- CNC_SCHEDULER unset, defaulting to scheduler 6 "
+#define CNC_SCHEDULER 6
+#endif
+
+cncVariant :: String
+cncVariant="io/" ++ show (CNC_SCHEDULER :: Int)
 
 #if CNC_SCHEDULER == 3
 get=get3; putt=putt3; finalize=finalize3; quiescence_support=False; 
@@ -841,11 +870,15 @@ get=get8; putt=putt8; finalize=finalize8; quiescence_support=True ;
 #error "Cnc.hs -- CNC_SCHEDULER is not set to a support scheduler: {3,4,5,6,8}"
 #endif
 
+itemsToList :: ITEMPREREQS => ItemCol0 tag b -> GraphCode [(tag,b)]
+
+-- |A monad representing the computations performed by nodes in the CnC
+-- |graph.  This includes putting out tags and items that will be
+-- |consumed by other steps.
 #if CNC_SCHEDULER == 8
 type StepCode a   = StepCode8 a
 type TagCol   a   = TagCol8   a 
 type ItemCol  a b = ItemCol8  a b
-type Step     a   = Step8 a
 newItemCol = newItemCol8
 newTagCol  = newTagCol8
 put = put8 
@@ -856,7 +889,6 @@ stepUnsafeIO io = S.lift$ io
 type StepCode a   = StepCode0 a
 type TagCol   a   = TagCol0   a 
 type ItemCol  a b = ItemCol0  a b
-type Step     a   = Step0 a
 newItemCol = newItemCol0
 newTagCol  = newTagCol0
 put = put0
@@ -865,8 +897,15 @@ itemsToList x = itemsToList0 x
 stepUnsafeIO io = io
 #endif
 
+-- |Steps are functions that take a single 'tag' as input and perform
+-- |a computation in the "StepCode" monad, which may perform "put"s and "get"s.
+type Step     a   = a -> StepCode ()
+
 cncUnsafeIO io = io
+
+stepPutStr :: String -> StepCode ()
 stepPutStr str = stepUnsafeIO (putStr str)
+cncPutStr :: String -> GraphCode ()
 cncPutStr  str = cncUnsafeIO  (putStr str)
 
 

@@ -39,7 +39,7 @@
 # Settings:
 # ----------------------------------------
 
-export GHC=ghc-6.13.20100511 
+#export GHC=ghc-6.13.20100511 
 #export GHC=~/bin/Linux-i686/bin/ghc-6.13.20100511
 
   # Which subset of schedures should we test:

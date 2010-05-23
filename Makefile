@@ -29,6 +29,11 @@ wc:
 	cloc --by-file $(FILES)
 	wc $(FILES)
 
+
+doc: 
+	mkdir html_doc
+	haddock -o html_doc -html --optghc -cpp Intel/Cnc.hs Intel/CncUtil.hs
+
 clean:
 	rm -f Intel/*.o Intel/*.hi Intel/*~ 
 	(cd examples; $(MAKE) clean)

@@ -1,12 +1,59 @@
 Name:           haskell-cnc
 Version:        0.1
+License: LGPL
 License-file:   LICENSE
+Stability: Beta
 Author:			Ryan Newton <rrnewton@gmail.com>
 Maintainer:		Ryan Newton <rrnewton@gmail.com>
+homepage: http://software.intel.com/en-us/articles/intel-concurrent-collections-for-cc/
+Copyright: Copyright (c) 2009-2010 Intel Corporation
+Synopsis: Library for parallel programming in the Intel Concurrent Collections paradigm.
+Description: Intel (Concurrent Collections) CnC is a data-flow like
+ deterministic parallel programming model, similar to
+ stream-processing but in which graph nodes share data in tables.
 
+Category: system
+Cabal-Version: >=1.2.3
 
 -- Needed for the scaling.hs plotting script:
 --   HSH, gnuplot
+-- , judy>=0.2.2
+build-type: Simple
 library
-  build-depends:  base, judy
+  build-depends:  base, mtl, containers, time, random, array, ghc-prim, extensible-exceptions
   exposed-modules:  Intel.Cnc Intel.CncUtil Intel.CncPure
+  extensions: CPP
+  GHC-Options: -O2 -threaded 
+  data-files: examples examples/hello_world.hs examples/mandel.hs examples/primes.hs examples/primes2.hs examples/sched_tree.hs examples/threadring_onestep.hs examples/threadring.hs examples/embarrassingly_par.hs examples/fib.hs examples/nbody.hs
+
+-- -Wall 
+
+
+--extra-source-files: COPYING
+--Cabal-Version: >=1.2.3
+--Build-type: Simple
+
+-- flag buildtests
+--   description: Build the executable to run unit tests
+--   default: False
+
+-- Extensions: ExistentialQuantification, OverlappingInstances,
+--    UndecidableInstances, FlexibleContexts, CPP
+
+
+-- Executable runtests
+--   if flag(buildtests)
+--     Buildable: True
+--     Build-Depends: base >= 4 && < 5, process, mtl, regex-compat,
+--       MissingH>=1.0.0,
+--       hslogger, filepath, regex-base, regex-posix, directory,
+--       bytestring, HUnit, testpack
+--     if !os(windows)
+--       Build-Depends: unix
+--   else
+--     Buildable: False
+--   Main-Is: runtests.hs
+--   HS-Source-Dirs: testsrc, .
+--   Extensions: ExistentialQuantification, OverlappingInstances,
+--     UndecidableInstances, FlexibleContexts, CPP
+--   GHC-Options: -O2 -threaded

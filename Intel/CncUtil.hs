@@ -26,17 +26,20 @@
  -
  -}
 
-
+-- |An internal utility module that supports the CnC implementations.
 #ifndef INCLUDEMETHOD
-module Intel.CncUtil where
+module Intel.CncUtil (
+		      foldRange, for_, splitN, forkJoin, 
+		      doTrials, FitInWord (..), 
+		      GMapKey (..), 
+		      (!)
+		      )
+where
 #endif
 
 import GHC.Conc
 import Control.Concurrent
 import Data.Time.Clock -- Not in 6.10
---import System.CPUTime
-
-import qualified Data.Judy as J
 import qualified Data.Map as DM
 import qualified Data.IntMap as DI
 import qualified Data.List as L
@@ -49,22 +52,23 @@ import Data.IORef
 import Debug.Trace
 
 
--- Start = inclusive, End = uninclusive:
+-- |A simple loop construct to use if you don't trust rewrite based deforestation.
+-- Usage foldRange start end acc, where start is inclusive, end uninclusive.
 foldRange start end acc fn = loop start acc
  where
   loop !i !acc
     | i == end = acc
     | otherwise = loop (i+1) (fn acc i)
 
--- My own forM:
+
+-- |My own forM, again, less trusting of optimizations.
 -- Inclusive start, exclusive end.
 for_ start end fn = loop start 
  where 
   loop !i | i == end  = return ()
 	  | otherwise = do fn i; loop (i+1) 
 
-
--- Split a list into N pieces (not evenly sized if N does not divide
+-- |Split a list into N pieces (not evenly sized if N does not divide
 -- the length of the list).
 splitN n ls = loop n ls
   where 
@@ -73,10 +77,9 @@ splitN n ls = loop n ls
     loop n ls = hd : loop (n-1) tl
        where (hd,tl) = splitAt sz ls
 
-
--- I'm amazed this is not built-in.
--- We want to run IO threads in parallel and wait till they're done.
+-- |Run IO threads in parallel and wait till they're done.
 forkJoin actions = 
+-- I'm amazed this is not built-in.
     do joiner <- newChan 
        mapM (\a -> forkIO (do a; writeChan joiner ())) actions
        mapM_ (\_ -> readChan joiner)  actions
@@ -85,7 +88,7 @@ forkJoin actions =
 t = forkJoin [putStrLn "foo", putStrLn "bar", putStrLn "baz"]
 
 
-
+-- |Run a test and time it.
 doTrials trials mnd = 
   sequence_ $ take trials $ repeat $ 
     do putStrLn "------------------------------------------------------------"
@@ -100,6 +103,8 @@ doTrials trials mnd =
 
 --------------------------------------------------------------------------------
 
+-- |All datatypes that can be packed into a single word, including
+-- scalars and some tuple types.
 class FitInWord v where 
   toWord   :: v -> Word
   fromWord :: Word -> v
@@ -157,7 +162,10 @@ instance FitInWord (Word16,Word16) where
 -- ADT definition for generic Maps:
 --------------------------------------------------------------------------------
 
-class GMapKey k where
+-- |Class for generic map key types.  By using indexed type families,
+-- |each key type may correspond to a different data structure that
+-- |implements it.
+class (Ord k, Eq k, Show k) => GMapKey k where
   data GMap k :: * -> *
   empty       :: GMap k v
   lookup      :: k -> GMap k v -> Maybe v
@@ -352,6 +360,9 @@ class GMapKeyVal k v where
 --   lookup2 k   (GMapInt2 m) = DI.lookup (wordToInt $ toWord k) m
 --   insert2 k v (GMapInt2 m) = GMapInt2 (DI.insert (wordToInt $ toWord k) v m)
 
+
+-- [2010.05.19] TEMPTOGGLE uncommenting to compile on laptop:
+{-
 instance FitInWord t => J.JE t where
   toWord   = undefined
   fromWord = undefined
@@ -368,7 +379,7 @@ instance (FitInWord k, J.JE v) => GMapKeyVal k v where
   -- lookup2 k   (GMapInt2 r) = do m <- readIORef r
   -- 				return$ DI.lookup (wordToInt $ toWord k) m
   -- insert2 k v (GMapInt2 r) = modifyIORef r (DI.insert (wordToInt $ toWord k) v)
-
+-}
 
 
 
