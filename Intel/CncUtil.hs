@@ -267,6 +267,22 @@ instance GMapKey () where
   toList (GMapUnit Nothing) = []
   toList (GMapUnit (Just v)) = [((),v)]
 
+instance GMapKey Bool where
+  data GMap Bool v              = GMapBool (Maybe v) (Maybe v)
+  empty                       = GMapBool Nothing Nothing
+  lookup True  (GMapBool v _) = v
+  lookup False (GMapBool _ v) = v
+  insert True v  (GMapBool a b) = GMapBool (Just v) b
+  insert False v (GMapBool a b) = GMapBool a (Just v)
+  alter fn True  (GMapBool a b) = GMapBool (fn a) b
+  alter fn False (GMapBool a b) = GMapBool a (fn b)
+  toList (GMapBool Nothing Nothing)   = []
+  toList (GMapBool (Just a) Nothing)  = [(True,a)]
+  toList (GMapBool Nothing (Just b))  = [(False,b)]
+  toList (GMapBool (Just a) (Just b)) = [(True,a),(False,b)]
+
+
+-- |GMaps over pairs are implemented by nested GMaps.
 instance (GMapKey a, GMapKey b) => GMapKey (a, b) where
   data GMap (a, b) v            = GMapPair (GMap a (GMap b v))
   empty		                = GMapPair empty
@@ -300,7 +316,7 @@ instance (Ord a, Ord b) => GMapKey (a, b) where
 --   lookup = DM.lookup
 --   insert = DM.insert
 
- 
+-- |Sum types are represented by separate GMaps for the separate variants.
 instance (GMapKey a, GMapKey b) => GMapKey (Either a b) where
   data GMap (Either a b) v                = GMapEither (GMap a v) (GMap b v)
   empty                                   = GMapEither empty empty
@@ -313,6 +329,17 @@ instance (GMapKey a, GMapKey b) => GMapKey (Either a b) where
   toList (GMapEither gm1 gm2) = 
       map (\ (a,v) -> (Left  a, v)) (toList gm1) ++ 
       map (\ (b,v) -> (Right b, v)) (toList gm2)
+
+-- |GMaps with list indices could be treated like tuples (nested
+-- |maps).  Instead, we put them in a regular Data.Map.
+instance (GMapKey a) => GMapKey [a] where
+  data GMap [a] v         = GMapList (DM.Map [a] v) deriving Show
+  empty                   = GMapList DM.empty
+  lookup k    (GMapList m) = DM.lookup k m
+  insert k v  (GMapList m) = GMapList (DM.insert k v m)
+  alter  fn k (GMapList m) = GMapList (DM.alter fn k m)
+  toList      (GMapList m) = DM.toList m
+ 
 
 
 (!) :: (GMapKey k) => GMap k v -> k -> v

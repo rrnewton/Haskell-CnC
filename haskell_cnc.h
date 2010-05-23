@@ -24,6 +24,7 @@
 #warning "Loading CNC as a separately compiled module" 
 -- This is here to test the efficiency of the normal module include method:
 import Intel.Cnc
+import Intel.CncUtil
 
 #undef INCLUDEMETHOD
 

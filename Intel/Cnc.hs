@@ -27,7 +27,7 @@
  -}
 
 
-#define DEBUG_HASKELL_CNC
+-- #define DEBUG_HASKELL_CNC
 
 {- 
 
@@ -58,10 +58,16 @@ module Intel.Cnc (
                   -- | The @GraphCode@ and @StepCode@ monads represent
                   -- | computations for constructing CnC graphs and
                   -- | which execute inside CnC graphs, respectively.
-		  Step, 
-		  -- StepCode(..), GraphCode,
+		  Step, TagCol, ItemCol,
+		  StepCode(..), GraphCode,
 		  newItemCol, newTagCol, prescribe, 
-		  putt, put, get
+		  putt, put, get,
+		  initialize, finalize,
+
+                  runGraph, 
+		  stepPutStr, cncPutStr, cncVariant,
+
+                  Hashable,
 		 )
 where
 #else
@@ -308,8 +314,7 @@ proto_putt action tc@(_set,_steps) tag =
         else return ()
        action steps tag
 
---itemsToList0 :: ItemCol0 a b -> StepCode [(a,b)]
-itemsToList0 :: ITEMPREREQS => ItemCol0 tag b -> GraphCode [(tag,b)]
+itemsToList0 :: ITEMPREREQS => ItemCol0 tag b -> StepCode0 [(tag,b)]
 itemsToList0 ht = 
  do if not quiescence_support 
        then error "need to use a scheduler with quiescence support for itemsToList" 
@@ -802,16 +807,12 @@ put8 (ItemCol8 icol) tag (!item) =
 	      Just (Just _, _)        ->  error ("Single assignment violated at tag: "++ show tag)
 #endif
 
-itemsToList8 :: ITEMPREREQS => ItemCol8 tag b -> StepCode [(tag,b)]
+itemsToList8 :: ITEMPREREQS => ItemCol8 tag b -> StepCode8 [(tag,b)]
 itemsToList8 (ItemCol8 icol) = 
   do if not quiescence_support 
        then error "need to use a scheduler with quiescence support for itemsToList" 
        else return ()
-#if CNC_SCHEDULER == 8
      map <- S.lift$ readIORef icol 
-#else
-     map <- readIORef icol 
-#endif
      return   $ Prelude.map (\ (key, (Just v, _)) -> (key,v)) 
  	      $ Prelude.filter fil 
  	      $ (Map.toList map)
@@ -870,7 +871,7 @@ get=get8; putt=putt8; finalize=finalize8; quiescence_support=True ;
 #error "Cnc.hs -- CNC_SCHEDULER is not set to a support scheduler: {3,4,5,6,8}"
 #endif
 
-itemsToList :: ITEMPREREQS => ItemCol0 tag b -> GraphCode [(tag,b)]
+itemsToList :: ITEMPREREQS => ItemCol tag b -> StepCode [(tag,b)]
 
 -- |A monad representing the computations performed by nodes in the CnC
 -- |graph.  This includes putting out tags and items that will be

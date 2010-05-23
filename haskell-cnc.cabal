@@ -22,11 +22,20 @@ build-type: Simple
 library
   build-depends:  base, mtl, containers, time, random, array, ghc-prim, extensible-exceptions
   exposed-modules:  Intel.Cnc Intel.CncUtil Intel.CncPure
-  extensions: CPP
+  extensions: CPP, 
+       FlexibleInstances, BangPatterns, MagicHash, ScopedTypeVariables, DeriveDataTypeable, MultiParamTypeClasses
   GHC-Options: -O2 -threaded 
-  data-files: examples examples/hello_world.hs examples/mandel.hs examples/primes.hs examples/primes2.hs examples/sched_tree.hs examples/threadring_onestep.hs examples/threadring.hs examples/embarrassingly_par.hs examples/fib.hs examples/nbody.hs
-
+  install-includes: ntimes ntimes_minmedmax README.txt haskell_cnc.h Makefile install_environment_vars.sh default_opt_settings.sh runcnc run_all_tests.sh scaling.hs 
+       examples/hello_world.hs examples/mandel.hs examples/primes.hs examples/primes2.hs examples/sched_tree.hs examples/threadring_onestep.hs examples/threadring.hs examples/embarrassingly_par.hs examples/fib.hs examples/nbody.hs
 -- -Wall 
+
+-- exposed-modules, exposed, buildable, build-tools, cpp-options,
+-- cc-options, ld-options, pkgconfig-depends, frameworks, c-sources,
+-- extensions, extra-libraries, extra-lib-dirs, includes,
+-- install-includes, include-dirs, hs-source-dirs, other-modules,
+-- ghc-prof-options, ghc-shared-options, ghc-options, hugs-options,
+-- nhc98-options, jhc-options
+
 
 
 --extra-source-files: COPYING
