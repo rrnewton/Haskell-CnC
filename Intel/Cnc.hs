@@ -6,7 +6,7 @@
   , MultiParamTypeClasses
   #-}
 --  Note: PatternSignatures was deprecated after 6.8.
-
+{-# OPTIONS_HADDOCK prune #-}
 {-
  - Intel Concurrent Collections for Haskell
  - Copyright (c) 2010, Intel Corporation.
@@ -50,16 +50,26 @@
 {-|
   This module implements the Intel Concurrent Collections (CnC) programming model.
 
-  Note that the module @Intel.CncPure@ is an alternative implementation that exposes the same interface as this module.
+  CnC is a data-flow like deterministic parallel programming model.
+  To use it, one constructs a /CnC graph/ of computation steps. 
+  Edges in the graph are control and data relationships, which are 
+  implemented by  /tag/ and /item/ collections respectively.
+
+  A brief introduction to CnC using this module can be found at <http://software.intel.com/foobar>.
+  General documentation on the CnC model can be found at 
+   <http://software.intel.com/en-us/articles/intel-concurrent-collections-for-cc/>.
+
+  (Note that the module "Intel.CncPure" is an alternative implementation that exposes the same interface as this module.)
  -}
 #ifndef INCLUDEMETHOD
 module Intel.Cnc (
-
-                  -- | The @GraphCode@ and @StepCode@ monads represent
-                  -- | computations for constructing CnC graphs and
-                  -- | which execute inside CnC graphs, respectively.
 		  Step, TagCol, ItemCol,
-		  StepCode(..), GraphCode,
+                  -- |The @GraphCode@ monad represents
+                  -- computations for constructing CnC graphs. 
+		  GraphCode,
+		  -- |The @StepCode@ monad represents computations 
+                  -- running inside individual nodes of CnC graphs (in parallel).		      
+		  StepCode(..), 
 		  newItemCol, newTagCol, prescribe, 
 		  putt, put, get,
 		  initialize, finalize,
@@ -67,9 +77,37 @@ module Intel.Cnc (
                   runGraph, 
 		  stepPutStr, cncPutStr, cncVariant,
 
-                  Hashable,
-
                   tests, 
+-- * Example Program
+{- |
+
+Below is a simple program that prints \"Hello World 99\".  Item
+collections are indexed by string tags (keys).  The CnC graph consists
+of one node.
+
+@
+myStep items tag =
+  do word1 <- 'get' items \"left\"
+     word2 <- 'get' items \"right\"
+     'put' items \"result\" (word1 ++ word2 ++ show tag)
+
+cncGraph = 
+  do tags  <- 'newTagCol'
+     items <- 'newItemCol'
+     'prescribe' tags (mystep items)
+     'initialize' $
+        do 'put' items \"left\"  \"hello \"
+           'put' items \"right\" \"world \"
+           'putt' tags 99
+     'finalize' $ 
+        do 'get' items \"result\"
+
+main = putStrLn (runGraph cncGraph)
+@
+
+ -}
+
+
 		 )
 where
 #else
@@ -118,9 +156,11 @@ memoize = False
 #endif
 
 
-------------------------------------------------------------
--- Abstract over the shared mutable data structure used for item
--- collections:
+--------------------------------------------------------------------------------
+-- Mutable Maps.  
+-- Abstract over the shared mutable data structure used
+-- for item collections.
+--------------------------------------------------------------------------------
 
 #ifdef HASHTABLE_TEST
 type MutableMap a b = HashTable a (MVar b)
@@ -138,9 +178,8 @@ mmToList = HT.toList
 #warning "Enabling HashTable item collections.  These are not truly thread safe (yet)."
 #else
 
-#define USE_GMAP
 #ifdef USE_GMAP
-
+#warning "Using experimental indexed type family GMap implementation..."
 -- Trying to use GMaps:
 type MutableMap a b = IORef (GMap a (MVar b))
 newMutableMap :: (GMapKey tag) => IO (MutableMap tag b)
@@ -195,6 +234,47 @@ mmToList col =
 #endif
 #endif
 
+
+------------------------------------------------------------
+-- Hot Atomic Words operations
+------------------------------------------------------------
+
+-- In this library we abuse individual words of memory with many
+-- concurrent, atomic operations.  In Haskell, there are three choices
+-- for these: IORef, MVars, and STVars.
+
+-- We want to experiment with all three of these. 
+
+#define HOTVAR 1
+newHotVar     :: a -> IO (HotVar a)
+modifyHotVar  :: HotVar a -> (a -> (a,b)) -> IO b
+modifyHotVar_ :: HotVar a -> (a -> a) -> IO ()
+
+#if HOTVAR == 1
+type HotVar a = IORef a
+newHotVar     = newIORef
+modifyHotVar  = atomicModifyIORef
+modifyHotVar_ v fn = atomicModifyIORef v (\a -> (fn a, ()))
+
+#elif HOTVAR == 2 
+#warning "Using MVars for hot atomic variables."
+type HotVar a = MVar a
+newHotVar     = newMVar
+modifyHotVar  v fn = modifyMVar  v (return . fn)
+modifyHotVar_ v fn = modifyMVar_ v (return . fn)
+
+#elif HOTVAR == 3
+#warning "Using TVars for hot atomic variables."
+-- Simon Marlow said he saw better scaling with TVars (surprise to me):
+type HotVar a = TVar a
+newHotVar = newTVarIO
+modifyHotVar  tv fn = atomically (do x <- readTVar tv 
+				     let (x2,b) = fn x
+				     writeTVar tv x2
+				     return b)
+modifyHotVar_ tv fn = atomically (do x <- readTVar tv; writeTVar tv (fn x))
+#endif
+
 ------------------------------------------------------------
 -- Type definitions:
 
@@ -216,7 +296,7 @@ type GraphCode = IO
 
 -- Basically just a table for memoization:
 
--- |Attach a computation step to a feed of control tags.  This adds a new node in the computation graph.
+-- |Attach a computation step to a supply of control tags.  This adds a new node in the computation graph.
 prescribe   :: TagCol tag -> Step tag -> GraphCode ()
 
 -- |Put-Tag.  Push a control tag out into the computation graph.
@@ -226,44 +306,17 @@ put  :: ITEMPREREQS     => ItemCol tag val -> tag -> val  -> StepCode ()
 -- |Get an item.  Synchronous read-data operation.
 get  :: ITEMPREREQS     => ItemCol tag val -> tag         -> StepCode val
 
+-- |Run an initial step which populates the CnC graph with input tags and items.
+--  Presently only a single initialize is allowed within a graph execution.
 initialize :: StepCode a -> GraphCode a
+-- |Run a final step which collects outputs of the graph that are of interest to the larger application.
+--  Presently only a single finalize is allowed within a graph execution.
 finalize   :: StepCode a -> GraphCode a
 
 -- |Construct a new tag collection.
 newTagCol  :: GraphCode (TagCol tag)
 -- |Construct a new item collection.
 newItemCol :: ITEMPREREQS => GraphCode (ItemCol tag val)
-
-
-class Hashable a where
-    hash :: a -> Int32
-
-instance Hashable Bool where
-    hash True  = 1
-    hash False = 0
-
-instance Hashable Int where
-    hash = hashInt
-instance Hashable Char where
-    hash = hashInt . fromEnum 
-instance Hashable Word16 where
-    hash = hashInt . fromIntegral
---instance Hashable String where -- Needs -XTypeSynonymInstances 
-instance Hashable [Char] where
-    hash = hashString
-instance (Hashable a, Hashable b) => Hashable (a,b) where 
-    hash (a,b) = hash a + hash b
-
-instance Hashable a => Hashable [a] where
-    hash []    = 0 
-    hash (h:t) = hash h + hash t
-
--- Needs -fallow-undecidable-instances:
--- instance Integral t => Hashable t where
---     hash n = hashInt (fromInteger (toInteger n))
--- instance Enum a => Hashable a where
---     hash = hashInt . fromEnum 
-
 
 --------------------------------------------------------------------------------
 --                             Implementation                                 --
@@ -336,7 +389,8 @@ itemsToList0 ht =
 -- Embed StepCode in the graph construction program:
 initialize0 x = x
 
--- Bring us from the graph monad back to the IO monad:
+-- | Construct a CnC graph and execute it to completion.  Completion
+--   is defined as the 'finalize' action having completed.
 runGraph :: GraphCode a -> a
 runGraph x = unsafePerformIO x
 
@@ -447,21 +501,6 @@ finalize3 x = x
 -- TODO: we should do a better job here by using a monad transformer on top of IO:
 -- But if we must keep the same CnC interface... This is expedient:
 
-
-{- 
--- This will be one hot MVar:
-global_stack :: MVar ([a])
-global_stack = unsafePerformIO (newMVar [])
-
--- A simple stack interface:
-----------------------------------------
-push stack val = modifyMVar_ stack $ return . (val:)
-tryPop stack = modifyMVar stack tryfirst
-  where 
-    tryfirst []    = return ([], Nothing)
-    tryfirst (a:b) = return (b, Just a)
-----------------------------------------
--}
 
 -- This will be one hot IORef:
 global_stack :: IORef [a]
@@ -577,7 +616,7 @@ finalize6 finalAction =
 			   myId <- myThreadId
 			   set  <- readIORef global_mortalthreads
 			   if Set.notMember myId set
-			      then worker
+			      then worker -- keep going
 			      else writeChan joiner ()
        ver5_6_core_finalize joiner finalAction worker
 
@@ -598,7 +637,8 @@ global_makeworker :: IORef (IO ())
 global_makeworker = unsafePerformIO$ newIORef (return ())
 
 ------------------------------------------------------------
--- Version 7: Now with healing
+-- Version 7: Now with healing -- bring back worker threads that died
+-- prematurely.
 
 -- TODO: Improve on 6 by correcting premature deaths.
 
@@ -861,6 +901,7 @@ itemsToList8 (ItemCol8 icol) =
 #define CNC_SCHEDULER 6
 #endif
 
+-- |An informal identifier of the CnC version presently in use (for example, identifying a scheduler implementation).
 cncVariant :: String
 cncVariant="io/" ++ show (CNC_SCHEDULER :: Int)
 
@@ -880,8 +921,8 @@ get=get8; putt=putt8; finalize=finalize8; quiescence_support=True ;
 itemsToList :: ITEMPREREQS => ItemCol tag b -> StepCode [(tag,b)]
 
 -- |A monad representing the computations performed by nodes in the CnC
--- |graph.  This includes putting out tags and items that will be
--- |consumed by other steps.
+-- graph.  This includes putting out tags and items that will be
+-- consumed by other steps.
 #if CNC_SCHEDULER == 8
 type StepCode a   = StepCode8 a
 type TagCol   a   = TagCol8   a 
@@ -905,13 +946,15 @@ stepUnsafeIO io = io
 #endif
 
 -- |Steps are functions that take a single 'tag' as input and perform
--- |a computation in the "StepCode" monad, which may perform "put"s and "get"s.
+-- a computation in the "StepCode" monad, which may perform "put"s and "get"s.
 type Step     a   = a -> StepCode ()
 
 cncUnsafeIO io = io
 
+-- | Print a message within a step (unsafe side effect).
 stepPutStr :: String -> StepCode ()
 stepPutStr str = stepUnsafeIO (putStr str)
+-- | Print a message within the graph construction code (unsafe side effect).
 cncPutStr :: String -> GraphCode ()
 cncPutStr  str = cncUnsafeIO  (putStr str)
 
@@ -921,39 +964,51 @@ cncPutStr  str = cncUnsafeIO  (putStr str)
 atomicIncr x = atomicModifyIORef x (\n -> (n+1, ()))
 atomicDecr x = atomicModifyIORef x (\n -> (n-1, ()))
 
--- --------------------------------------------------------------------------------
--- -- Test program:
-{-
+--------------------------------------------------------------------------------
+--  Testing
+--------------------------------------------------------------------------------
+
+-- Here's a tiny program to run:
 incrStep d1 (t2,d2) tag = 
  do val <- get d1 tag 
-    putStr ("  ("++ show tag ++") Incrementing " ++ show val ++"\n")
+    stepPutStr ("  ("++ show tag ++") Incrementing " ++ show val ++"\n")
     put d2 tag (val + 1)
     putt t2 tag
 
-test = -- Allocate collections:
-    do t1 <- newTagCol()
-       t2 <- newTagCol()
-       t3 <- newTagCol()
-       d1 <- newItemCol()
-       d2 <- newItemCol()
-       d3 <- newItemCol()
-        -- Initialize:
-       put d1 'a' 33
-       put d1 'b' 100
-       -- Build and execute the graph:
-       prescribe t1 (incrStep d1 (t2,d2))
-       prescribe t2 (incrStep d2 (t3,d3))
-       -- Start things up:	 
-       putt t1 'a'
-       putt t1 'b'
-       -- Read the results (waits until they're ready):
-       result1 <- get d3 'a'
-       result2 <- get d3 'b'
-       return (result1, result2) 
+smalltest = testCase "Small test of Cnc model under Cnc.hs" $ 
+            putStrLn ("Final Result: "++ show v)
+  where 
+   v = runGraph g
+   g = do -- First, allocate collections:
+        t1 <- newTagCol
+        t2 <- newTagCol
+        t3 <- newTagCol
+        d1 <- newItemCol
+        d2 <- newItemCol
+        d3 <- newItemCol
 
--}
+         -- Build and execute the graph:
+        prescribe t1 (incrStep d1 (t2,d2))
+ 	prescribe t2 (incrStep d2 (t3,d3))
 
+        -- Start things up:	 
+	initialize $ do put d1 'a' 33
+ 			put d1 'b' 100
+			putt t1 'b'
+			putt t1 'a'
+
+        let incrStep d1 (t2,d2) tag = 
+	     do n <- get d1 tag
+	        put d2 tag (n+1)
+	        putt t2 tag
+
+        -- Get some of the results:
+	finalize $ 
+	  do a <- itemsToList d1
+	     b <- itemsToList d2
+	     c <- itemsToList d3
+	     return (a,b,c)
 
 tests :: Test
-tests = TestList [ ]
+tests = TestList [ smalltest ]
 

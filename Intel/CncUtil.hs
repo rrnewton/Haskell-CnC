@@ -7,6 +7,7 @@
   , OverlappingInstances
   , MultiParamTypeClasses
   #-}
+{-# OPTIONS_HADDOCK hide #-}
 {-
  - Intel Concurrent Collections for Haskell
  - Copyright (c) 2010, Intel Corporation.
@@ -32,7 +33,9 @@ module Intel.CncUtil (
 		      foldRange, for_, splitN, forkJoin, 
 		      doTrials, FitInWord (..), 
 		      GMapKey (..), 
+		      Hashable (..),
 		      (!),
+		      testCase,
 		      tests
 		      )
 where
@@ -50,10 +53,11 @@ import Data.Word
 import Data.Int
 import Data.Bits
 import Data.IORef
+import qualified Data.HashTable as HT
 import Debug.Trace
 
 import Test.HUnit
-
+import Test.QuickCheck (quickCheck, (==>))
 
 -- |A simple loop construct to use if you don't trust rewrite based deforestation.
 -- Usage foldRange start end acc, where start is inclusive, end uninclusive.
@@ -63,9 +67,9 @@ foldRange start end acc fn = loop start acc
     | i == end = acc
     | otherwise = loop (i+1) (fn acc i)
 
-
 -- |My own forM, again, less trusting of optimizations.
 -- Inclusive start, exclusive end.
+for_ start end fn | start > end = error "for_: start is greater than end"
 for_ start end fn = loop start 
  where 
   loop !i | i == end  = return ()
@@ -73,12 +77,16 @@ for_ start end fn = loop start
 
 -- |Split a list into N pieces (not evenly sized if N does not divide
 -- the length of the list).
+splitN :: Int -> [a] -> [[a]]
+splitN n ls | n <= 0 = error "Cannot split list by a factor of 0"
 splitN n ls = loop n ls
   where 
     sz = length ls `quot` n
     loop 1 ls = [ls]
     loop n ls = hd : loop (n-1) tl
        where (hd,tl) = splitAt sz ls
+
+
 
 -- |Run IO threads in parallel and wait till they're done.
 forkJoin actions = 
@@ -104,6 +112,46 @@ doTrials trials mnd =
        --let diff = fromIntegral (end-start) / (10.0 ^ 12)
        putStrLn$ show diff ++  " real time consumed"
 
+--------------------------------------------------------------------------------
+-- Class of types which are hashable.
+--------------------------------------------------------------------------------
+
+-- TODO: Might as well replace this by the Data.Hash module on cabal.
+
+class Hashable a where
+    hash :: a -> Int32
+
+instance Hashable Bool where
+    hash True  = 1
+    hash False = 0
+
+instance Hashable Int where
+    hash = HT.hashInt
+instance Hashable Char where
+    hash = HT.hashInt . fromEnum 
+instance Hashable Word16 where
+    hash = HT.hashInt . fromIntegral
+--instance Hashable String where -- Needs -XTypeSynonymInstances 
+instance Hashable [Char] where
+    hash = HT.hashString
+instance (Hashable a, Hashable b) => Hashable (a,b) where 
+    hash (a,b) = hash a + hash b
+
+instance Hashable a => Hashable [a] where
+    hash []    = 0 
+    hash (h:t) = hash h + hash t
+
+-- Needs -fallow-undecidable-instances:
+-- instance Integral t => Hashable t where
+--     hash n = hashInt (fromInteger (toInteger n))
+-- instance Enum a => Hashable a where
+--     hash = hashInt . fromEnum 
+
+
+
+
+--------------------------------------------------------------------------------
+-- Class of types that fit in a machine word.
 --------------------------------------------------------------------------------
 
 -- |All datatypes that can be packed into a single word, including
@@ -159,6 +207,7 @@ instance FitInWord (Word16,Word16) where
   toWord (a,b) = shiftL (fromIntegral a) 16 + (fromIntegral b)
   fromWord n = (fromIntegral$ shiftR n 16, 
 		fromIntegral$ n .&. 0xFFFF)
+
 
 
 --------------------------------------------------------------------------------
@@ -429,8 +478,13 @@ instance (FitInWord k, J.JE v) => GMapKeyVal k v where
 test1gmap = putStrLn $ maybe "Couldn't find key!" id $ lookup (5, Right ()) myGMap
 test2gmap = putStrLn $ maybe "Couldn't find key!" id $ lookup 3 intMap
 
+-- There's a problem with quickcheck where it doesn't
+-- newline-terminate the "Cases: N" report message.
+testCase str io = TestLabel str $ TestCase$ do putStrLn$ "\n *** Running unit test: "++str; io; putStrLn ""
 
-test1 = TestCase$ assertEqual "splitN" [[1,2], [3,4,5]] (splitN 2 [1..5]) 
+test1 = testCase "Spot check list lengths"$ assertEqual "splitN" [[1,2], [3,4,5]] (splitN 2 [1..5]) 
+test2 = testCase "Quickcheck splitN - varying split size"$ 
+	quickCheck$ (\ (n::Int) -> n>0 ==> 
+		     (\ (l::[Int]) -> concat (splitN n l) == l)) 
 
-tests = TestList [test1]
-
+tests = TestList [test1, test2]

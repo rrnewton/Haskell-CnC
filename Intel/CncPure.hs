@@ -3,7 +3,7 @@
    , BangPatterns
    , NamedFieldPuns, RecordWildCards
   #-}
-
+{-# OPTIONS_HADDOCK prune #-}
 {-
  - Intel Concurrent Collections for Haskell
  - Copyright (c) 2010, Intel Corporation.
@@ -23,9 +23,20 @@
  -
  -}
 
-
+-- |This module is an alternative implementation exposing the same inteface as "Intel.Cnc".
 #ifndef INCLUDEMETHOD
-module Intel.CncPure
+module Intel.CncPure(
+		  Step, TagCol, ItemCol,
+		  StepCode(..), GraphCode,
+		  newItemCol, newTagCol, prescribe, 
+		  putt, put, get,
+		  initialize, finalize,
+
+                  runGraph, 
+		  stepPutStr, cncPutStr, cncVariant,
+
+                  tests, 
+		 )
     where
 #endif
 
@@ -47,7 +58,7 @@ import Control.Monad
 import Debug.Trace
 import Unsafe.Coerce
 
-import Intel.CncUtil
+import Intel.CncUtil hiding (tests)
 
 import System.IO.Unsafe
 import System.Random
@@ -1068,6 +1079,4 @@ showcol (n, MT tmap, MI imap) =
 
 --------------------------------------------------------------------------------
 
-test3 = TestLabel "Dummy test" $ TestCase (assertEqual "duh," (1,2) (1,2))
-
-tests = TestList [test1, test2, test3]
+tests = TestList [test1, test2]

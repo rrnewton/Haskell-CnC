@@ -32,7 +32,7 @@ wc:
 
 doc: 
 	mkdir html_doc
-	haddock -o html_doc -html --optghc -cpp Intel/Cnc.hs Intel/CncUtil.hs
+	haddock -o html_doc -html --optghc -cpp Intel/Cnc.hs Intel/CncPure.hs
 
 clean:
 	rm -f Intel/*.o Intel/*.hi Intel/*~ 

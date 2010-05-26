@@ -42,5 +42,5 @@ main = do
 	  let code = ExitSuccess 
 	  case (problems,code) of
 	    (0, ExitSuccess)   -> exitWith ExitSuccess
-	    (n, ExitSuccess)   -> do putStrLn "ERROR: Failures in unit tests!";    exitWith (ExitFailure n)
+	    (n, ExitSuccess)   -> do putStrLn$ "ERROR: "++ show n ++" failures in unit tests!";    exitWith (ExitFailure n)
 	    (_, ExitFailure n) -> do putStrLn "ERROR: Example programs failed!\n"; exitWith (ExitFailure n)
