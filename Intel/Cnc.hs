@@ -26,22 +26,7 @@
  -
  -}
 
-
 -- #define DEBUG_HASKELL_CNC
-
-{- 
-
-   This is an implementation of CnC based on the IO monad.  The
-   exposed interface is the same as the pure implementation, and CnC
-   computations remain pure.
-
-  This version formulates steps as side-effecting functions on tables
-  of MVars (item collections).
-
-  If we had concurrent hashtables, that would be one option.  Instead
-  we need to use Data.Map.
-
- -}
 
 -- This must be defined because the runtime may allow a low
 -- probability of duplicating stolen work.
@@ -114,36 +99,46 @@ where
 #warning "Loading imperative, IO-based CnC implementation."
 #endif
 
+{- 
+
+   This is an implementation of CnC based on the IO monad.  The
+   exposed interface is the same as the pure implementation, and CnC
+   computations remain pure.
+
+  This version formulates steps as side-effecting functions on tables
+  of MVars (item collections).
+
+  If we had concurrent hashtables, that would be one option.  Instead
+  we need to use immutable maps stored inside a mutable reference.
+  (Course lock to protect hash tables would also be a, probably
+  undesirable, option.)  
+-}
+
 import Data.Set as Set
 import Data.HashTable as HT
 import Data.Map as Map
 import Data.Int
 import Data.IORef
 import Data.Word
+import Data.Typeable
 import Control.Monad
 import Control.Monad.Trans
 import qualified  Control.Monad.State.Strict as S 
 --import qualified  Control.Monad.State.Lazy as S 
 import Control.Concurrent.MVar
 import Control.Concurrent.Chan
---import System.Environment
+import Control.Concurrent
+--import Control.Exception
+import Control.Exception.Extensible
 import System.IO.Unsafe
 import GHC.IO
-
-import Control.Concurrent
 import GHC.Conc
 import GHC.Prim
 import GHC.Exts 
 
 import Test.HUnit
 
-
-
 import Intel.CncUtil as GM hiding (tests)
-
-import Data.Typeable
---import Control.Exception
-import Control.Exception.Extensible
 
 ------------------------------------------------------------
 -- Configuration Toggles:
