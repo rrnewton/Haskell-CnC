@@ -240,7 +240,7 @@ mmToList col =
 
 -- We want to experiment with all three of these. 
 
-#define HOTVAR 1
+#define HOTVAR 3
 newHotVar     :: a -> IO (HotVar a)
 modifyHotVar  :: HotVar a -> (a -> (a,b)) -> IO b
 modifyHotVar_ :: HotVar a -> (a -> a) -> IO ()
@@ -498,20 +498,19 @@ finalize3 x = x
 
 
 -- This will be one hot IORef:
-global_stack :: IORef [a]
-global_stack = unsafePerformIO (newIORef [])
+global_stack :: HotVar [a]
+global_stack = unsafePerformIO (newHotVar [])
 
 -- A simple stack interface:
 ----------------------------------------
-push   :: IORef [a] -> a -> IO ()
-tryPop :: IORef [a] -> IO (Maybe a)
-push stack val = atomicModifyIORef stack (\ls -> (val:ls, ()))
-tryPop stack   = atomicModifyIORef stack tryfirst
+push   :: HotVar [a] -> a -> IO ()
+tryPop :: HotVar [a] -> IO (Maybe a)
+push stack val = modifyHotVar_ stack (val:)
+tryPop stack   = modifyHotVar stack tryfirst
   where 
     tryfirst []    = ([], Nothing)
     tryfirst (a:b) = (b,  Just a)
 ----------------------------------------
-
 putt5 = proto_putt (\ steps tag -> 
                     foldM (\ () step -> push global_stack (step tag))
                       () steps)
