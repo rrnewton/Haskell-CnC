@@ -19,15 +19,34 @@ Cabal-Version: >=1.2.3
 --   HSH, gnuplot
 -- , judy>=0.2.2
 build-type: Simple
+
+
 library
-  build-depends:  base, mtl, containers, time, random, array, ghc-prim, extensible-exceptions
+  build-depends:  base, mtl, containers, time, random, array, ghc-prim, extensible-exceptions, HUnit
   exposed-modules:  Intel.Cnc Intel.CncUtil Intel.CncPure
+--                    Intel.Cnc3
   extensions: CPP, 
-       FlexibleInstances, BangPatterns, MagicHash, ScopedTypeVariables, DeriveDataTypeable, MultiParamTypeClasses
+       -- These extensions are needed for Cnc.hs
+       FlexibleInstances, BangPatterns, MagicHash, ScopedTypeVariables, DeriveDataTypeable, MultiParamTypeClasses,
+       -- And the following are needed for CncPure.hs:
+       ExistentialQuantification, ScopedTypeVariables, BangPatterns, NamedFieldPuns, RecordWildCards
+
   GHC-Options: -O2 -threaded 
   install-includes: ntimes ntimes_minmedmax README.txt haskell_cnc.h Makefile install_environment_vars.sh default_opt_settings.sh runcnc run_all_tests.sh scaling.hs 
        examples/hello_world.hs examples/mandel.hs examples/primes.hs examples/primes2.hs examples/sched_tree.hs examples/threadring_onestep.hs examples/threadring.hs examples/embarrassingly_par.hs examples/fib.hs examples/nbody.hs
 -- -Wall 
+-- This seems to be completly ignored currently:
+  -- Test test-bar
+  --   type: library-1
+  --   test-is: Intel.Cnc
+
+Executable runAllTests
+  Main-is:           runAllTests.hs
+  Build-Depends:     base >= 3 && < 5, directory, process
+  other-modules:  Intel.Cnc Intel.CncUtil Intel.CncPure
+  extensions: CPP
+  GHC-Options: -O2 -threaded 
+
 
 -- exposed-modules, exposed, buildable, build-tools, cpp-options,
 -- cc-options, ld-options, pkgconfig-depends, frameworks, c-sources,

@@ -32,7 +32,8 @@ module Intel.CncUtil (
 		      foldRange, for_, splitN, forkJoin, 
 		      doTrials, FitInWord (..), 
 		      GMapKey (..), 
-		      (!)
+		      (!),
+		      tests
 		      )
 where
 #endif
@@ -50,6 +51,8 @@ import Data.Int
 import Data.Bits
 import Data.IORef
 import Debug.Trace
+
+import Test.HUnit
 
 
 -- |A simple loop construct to use if you don't trust rewrite based deforestation.
@@ -184,7 +187,8 @@ instance FitInWord t => GMapKey t where
   -- alter  fn k (GMapWord m) = GMapWord (alter fn (ord k) m)
   -- toList      (GMapWord m) = map (\ (i,v) -> (chr i,v)) (toList m)
   data GMap t v           = GMapInt (DI.IntMap v) deriving Show
-  empty                   = trace "\n <<<<< Empty FitInWord Gmap... >>>>\n"$ GMapInt DI.empty
+  --empty                   = trace "\n <<<<< Empty FitInWord Gmap... >>>>\n"$ GMapInt DI.empty
+  empty                   = GMapInt DI.empty
   lookup k    (GMapInt m) = DI.lookup (wordToInt$ toWord k) m
   insert k v  (GMapInt m) = GMapInt (DI.insert (wordToInt$ toWord k) v m)
   alter  fn k (GMapInt m) = GMapInt (DI.alter fn (wordToInt$ toWord k) m)
@@ -425,4 +429,8 @@ instance (FitInWord k, J.JE v) => GMapKeyVal k v where
 test1gmap = putStrLn $ maybe "Couldn't find key!" id $ lookup (5, Right ()) myGMap
 test2gmap = putStrLn $ maybe "Couldn't find key!" id $ lookup 3 intMap
 
+
+test1 = TestCase$ assertEqual "splitN" [[1,2], [3,4,5]] (splitN 2 [1..5]) 
+
+tests = TestList [test1]
 

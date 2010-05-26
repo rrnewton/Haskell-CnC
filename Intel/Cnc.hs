@@ -68,6 +68,8 @@ module Intel.Cnc (
 		  stepPutStr, cncPutStr, cncVariant,
 
                   Hashable,
+
+                  tests, 
 		 )
 where
 #else
@@ -95,7 +97,11 @@ import GHC.Conc
 import GHC.Prim
 import GHC.Exts 
 
-import Intel.CncUtil as GM
+import Test.HUnit
+
+
+
+import Intel.CncUtil as GM hiding (tests)
 
 import Data.Typeable
 --import Control.Exception
@@ -946,3 +952,8 @@ test = -- Allocate collections:
        return (result1, result2) 
 
 -}
+
+
+tests :: Test
+tests = TestList [ ]
+

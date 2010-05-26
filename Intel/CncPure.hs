@@ -25,7 +25,8 @@
 
 
 #ifndef INCLUDEMETHOD
-module Intel.CncPure where
+module Intel.CncPure
+    where
 #endif
 
 import Data.Array as Array
@@ -50,6 +51,8 @@ import Intel.CncUtil
 
 import System.IO.Unsafe
 import System.Random
+
+import Test.HUnit
 
 -- README
 ------------------------------------------------------------
@@ -976,7 +979,9 @@ itemsToList id =
 	  Done tags items)
 
 --------------------------------------------------------------------------------
--- Small Test program:
+-- Testing:
+--------------------------------------------------------------------------------
+
 
 type TI = TagCol  Char
 type II = ItemCol Char Int
@@ -988,7 +993,8 @@ incrStep d1 (t2,d2) tag c =
 		      [_put  d2 tag (n+1)]
 
 -- Test using the function interface directly:
-test = -- Allocate collections:
+test1 = TestCase $ 
+    -- Allocate collections:
     let w0      = _newWorld 0
         (t1,w2) = _newTagCol  w0
         (t2,w3) = _newTagCol  w2
@@ -1010,14 +1016,15 @@ test = -- Allocate collections:
         w9 = scheduler graph inittags w8
 
     in 
-     do putStrLn $ showcol w9
+     do putStrLn $ ""
+	putStrLn $ showcol w9
         putStrLn $ "  d1: " ++ show (_get w9 d1 'a', _get w9 d1 'b') 
         putStrLn $ "  d2: " ++ show (_get w9 d2 'a', _get w9 d2 'b') 
         putStrLn $ "  d3: " ++ show (_get w9 d3 'a', _get w9 d3 'b') 
         return ()
 
 -- Same test using wrappers:	 
-test2 = 
+test2 = TestCase $ 
   let v = runGraph $ do
         t1 <- newTagCol
         t2 <- newTagCol
@@ -1026,7 +1033,8 @@ test2 =
         d2 <- newItemCol
         d3 <- newItemCol
 		  
-	initialize $ do put d1 'a' 33
+	initialize $ do stepPutStr "\n"
+			put d1 'a' 33
  			put d1 'b' 100
 			putt t1 'b'
 			putt t1 'a'
@@ -1058,3 +1066,8 @@ showcol (n, MT tmap, MI imap) =
     -- Hack -- pull out the first item collection:
     foo = (unsafeCoerce $ (IntMap.!) imap 3) :: ItemColInternal Char Int
 
+--------------------------------------------------------------------------------
+
+test3 = TestLabel "Dummy test" $ TestCase (assertEqual "duh," (1,2) (1,2))
+
+tests = TestList [test1, test2, test3]
