@@ -47,7 +47,7 @@ runit total = runGraph graph `pseq` return ()
      do 
 #if CNC_VARIANT == 1
         let tid = -99
-#elif CNC_SCHEDULER == 8
+#elif CNC_SCHEDULER == 8 || CNC_SCHEDULER == 5 || CNC_SCHEDULER == 6
         tid <- S.lift$ myThreadId 
 #else
         tid <- myThreadId 

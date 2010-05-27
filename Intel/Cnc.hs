@@ -308,8 +308,8 @@ initialize0 x = x
 
 -- | Construct a CnC graph and execute it to completion.  Completion
 --   is defined as the 'finalize' action having completed.
-runGraph :: GraphCode0 a -> a
-runGraph x = unsafePerformIO x
+runGraph0 :: GraphCode0 a -> a
+runGraph0 x = unsafePerformIO x
 
 --------------------------------------------------------------------------------
 
@@ -425,7 +425,6 @@ type TagCol5 a   = (IORef (Set a), IORef [Step5 a])
 -- Here the hidden state keeps track of a pointer to the work-sharing
 -- stack used for this graph.
 type StepCode5 a = (S.StateT (HiddenState5) IO a)
---newtype HiddenState5 = HiddenState5 (HotVar [IO ()])
 
 -- In this version we need to thread the state through the graph code as well:
 type GraphCode5 a = StepCode5 a
@@ -436,26 +435,16 @@ type GraphCode5 a = StepCode5 a
 --   (3) the "make worker" function to spawn new threads
 --   (4) the set of "mortal threads"
 newtype HiddenState5 = HiddenState5 (HotVar [StepCode5 ()], HotVar Int, IO (), Set ThreadId)
+  deriving Show
 
---newtype ItemCol5 a b = ItemCol5 (IORef (Map a ((Maybe b), WaitingSteps5)))
-
--- Using a different type 
-type Step6 a = a -> StepCode6 ()
-type TagCol6 a   = (IORef (Set a), IORef [Step6 a])
-
-
--- Here the hidden state keeps four things:
---   (1) the stack used for this graph
---   (2) the number of workers for this graph
---   (3) the set of "mortal threads"
---   (4) the "make worker" function to spawn new threads
-type StepCode6 a = (S.StateT (HiddenState6) IO a)
-newtype HiddenState6 = HiddenState6 (HotVar [IO ()], Int, Set ThreadId, IO ())
-
+instance Show (IORef a) where 
+  show ref = "<ioref>"
+instance Show (IO a) where 
+  show ref = "<io>"
 
 
 -- This will be one hot IORef:
-global_stack :: HotVar [IO ()]
+global_stack :: HotVar [StepCode5 ()]
 global_stack = unsafePerformIO (newHotVar [])
 
 global_numworkers :: IORef Int
@@ -477,8 +466,8 @@ newTagCol5 = S.lift sharedNTC
 
 putt5 = proto_putt_lifted
 	(\ steps tag -> 
-	   do (HiddenState5 (stack, numworkers, makeworker, _)) <- S.get
-              foldM (\ () step -> S.lift$ push stack (step tag))
+	   do --(HiddenState5 (stack, numworkers, makeworker, _)) <- S.get
+              foldM (\ () step -> S.lift$ push global_stack (step tag))
                        () steps)
  
 get5  :: ITEMPREREQS => ItemCol0 tag b -> tag -> StepCode5 b
@@ -489,14 +478,34 @@ finalize5 :: StepCode5 a -> GraphCode5 a
 finalize5 finalAction = 
     do joiner <- S.lift$ newChan 
        let worker = 
-	       do x <- tryPop global_stack
+	       do x <- S.lift$ tryPop global_stack
 		  case x of 
-		    Nothing -> writeChan joiner ()
+		    Nothing -> S.lift$ writeChan joiner ()
 		    Just action -> do action
-				      worker
-       return undefined
-       --ver5_6_core_finalize joiner finalAction worker 
+				      worker      
+       ver5_6_core_finalize joiner finalAction worker 
 
+
+-- FIXME: CODE DUPLICATION:
+itemsToList5 :: ITEMPREREQS => ItemCol0 tag b -> StepCode5 [(tag,b)]
+itemsToList5 ht = 
+ do if not quiescence_support 
+       then error "need to use a scheduler with quiescence support for itemsToList" 
+       else return ()
+    ls <- S.lift (mmToList ht)
+    foldM (\ acc (key,mvar) -> 
+	   do --putStrLn "Try take mvar..."
+	      val <- S.lift$ readMVar mvar
+	      --putStrLn "  Took!"
+	      return $ (key,val) : acc)
+	  [] ls
+
+--runGraph5 :: GraphCode a -> a
+runGraph5 x = unsafePerformIO (runState5 x)
+runState5 x =
+    do hv  <- newHotVar []
+       hv2 <- newHotVar 0
+       S.runStateT x (HiddenState5 (hv,hv2, undefined, Set.empty))
 
 -- FIXME: CODE DUPLICATION:
 put5  :: ITEMPREREQS => ItemCol0 tag b -> tag -> b  -> StepCode5 ()
@@ -524,7 +533,7 @@ put5 col tag (!item) =
 -- should succeed.
 
 ver5_6_core_get hook (col) tag = 
-    do (HiddenState5 (stack, numworkers, makeworker, _)) <- S.get
+    do --(HiddenState5 (stack, numworkers, makeworker, _)) <- S.get
        mvar    <- S.lift$ assureMvar col tag 
        hopeful <- S.lift$ tryTakeMVar mvar
        case hopeful of 
@@ -532,9 +541,10 @@ ver5_6_core_get hook (col) tag =
 		       return v
 	 -- Otherwise, no data.  If we block our own thread, we need to issue a replacement.
          Nothing -> do 
-		       S.lift$  atomicIncr numworkers
+		       S.lift$  atomicIncr global_numworkers
 		       -- If this were CPS then we would just give our
 		       -- continuation to the forked thread.  Alas, no.
+		       makeworker <- S.lift$ readIORef global_makeworker
 		       S.lift$ forkIO makeworker
 		       S.lift$ hook -- Any IO action can go here...
 #ifdef DEBUG_HASKELL_CNC
@@ -542,17 +552,19 @@ ver5_6_core_get hook (col) tag =
 #endif
 		       S.lift$ readMVar mvar
 
-
---ver5_6_core_finalize :: Chan a
+--ver5_6_core_finalize :: Chan a -> IO b -> IO () -> StepCode5 b
+ver5_6_core_finalize :: Chan a -> StepCode5 b -> StepCode5 () -> GraphCode5 b
 ver5_6_core_finalize joiner finalAction worker = 
-    do (HiddenState5 (stack, numworkers, makeworker, _)) <- S.get
-       S.lift$ writeIORef global_makeworker worker
+    do --(HiddenState5 (stack, numworkers, makeworker, _)) <- S.get
+       state <- S.get 
+       let makeworker = do S.runStateT worker state; return ()
+       S.lift$ writeIORef global_makeworker makeworker
        S.lift$ atomicModifyIORef global_numworkers (\n -> (n + numCapabilities, ()))
        -- Fork one worker per thread:
 #ifdef DEBUG_HASKELL_CNC
        S.lift$ putStrLn$ "Forking "++ show numCapabilities ++" threads"
 #endif
-       S.lift$ mapM (\n -> forkIO (worker)) [0..numCapabilities-1]
+       S.lift$ mapM (\n -> forkIO makeworker) [0..numCapabilities-1]
 
        -- This waits for quiescense:
        let waitloop = do num <- readIORef global_numworkers
@@ -566,7 +578,7 @@ ver5_6_core_finalize joiner finalAction worker =
 				  atomicDecr global_numworkers
 				  waitloop
        S.lift$ waitloop
-       S.lift$ finalAction
+       finalAction
 ------------------------------------------------------------
 
 
@@ -881,7 +893,7 @@ get=get8; putt=putt8; finalize=finalize8; quiescence_support=True ;
 #error "Cnc.hs -- CNC_SCHEDULER is not set to a support scheduler: {3,4,5,6,8}"
 #endif
 
---itemsToList :: ITEMPREREQS => ItemCol tag b -> StepCode [(tag,b)]
+itemsToList :: ITEMPREREQS => ItemCol tag b -> StepCode [(tag,b)]
 
 -- |A monad representing the computations performed by nodes in the CnC
 -- graph.  This includes putting out tags and items that will be
@@ -897,6 +909,7 @@ put = put8
 initialize = initialize8
 itemsToList x = itemsToList8 x
 stepUnsafeIO io = S.lift$ io
+runGraph = runGraph0
 
 #elif CNC_SCHEDULER == 5 || CNC_SCHEDULER == 6
 # warning "Selecting types for scheduler 5/6..."
@@ -908,8 +921,9 @@ newItemCol = newItemCol0
 newTagCol  = newTagCol5
 put = put5
 initialize = initialize0
---itemsToList x = itemsToList8 x
+itemsToList x = itemsToList5 x
 stepUnsafeIO io = S.lift$ io
+runGraph = runGraph5
 
 #else
 type StepCode a   = StepCode0 a
@@ -922,20 +936,21 @@ put = put0
 initialize = initialize0
 itemsToList x = itemsToList0 x
 stepUnsafeIO io = io
+runGraph = runGraph0
 #endif
 
 -- |Steps are functions that take a single 'tag' as input and perform
 -- a computation in the "StepCode" monad, which may perform "put"s and "get"s.
 type Step     a   = a -> StepCode ()
 
-cncUnsafeIO io = io
+cncUnsafeIO io = GRAPHLIFT io
 
 -- | Print a message within a step (unsafe side effect).
 stepPutStr :: String -> StepCode ()
 stepPutStr str = stepUnsafeIO (putStr str)
 -- | Print a message within the graph construction code (unsafe side effect).
 cncPutStr :: String -> GraphCode ()
-cncPutStr  str = GRAPHLIFT cncUnsafeIO  (putStr str)
+cncPutStr  str = cncUnsafeIO  (putStr str)
 
 
 --------------------------------------------------------------------------------

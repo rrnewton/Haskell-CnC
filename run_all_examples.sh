@@ -44,7 +44,8 @@
 
   # Which subset of schedures should we test:
 PURESCHEDS="2"
-IOSCHEDS="8 6 5 3"
+#IOSCHEDS="8 6 5 3"
+IOSCHEDS="3 5 8"
 #IOSCHEDS="3 5 6 8"
 
 #THREADSETTINGS="0 1 2 3 4 7 8"

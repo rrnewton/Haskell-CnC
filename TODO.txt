@@ -1,0 +1,19 @@
+
+
+Things to work on:
+
+  * reorganize schedulers into separate modules
+
+  * Finish GMAP implementation and test it.  Make it parameterize on
+    key & value type and try Judy arrays.
+
+  * put tail_putt into use and finish it for all schedulers
+
+  * redo scheduler #8 with continuation monad (e.g. scheduler 9)
+
+  * Fix scheduler 6 resulting in sched 7 which can either "heal" lost
+    workers periodically, or which is non-quiescent but which has all
+    workers spin (maybe with some sleeping) until the finalize action
+    is finished.
+
+
