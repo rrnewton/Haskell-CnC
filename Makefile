@@ -6,7 +6,7 @@ all:
         # This target builds CnC as precompiled modules:
         # Pick default schedulers as well:
 	ghc --make -c -cpp -DCNC_SCHEDULER=2 Intel/CncPure.hs
-	ghc --make -c -cpp -DCNC_SCHEDULER=6 Intel/Cnc.hs
+	ghc --make -c -cpp -DCNC_SCHEDULER=5 Intel/Cnc.hs
 
 interact:
 	ghci -cpp -DCNC_SCHEDULER=2 Intel/CncPure.hs

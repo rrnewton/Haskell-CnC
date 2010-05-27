@@ -47,7 +47,7 @@
   (Note that the module "Intel.CncPure" is an alternative implementation that exposes the same interface as this module.)
  -}
 #ifndef INCLUDEMETHOD
-module Intel.Cnc (
+module Intel.Cnc {-(
 		  Step, TagCol, ItemCol,
                   -- |The @GraphCode@ monad represents
                   -- computations for constructing CnC graphs. 
@@ -93,7 +93,7 @@ main = putStrLn (runGraph cncGraph)
  -}
 
 
-		 )
+		 )-}
 where
 #else
 #warning "Loading imperative, IO-based CnC implementation."
@@ -240,7 +240,7 @@ mmToList col =
 
 -- We want to experiment with all three of these. 
 
-#define HOTVAR 3
+#define HOTVAR 1
 newHotVar     :: a -> IO (HotVar a)
 modifyHotVar  :: HotVar a -> (a -> (a,b)) -> IO b
 modifyHotVar_ :: HotVar a -> (a -> a) -> IO ()
@@ -271,25 +271,7 @@ modifyHotVar_ tv fn = atomically (do x <- readTVar tv; writeTVar tv (fn x))
 #endif
 
 ------------------------------------------------------------
--- Type definitions:
-
--- A tag collection consists of a buffer of tags together with a list
--- of prescribed steps.
---
--- IORef's are not updated atomically.  Prescribing is not intended to
--- be done concurrently.  (Even though the graph monad is actually the
--- IO monad that is not indended to be exposed to the programmer.)
-type TagCol0  a   = (IORef (Set a), IORef [Step0 a])
-type ItemCol0 a b = MutableMap a b
-
-type Step0 a = a -> StepCode0 ()
-type StepCode0 = IO 
-type GraphCode = IO
-
-------------------------------------------------------------
--- (Optional) type signatures for operations:
-
--- Basically just a table for memoization:
+-- Type signatures for the primary API operations:
 
 -- |Attach a computation step to a supply of control tags.  This adds a new node in the computation graph.
 prescribe   :: TagCol tag -> Step tag -> GraphCode ()
@@ -309,9 +291,42 @@ initialize :: StepCode a -> GraphCode a
 finalize   :: StepCode a -> GraphCode a
 
 -- |Construct a new tag collection.
-newTagCol  :: GraphCode (TagCol tag)
+--newTagCol  :: GraphCode (TagCol tag)
 -- |Construct a new item collection.
 newItemCol :: ITEMPREREQS => GraphCode (ItemCol tag val)
+
+------------------------------------------------------------
+-- FIRST version of type definitions.
+-- (changes slightly under different schedulers)
+
+-- A tag collection consists of a buffer of tags together with a list
+-- of prescribed steps.
+--
+-- IORef's are not updated atomically.  Prescribing is not intended to
+-- be done concurrently.  (Even though the graph monad is actually the
+-- IO monad that is not indended to be exposed to the programmer.)
+type TagCol0  a   = (IORef (Set a), IORef [Step0 a])
+type ItemCol0 a b = MutableMap a b
+
+type Step0 a = a -> StepCode0 ()
+type StepCode0 = IO 
+type GraphCode0 = IO
+
+
+#ifndef CNC_SCHEDULER
+#warning  "Cnc.hs -- CNC_SCHEDULER unset, defaulting to scheduler 5 "
+#define CNC_SCHEDULER 5
+#endif
+
+-- #undef CNC_SCHEDULER
+-- #define CNC_SCHEDULER 8
+
+#if CNC_SCHEDULER == 5 || CNC_SCHEDULER == 6
+#warning "Scheduler 5/6 active Lifting GraphCode monad"
+#define GRAPHLIFT S.lift$
+#else
+#define GRAPHLIFT id$
+#endif
 
 --------------------------------------------------------------------------------
 --                             Implementation                                 --
@@ -320,14 +335,14 @@ newItemCol :: ITEMPREREQS => GraphCode (ItemCol tag val)
 -- These 'new' functions need an argument if we don't want to run in
 -- to the monomorphism restriction (-fno-monomorphism-restriction)
 newItemCol0 :: ITEMPREREQS => GraphCode (ItemCol0 tag b)
-newItemCol0 = newMutableMap
+newItemCol0 = GRAPHLIFT newMutableMap
 
 sharedNTC = do ref1 <- newIORef Set.empty
 	       ref2 <- newIORef []
 	       return (ref1, ref2)
 
 newTagCol0  :: GraphCode (TagCol0 tag)
-newTagCol0 = sharedNTC
+newTagCol0 = GRAPHLIFT sharedNTC
 
 
 -- Putting items: If it's not there we add the mvar ourselves.
@@ -349,8 +364,8 @@ put0 col tag (!item) =
 -- A tag collection stores the list of subscribed step collections.
 -- To "prescribe", simply add it to the list:
 prescribe (_set,_steps) step = 
-    do steps <- readIORef _steps
-       writeIORef _steps (step:steps)
+    do steps <- GRAPHLIFT readIORef _steps
+       GRAPHLIFT writeIORef _steps (step:steps)
 
 
 -- This encapsulates the book-keeping necessary for a put-tag (putt).
@@ -367,6 +382,23 @@ proto_putt action tc@(_set,_steps) tag =
 	     else writeIORef _set (Set.insert tag set)
         else return ()
        action steps tag
+
+-- Could remove this bit of duplication if I would lift the other
+-- cases into an identity monad transformer.  (Or unit state.) 
+--proto_putt_lifted :: Ord a =>  ([Step8 a] -> a -> StepCode8 b) -> TagCol8 a -> a -> StepCode8 b
+proto_putt_lifted ::
+   (MonadTrans t, Monad (t IO), Ord tag) =>
+   (a -> tag -> t IO b) -> (IORef (Set tag), IORef a) -> tag -> t IO b
+proto_putt_lifted action tc@(_set,_steps) tag = 
+    do set   <- S.lift$ readIORef _set
+       steps <- S.lift$ readIORef _steps
+       if memoize 
+        then if Set.member tag set
+	     then return ()
+	     else S.lift $ writeIORef _set (Set.insert tag set)
+        else return ()
+       action steps tag
+
 
 itemsToList0 :: ITEMPREREQS => ItemCol0 tag b -> StepCode0 [(tag,b)]
 itemsToList0 ht = 
@@ -386,7 +418,7 @@ initialize0 x = x
 
 -- | Construct a CnC graph and execute it to completion.  Completion
 --   is defined as the 'finalize' action having completed.
-runGraph :: GraphCode a -> a
+runGraph :: GraphCode0 a -> a
 runGraph x = unsafePerformIO x
 
 --------------------------------------------------------------------------------
@@ -396,12 +428,11 @@ runGraph x = unsafePerformIO x
 
 -- The core routines are duplicated for the different scheduler versions.
 putt3 :: Ord a  => TagCol0 a -> a -> StepCode0 ()
-putt5 :: Ord a  => TagCol0 a -> a -> StepCode0 ()
-putt6 :: Ord a  => TagCol0 a -> a -> StepCode0 ()
+putt5 :: Ord a  => TagCol5 a -> a -> StepCode5 ()
+--putt6 :: Ord a  => TagCol0 a -> a -> StepCode0 ()
 
-finalize3 :: StepCode0 a -> GraphCode a
-finalize5 :: StepCode0 a -> GraphCode a
-finalize6 :: StepCode0 a -> GraphCode a
+finalize3 :: StepCode0 a -> GraphCode0 a
+--finalize6 :: StepCode0 a -> GraphCode0 a
 
 ------------------------------------------------------------
 -- TODO  TODO TODO TODO TODO TODO TODO TODO TODO TODO  -- 
@@ -497,9 +528,48 @@ finalize3 x = x
 -- But if we must keep the same CnC interface... This is expedient:
 
 
+-- Using a different type 
+type Step5 a = a -> StepCode5 ()
+type TagCol5 a   = (IORef (Set a), IORef [Step5 a])
+
+-- Here the hidden state keeps track of a pointer to the work-sharing
+-- stack used for this graph.
+type StepCode5 a = (S.StateT (HiddenState5) IO a)
+--newtype HiddenState5 = HiddenState5 (HotVar [IO ()])
+
+-- In this version we need to thread the state through the graph code as well:
+type GraphCode5 a = StepCode5 a
+
+-- Here the hidden state keeps four things:
+--   (1) the stack used for this graph
+--   (2) the number of workers for this graph
+--   (3) the "make worker" function to spawn new threads
+--   (4) the set of "mortal threads"
+newtype HiddenState5 = HiddenState5 (HotVar [StepCode5 ()], HotVar Int, IO (), Set ThreadId)
+
+--newtype ItemCol5 a b = ItemCol5 (IORef (Map a ((Maybe b), WaitingSteps5)))
+
+-- Using a different type 
+type Step6 a = a -> StepCode6 ()
+type TagCol6 a   = (IORef (Set a), IORef [Step6 a])
+
+
+-- Here the hidden state keeps four things:
+--   (1) the stack used for this graph
+--   (2) the number of workers for this graph
+--   (3) the set of "mortal threads"
+--   (4) the "make worker" function to spawn new threads
+type StepCode6 a = (S.StateT (HiddenState6) IO a)
+newtype HiddenState6 = HiddenState6 (HotVar [IO ()], Int, Set ThreadId, IO ())
+
+
+
 -- This will be one hot IORef:
-global_stack :: HotVar [a]
+global_stack :: HotVar [IO ()]
 global_stack = unsafePerformIO (newHotVar [])
+
+global_numworkers :: IORef Int
+global_numworkers = unsafePerformIO (newIORef 0)
 
 -- A simple stack interface:
 ----------------------------------------
@@ -511,33 +581,85 @@ tryPop stack   = modifyHotVar stack tryfirst
     tryfirst []    = ([], Nothing)
     tryfirst (a:b) = (b,  Just a)
 ----------------------------------------
-putt5 = proto_putt (\ steps tag -> 
-                    foldM (\ () step -> push global_stack (step tag))
-                      () steps)
 
+putt5 = proto_putt_lifted
+	(\ steps tag -> 
+	   do (HiddenState5 (stack, numworkers, makeworker, _)) <- S.get
+              foldM (\ () step -> S.lift$ push stack (step tag))
+                       () steps)
+ 
+get5  :: ITEMPREREQS => ItemCol0 tag b -> tag -> StepCode5 b
 get5 col tag = ver5_6_core_get (return ()) col tag
 
 -- At finalize time we set up the workers and run them.
+finalize5 :: StepCode5 a -> GraphCode5 a
 finalize5 finalAction = 
-    do joiner <- newChan 
+    do joiner <- S.lift$ newChan 
        let worker = 
 	       do x <- tryPop global_stack
 		  case x of 
 		    Nothing -> writeChan joiner ()
-		    Just action -> do action; worker
-       ver5_6_core_finalize joiner finalAction worker 
+		    Just action -> do action
+				      worker
+       return undefined
+       --ver5_6_core_finalize joiner finalAction worker 
+
+
+-- FIXME: CODE DUPLICATION:
+put5  :: ITEMPREREQS => ItemCol0 tag b -> tag -> b  -> StepCode5 ()
+put5 col tag (!item) = 
+    do mvar <- S.lift$ assureMvar col tag 
+       bool <- S.lift$ tryPutMVar mvar item
+#ifdef REPEAT_PUT_ALLOWED
+       return ()
+#else
+       if not bool then error ("Already an item with tag " ++ show tag) else return ()
+#endif
+
 
 
 -- A couple pieces that are common to version 5 and 6
 ------------------------------------------------------------
+-- FIXME: [2010.05.05] I believe this has a problem.
+-- tryTakeMVar can fail spuriously if there's a collision with another
+-- thread reading the mvar.  This is a sense in which mvars CANNOT
+-- mimick IVars (at least ivars with the ability to test for presence
+-- -- a monotonic test!)
+
+-- This should only be a performance bug (forks an extra task for no
+-- good reason).  When the code below falls back to readMVar that
+-- should succeed.
+
+ver5_6_core_get hook (col) tag = 
+    do (HiddenState5 (stack, numworkers, makeworker, _)) <- S.get
+       mvar    <- S.lift$ assureMvar col tag 
+       hopeful <- S.lift$ tryTakeMVar mvar
+       case hopeful of 
+         Just v  -> do S.lift$ putMVar mvar v -- put it back where we found it
+		       return v
+	 -- Otherwise, no data.  If we block our own thread, we need to issue a replacement.
+         Nothing -> do 
+		       S.lift$  atomicIncr numworkers
+		       -- If this were CPS then we would just give our
+		       -- continuation to the forked thread.  Alas, no.
+		       S.lift$ forkIO makeworker
+		       S.lift$ hook -- Any IO action can go here...
+#ifdef DEBUG_HASKELL_CNC
+		       S.lift$ putStrLn $ " >>> Blocked on "++ show tag ++"||| "
+#endif
+		       S.lift$ readMVar mvar
+
+
+--ver5_6_core_finalize :: Chan a
 ver5_6_core_finalize joiner finalAction worker = 
-    do writeIORef global_makeworker worker
-       atomicModifyIORef global_numworkers (\n -> (n + numCapabilities, ()))
+    do (HiddenState5 (stack, numworkers, makeworker, _)) <- S.get
+       S.lift$ writeIORef global_makeworker worker
+       S.lift$ atomicModifyIORef global_numworkers (\n -> (n + numCapabilities, ()))
        -- Fork one worker per thread:
 #ifdef DEBUG_HASKELL_CNC
-       putStrLn$ "Forking "++ show numCapabilities ++" threads"
+       S.lift$ putStrLn$ "Forking "++ show numCapabilities ++" threads"
 #endif
-       mapM (\n -> forkIO (worker)) [0..numCapabilities-1]
+       S.lift$ mapM (\n -> forkIO (worker)) [0..numCapabilities-1]
 
        -- This waits for quiescense:
        let waitloop = do num <- readIORef global_numworkers
@@ -550,43 +672,15 @@ ver5_6_core_finalize joiner finalAction worker =
 				  readChan joiner
 				  atomicDecr global_numworkers
 				  waitloop
-       waitloop
-       finalAction
-
--- FIXME: [2010.05.05] I believe this has a problem.
--- tryTakeMVar can fail spuriously if there's a collision with another
--- thread reading the mvar.  This is a sense in which mvars CANNOT
--- mimick IVars (at least ivars with the ability to test for presence
--- -- a monotonic test!)
-
--- This should only be a performance bug (forks an extra task for no
--- good reason).  When the code below falls back to readMVar that
--- should succeed.
-
-ver5_6_core_get hook col tag = 
-    do mvar    <- assureMvar col tag 
-       hopeful <- tryTakeMVar mvar
-       case hopeful of 
-         Just v  -> do putMVar mvar v -- put it back where we found it
-		       return v
-	 -- Otherwise, no data.  If we block our own thread, we need to issue a replacement.
-         Nothing -> do action <- readIORef global_makeworker
-		       atomicIncr global_numworkers
-		       -- If this were CPS then we would just give our
-		       -- continuation to the forked thread.  Alas, no.
-		       forkIO action
-		       hook -- Any IO action can go here...
-#ifdef DEBUG_HASKELL_CNC
-		       putStrLn $ " >>> Blocked on "++ show tag ++"||| "
-#endif
-		       readMVar mvar
+       S.lift$ waitloop
+       S.lift$ finalAction
 ------------------------------------------------------------
-
 
 
 ------------------------------------------------------------
 -- Version 6: Blocking with replacement.
 
+{-
 -- When a thread goes down (blocks waiting on data) this version
 -- regenerates a new thread to replace it.  The thread that went down
 -- is mortal when it wakes up.  It will finish what it was doing and
@@ -618,17 +712,18 @@ get6 col tag = ver5_6_core_get io col tag
  where io = do myId  <- myThreadId
 	       atomicModifyIORef global_mortalthreads (\s -> (Set.insert myId s, ()))
 
+-}
+
 -- This is a bit silly, this emulates "thread local storage" to let
 -- each worker thread know whether it is recursive (True) or "oneshot".
 global_mortalthreads :: IORef (Set ThreadId)
 global_mortalthreads = unsafePerformIO (newIORef Set.empty)
 
-global_numworkers :: IORef Int
-global_numworkers = unsafePerformIO (newIORef 0)
-
 -- A computation that forks a new worker thread:
 global_makeworker :: IORef (IO ())
 global_makeworker = unsafePerformIO$ newIORef (return ())
+
+
 
 ------------------------------------------------------------
 -- Version 7: Now with healing -- bring back worker threads that died
@@ -690,20 +785,6 @@ stepStats =
      tid <- S.lift myThreadId
      HiddenState8 (_, ls) <- S.get 
      S.lift$ putStrLn (">>>   Step state: list len: "++ show (length ls))
-
-
--- Could remove this bit of duplication if I would lift the other
--- cases into an identity monad transformer.  (Or unit state.) 
-proto_putt8 :: Ord a =>  ([Step8 a] -> a -> StepCode8 b) -> TagCol8 a -> a -> StepCode8 b
-proto_putt8 action tc@(_set,_steps) tag = 
-    do set   <- S.lift$ readIORef _set
-       steps <- S.lift$ readIORef _steps
-       if memoize 
-        then if Set.member tag set
-	     then return ()
-	     else S.lift $ writeIORef _set (Set.insert tag set)
-        else return ()
-       action steps tag
 
 -- This is the high level interface for running several steps in
 -- parallel and then blocking on the result.
@@ -782,15 +863,15 @@ spawn ioaction =
 -- The core of the version 8 implementation:
 --------------------------------------------------------------------------------
 
-newItemCol8 :: ITEMPREREQS => GraphCode (ItemCol8 tag b)
+newItemCol8 :: ITEMPREREQS => GraphCode0 (ItemCol8 tag b)
 newItemCol8 = do ref <- newIORef Map.empty
 		 return (ItemCol8 ref)
 
-newTagCol8  :: GraphCode (TagCol8 tag)
+newTagCol8  :: GraphCode0 (TagCol8 tag)
 newTagCol8 = sharedNTC
 
 putt8 :: Ord a  => TagCol8 a -> a -> StepCode8 ()
-putt8 = proto_putt8
+putt8 = proto_putt_lifted
 	         (\ steps tag -> 
 		  -- Spark each downstream step, attempting to do it in parallel before a 
 		  -- subsequent sync (at the end of the containing step).		  
@@ -812,7 +893,7 @@ get8 (ItemCol8 icol) tag =
 		 throw EscapeStep
 
 
-initfin :: String -> StepCode8 a -> GraphCode a       
+initfin :: String -> StepCode8 a -> GraphCode0 a       
 initfin str m = do let err = error str
 	           x <- try_stepcode err m
 	           case x of Nothing -> err
@@ -890,11 +971,6 @@ itemsToList8 (ItemCol8 icol) =
 -- Pick an implementation:
 -- (This has grown more complex with differences in the types used between schedulers.)
 
-#ifndef CNC_SCHEDULER
-#warning  "Cnc.hs -- CNC_SCHEDULER unset, defaulting to scheduler 6 "
-#define CNC_SCHEDULER 6
-#endif
-
 -- |An informal identifier of the CnC version presently in use (for example, identifying a scheduler implementation).
 cncVariant :: String
 cncVariant="io/" ++ show (CNC_SCHEDULER :: Int)
@@ -912,13 +988,14 @@ get=get8; putt=putt8; finalize=finalize8; quiescence_support=True ;
 #error "Cnc.hs -- CNC_SCHEDULER is not set to a support scheduler: {3,4,5,6,8}"
 #endif
 
-itemsToList :: ITEMPREREQS => ItemCol tag b -> StepCode [(tag,b)]
+--itemsToList :: ITEMPREREQS => ItemCol tag b -> StepCode [(tag,b)]
 
 -- |A monad representing the computations performed by nodes in the CnC
 -- graph.  This includes putting out tags and items that will be
 -- consumed by other steps.
 #if CNC_SCHEDULER == 8
 type StepCode a   = StepCode8 a
+type GraphCode a  = GraphCode0 a
 type TagCol   a   = TagCol8   a 
 type ItemCol  a b = ItemCol8  a b
 newItemCol = newItemCol8
@@ -927,8 +1004,23 @@ put = put8
 initialize = initialize8
 itemsToList x = itemsToList8 x
 stepUnsafeIO io = S.lift$ io
+
+#elif CNC_SCHEDULER == 5 || CNC_SCHEDULER == 6
+# warning "Selecting types for scheduler 5/6..."
+type StepCode a   = StepCode5 a
+type GraphCode a  = GraphCode5 a
+type TagCol   a   = TagCol5   a 
+type ItemCol  a b = ItemCol0  a b
+newItemCol = newItemCol0
+--newTagCol  = newTagCol0
+put = put5
+initialize = initialize0
+--itemsToList x = itemsToList8 x
+stepUnsafeIO io = S.lift$ io
+
 #else
 type StepCode a   = StepCode0 a
+type GraphCode a  = GraphCode0 a
 type TagCol   a   = TagCol0   a 
 type ItemCol  a b = ItemCol0  a b
 newItemCol = newItemCol0
@@ -950,7 +1042,7 @@ stepPutStr :: String -> StepCode ()
 stepPutStr str = stepUnsafeIO (putStr str)
 -- | Print a message within the graph construction code (unsafe side effect).
 cncPutStr :: String -> GraphCode ()
-cncPutStr  str = cncUnsafeIO  (putStr str)
+cncPutStr  str = GRAPHLIFT cncUnsafeIO  (putStr str)
 
 
 --------------------------------------------------------------------------------
@@ -962,6 +1054,7 @@ atomicDecr x = atomicModifyIORef x (\n -> (n-1, ()))
 --  Testing
 --------------------------------------------------------------------------------
 
+{-
 -- Here's a tiny program to run:
 incrStep d1 (t2,d2) tag = 
  do val <- get d1 tag 
@@ -1005,4 +1098,7 @@ smalltest = testCase "Small test of Cnc model under Cnc.hs" $
 
 tests :: Test
 tests = TestList [ smalltest ]
+-}
+
+tests = TestList [ ]
 
