@@ -151,123 +151,13 @@ memoize = False
 #endif
 
 
---------------------------------------------------------------------------------
--- Mutable Maps.  
--- Abstract over the shared mutable data structure used
--- for item collections.
---------------------------------------------------------------------------------
-
 #ifdef HASHTABLE_TEST
-type MutableMap a b = HashTable a (MVar b)
-newMutableMap :: (Eq tag, Hashable tag) => IO (MutableMap tag b)
-newMutableMap = HT.new (==) hash
-assureMvar col tag = 
-  do mayb <- HT.lookup col tag
-     case mayb of 
-         Nothing -> do mvar <- newEmptyMVar
-		       HT.insert col tag mvar
-		       return mvar
-	 Just mvar -> return mvar
-mmToList = HT.toList
 #define ITEMPREREQS (Eq tag, Ord tag, Hashable tag, Show tag)
-#warning "Enabling HashTable item collections.  These are not truly thread safe (yet)."
-#else
-
-#ifdef USE_GMAP
-#warning "Using experimental indexed type family GMap implementation..."
--- Trying to use GMaps:
-type MutableMap a b = IORef (GMap a (MVar b))
-newMutableMap :: (GMapKey tag) => IO (MutableMap tag b)
-newMutableMap = newIORef GM.empty
-assureMvar col tag = 
-  do map <- readIORef col
-     case GM.lookup tag map of 
-         Nothing -> do mvar <- newEmptyMVar
-		       atomicModifyIORef col 
-			  (\mp -> 
-			   let altered = GM.alter 
-			                  (\mv -> 
-					    case mv of
-					     Nothing -> Just mvar
-					     Just mv -> Just mv)
-			                  tag mp 
-			   -- Might be able to optimize this somehow...
-			   in (altered, (GM.!) altered tag))
-	 Just mvar -> return mvar
-mmToList col = 
-    do map <- readIORef col 
-       return (GM.toList map)
+#elif USE_GMAP
 -- #define ITEMPREREQS (Ord tag, Eq tag, GMapKey tag, Show tag)
 #define ITEMPREREQS (GMapKey tag)
-
 #else
--- A Data.Map based version:
--- Can probably get rid of this once we build a little confidence with GMap:
-type MutableMap a b = IORef (Map a (MVar b))
-newMutableMap :: (Ord tag) => IO (MutableMap tag b)
-newMutableMap = newIORef Map.empty
-assureMvar col tag = 
-  do map <- readIORef col
-     case Map.lookup tag map of 
-         Nothing -> do mvar <- newEmptyMVar
-		       atomicModifyIORef col 
-			  (\mp -> 
-			   let altered = Map.alter 
-			                  (\mv -> 
-					    case mv of
-					     Nothing -> Just mvar
-					     Just mv -> Just mv)
-			                  tag mp 
-			   -- Might be able to optimize this somehow...
-			   in (altered, (Map.!) altered tag))
-	 Just mvar -> return mvar
-mmToList col = 
-    do map <- readIORef col 
-       return (Map.toList map)
 #define ITEMPREREQS (Eq tag, Ord tag, Show tag)
-
-#endif
-#endif
-
-
-------------------------------------------------------------
--- Hot Atomic Words operations
-------------------------------------------------------------
-
--- In this library we abuse individual words of memory with many
--- concurrent, atomic operations.  In Haskell, there are three choices
--- for these: IORef, MVars, and STVars.
-
--- We want to experiment with all three of these. 
-
-#define HOTVAR 1
-newHotVar     :: a -> IO (HotVar a)
-modifyHotVar  :: HotVar a -> (a -> (a,b)) -> IO b
-modifyHotVar_ :: HotVar a -> (a -> a) -> IO ()
-
-#if HOTVAR == 1
-type HotVar a = IORef a
-newHotVar     = newIORef
-modifyHotVar  = atomicModifyIORef
-modifyHotVar_ v fn = atomicModifyIORef v (\a -> (fn a, ()))
-
-#elif HOTVAR == 2 
-#warning "Using MVars for hot atomic variables."
-type HotVar a = MVar a
-newHotVar     = newMVar
-modifyHotVar  v fn = modifyMVar  v (return . fn)
-modifyHotVar_ v fn = modifyMVar_ v (return . fn)
-
-#elif HOTVAR == 3
-#warning "Using TVars for hot atomic variables."
--- Simon Marlow said he saw better scaling with TVars (surprise to me):
-type HotVar a = TVar a
-newHotVar = newTVarIO
-modifyHotVar  tv fn = atomically (do x <- readTVar tv 
-				     let (x2,b) = fn x
-				     writeTVar tv x2
-				     return b)
-modifyHotVar_ tv fn = atomically (do x <- readTVar tv; writeTVar tv (fn x))
 #endif
 
 ------------------------------------------------------------
@@ -291,7 +181,7 @@ initialize :: StepCode a -> GraphCode a
 finalize   :: StepCode a -> GraphCode a
 
 -- |Construct a new tag collection.
---newTagCol  :: GraphCode (TagCol tag)
+newTagCol  :: GraphCode (TagCol tag)
 -- |Construct a new item collection.
 newItemCol :: ITEMPREREQS => GraphCode (ItemCol tag val)
 
@@ -341,8 +231,8 @@ sharedNTC = do ref1 <- newIORef Set.empty
 	       ref2 <- newIORef []
 	       return (ref1, ref2)
 
-newTagCol0  :: GraphCode (TagCol0 tag)
-newTagCol0 = GRAPHLIFT sharedNTC
+newTagCol0  :: GraphCode0 (TagCol0 tag)
+newTagCol0 = sharedNTC
 
 
 -- Putting items: If it's not there we add the mvar ourselves.
@@ -581,6 +471,9 @@ tryPop stack   = modifyHotVar stack tryfirst
     tryfirst []    = ([], Nothing)
     tryfirst (a:b) = (b,  Just a)
 ----------------------------------------
+
+newTagCol5  :: GraphCode5 (TagCol5 tag)
+newTagCol5 = S.lift sharedNTC
 
 putt5 = proto_putt_lifted
 	(\ steps tag -> 
@@ -1012,7 +905,7 @@ type GraphCode a  = GraphCode5 a
 type TagCol   a   = TagCol5   a 
 type ItemCol  a b = ItemCol0  a b
 newItemCol = newItemCol0
---newTagCol  = newTagCol0
+newTagCol  = newTagCol5
 put = put5
 initialize = initialize0
 --itemsToList x = itemsToList8 x

@@ -36,7 +36,11 @@ module Intel.CncUtil (
 		      Hashable (..),
 		      (!),
 		      testCase,
-		      tests
+		      tests,
+
+                      MutableMap, newMutableMap, assureMvar, mmToList,
+		      HotVar, newHotVar, modifyHotVar, modifyHotVar_,
+
 		      )
 where
 #endif
@@ -58,6 +62,10 @@ import Debug.Trace
 
 import Test.HUnit
 import Test.QuickCheck (quickCheck, (==>))
+
+--------------------------------------------------------------------------------
+-- Miscellaneous Utilities
+--------------------------------------------------------------------------------
 
 -- |A simple loop construct to use if you don't trust rewrite based deforestation.
 -- Usage foldRange start end acc, where start is inclusive, end uninclusive.
@@ -111,6 +119,119 @@ doTrials trials mnd =
        let diff = (diffUTCTime end strt)
        --let diff = fromIntegral (end-start) / (10.0 ^ 12)
        putStrLn$ show diff ++  " real time consumed"
+
+
+--------------------------------------------------------------------------------
+-- Mutable Maps.  
+--------------------------------------------------------------------------------
+-- Abstract over the shared mutable data structure used
+-- for item collections (in the IO-based Cnc.hs)
+
+#ifdef HASHTABLE_TEST
+type MutableMap a b = HashTable a (MVar b)
+newMutableMap :: (Eq tag, Hashable tag) => IO (MutableMap tag b)
+newMutableMap = HT.new (==) hash
+assureMvar col tag = 
+  do mayb <- HT.lookup col tag
+     case mayb of 
+         Nothing -> do mvar <- newEmptyMVar
+		       HT.insert col tag mvar
+		       return mvar
+	 Just mvar -> return mvar
+mmToList = HT.toList
+#warning "Enabling HashTable item collections.  These are not truly thread safe (yet)."
+
+#elif USE_GMAP
+#warning "Using experimental indexed type family GMap implementation..."
+-- Trying to use GMaps:
+type MutableMap a b = IORef (GMap a (MVar b))
+newMutableMap :: (GMapKey tag) => IO (MutableMap tag b)
+newMutableMap = newIORef GM.empty
+assureMvar col tag = 
+  do map <- readIORef col
+     case GM.lookup tag map of 
+         Nothing -> do mvar <- newEmptyMVar
+		       atomicModifyIORef col 
+			  (\mp -> 
+			   let altered = GM.alter 
+			                  (\mv -> 
+					    case mv of
+					     Nothing -> Just mvar
+					     Just mv -> Just mv)
+			                  tag mp 
+			   -- Might be able to optimize this somehow...
+			   in (altered, (GM.!) altered tag))
+	 Just mvar -> return mvar
+mmToList col = 
+    do map <- readIORef col 
+       return (GM.toList map)
+#else
+-- A Data.Map based version:
+-- Can probably get rid of this once we build a little confidence with GMap:
+type MutableMap a b = IORef (DM.Map a (MVar b))
+newMutableMap :: (Ord tag) => IO (MutableMap tag b)
+newMutableMap = newIORef DM.empty
+assureMvar col tag = 
+  do map <- readIORef col
+     case DM.lookup tag map of 
+         Nothing -> do mvar <- newEmptyMVar
+		       atomicModifyIORef col 
+			  (\mp -> 
+			   let altered = DM.alter 
+			                  (\mv -> 
+					    case mv of
+					     Nothing -> Just mvar
+					     Just mv -> Just mv)
+			                  tag mp 
+			   -- Might be able to optimize this somehow...
+			   in (altered, (DM.!) altered tag))
+	 Just mvar -> return mvar
+mmToList col = 
+    do map <- readIORef col 
+       return (DM.toList map)
+#endif
+
+------------------------------------------------------------
+-- Hot Atomic Words operations
+------------------------------------------------------------
+
+-- In this library we abuse individual words of memory with many
+-- concurrent, atomic operations.  In Haskell, there are three choices
+-- for these: IORef, MVars, and STVars.
+
+-- We want to experiment with all three of these. 
+
+#define HOTVAR 1
+newHotVar     :: a -> IO (HotVar a)
+modifyHotVar  :: HotVar a -> (a -> (a,b)) -> IO b
+modifyHotVar_ :: HotVar a -> (a -> a) -> IO ()
+
+#if HOTVAR == 1
+type HotVar a = IORef a
+newHotVar     = newIORef
+modifyHotVar  = atomicModifyIORef
+modifyHotVar_ v fn = atomicModifyIORef v (\a -> (fn a, ()))
+
+#elif HOTVAR == 2 
+#warning "Using MVars for hot atomic variables."
+type HotVar a = MVar a
+newHotVar     = newMVar
+modifyHotVar  v fn = modifyMVar  v (return . fn)
+modifyHotVar_ v fn = modifyMVar_ v (return . fn)
+
+#elif HOTVAR == 3
+#warning "Using TVars for hot atomic variables."
+-- Simon Marlow said he saw better scaling with TVars (surprise to me):
+type HotVar a = TVar a
+newHotVar = newTVarIO
+modifyHotVar  tv fn = atomically (do x <- readTVar tv 
+				     let (x2,b) = fn x
+				     writeTVar tv x2
+				     return b)
+modifyHotVar_ tv fn = atomically (do x <- readTVar tv; writeTVar tv (fn x))
+#endif
+
+
 
 --------------------------------------------------------------------------------
 -- Class of types which are hashable.
