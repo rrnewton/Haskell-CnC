@@ -70,25 +70,32 @@ tryPop stack   = modifyHotVar stack tryfirst
 -- good reason).  When the code below falls back to readMVar that
 -- should succeed.
 
-ver5_6_core_get hook (col) tag = 
-    do --(HiddenState5 (stack, numworkers, makeworker, _)) <- S.get
-       mvar    <- S.lift$ assureMvar col tag 
-       hopeful <- S.lift$ tryTakeMVar mvar
+issueReplacement = 
+  do STEPLIFT atomicIncr global_numworkers
+     -- If this were CPS then we would just give our
+     -- continuation to the forked thread.  Alas, no.
+     makeworker <- STEPLIFT readIORef global_makeworker
+     STEPLIFT forkIO makeworker
+
+grabWithBackup hook mvar =
+    do hopeful <- STEPLIFT tryTakeMVar mvar
        case hopeful of 
-         Just v  -> do S.lift$ putMVar mvar v -- put it back where we found it
+         Just v  -> do STEPLIFT putMVar mvar v -- put it back where we found it
 		       return v
 	 -- Otherwise, no data.  If we block our own thread, we need to issue a replacement.
-         Nothing -> do 
-		       S.lift$  atomicIncr global_numworkers
-		       -- If this were CPS then we would just give our
-		       -- continuation to the forked thread.  Alas, no.
-		       makeworker <- S.lift$ readIORef global_makeworker
-		       S.lift$ forkIO makeworker
-		       S.lift$ hook -- Any IO action can go here...
+         Nothing -> do issueReplacement
+		       
+		       STEPLIFT hook -- Any IO action can go here...
 #ifdef DEBUG_HASKELL_CNC
-		       S.lift$ putStrLn $ " >>> Blocked on "++ show tag ++"||| "
+		       STEPLIFT putStrLn $ " >>> Blocked on "++ show tag ++"||| "
 #endif
-		       S.lift$ readMVar mvar
+		       STEPLIFT readMVar mvar
+
+
+ver5_6_core_get hook (col) tag = 
+    do --(HiddenState5 (stack, numworkers, makeworker, _)) <- S.get
+       mvar    <- STEPLIFT assureMvar col tag 
+       grabWithBackup hook mvar
 
 --ver5_6_core_finalize :: Chan a -> IO b -> IO () -> StepCode b
 ver5_6_core_finalize :: Chan a -> StepCode b -> StepCode () -> GraphCode b

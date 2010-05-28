@@ -36,11 +36,12 @@ wc:
 	wc $(FILES)
 
 
+DOCBASE=html_doc
+
 doc: 
-	mkdir -p html_doc/url/Intel/
-	ls Intel/*.hs | xargs -i echo HsColour -html {} -o html_doc/url/Intel/{}
-#	haddock  --source-base=url/ --source-module=url/%F -o html_doc -html --optghc -cpp Intel/Cnc.hs Intel/CncPure.hs
-#	cp Intel/*.hs html_doc/url/Intel/
+	mkdir -p $(DOCBASE)/url/Intel/
+	ls Intel/*.hs | xargs -i HsColour -html {} -ohtml_doc/url/{}
+	haddock  --source-base=url/ --source-module=url/%F -o html_doc -html --optghc -cpp Intel/Cnc.hs Intel/CncPure.hs
 
 
 clean:

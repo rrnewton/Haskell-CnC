@@ -53,3 +53,17 @@ finalize x = x
 -- TODO: At least kill off the existing threads here?
 
 quiescence_support=False; 
+
+
+--------------------------------------------------------------------------------
+-- EXPERIMENTAL:
+--------------------------------------------------------------------------------
+-- This is a proposed addition for manipulating items outside of item collections.
+
+type Item = MVar
+newItem  = newEmptyMVar
+readItem = readMVar
+putItem mv x = 
+  do b <- tryPutMVar mv x
+     if b then return ()
+	  else error "Violation of single assignment rule; second put on Item!"

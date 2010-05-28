@@ -67,6 +67,8 @@ module MODNAME (
                   runGraph, 
 		  stepPutStr, cncPutStr, cncVariant,
 
+                  Item, newItem, readItem, putItem,
+
                   tests, 
 -- * Example Program
 {- |
@@ -170,7 +172,12 @@ memoize = False
 prescribe   :: TagCol tag -> Step tag -> GraphCode ()
 
 -- |Put-Tag.  Push a control tag out into the computation graph.
+#ifdef MEMOIZE
 putt :: Ord tag         => TagCol  tag     -> tag         -> StepCode ()
+#else
+putt ::                    TagCol  tag     -> tag         -> StepCode ()
+#endif
+
 -- |Put an item.  Subsequently, any steps waiting on the item may subsequently execute.
 put  :: ITEMPREREQS     => ItemCol tag val -> tag -> val  -> StepCode ()
 -- |Get an item.  Synchronous read-data operation.
@@ -238,15 +245,20 @@ prescribe (_set,_steps) step =
 -- It is common to all the scheduler variants below.
 -- 
 -- FIXME: Consider a trampoline.  Some schedulers may stack leak.
-proto_putt :: Ord a =>  ([Step a] -> a -> StepCode b) -> TagCol a -> a -> StepCode b
+--proto_putt :: Ord a =>  ([Step a] -> a -> StepCode b) -> TagCol a -> a -> StepCode b
 proto_putt action tc@(_set,_steps) tag = 
     do set   <- STEPLIFT readIORef _set
        steps <- STEPLIFT readIORef _steps
-       if memoize 
-        then if Set.member tag set
-	     then return ()
-	     else STEPLIFT writeIORef _set (Set.insert tag set)
-        else return ()
+--       if memoize 
+--        then 
+#ifdef MEMOIZE
+       if Set.member tag set
+        then return ()
+        else STEPLIFT writeIORef _set (Set.insert tag set)
+#else
+--        else 
+       return ()
+#endif
        action steps tag
 
 #ifndef SUPPRESS_itemsToList
@@ -336,6 +348,23 @@ smalltest = testCase "Small test of Cnc model under Cnc.hs" $
 
 tests :: Test
 tests = TestList [ smalltest ]
+
+
+--------------------------------------------------------------------------------
+-- EXPERIMENTAL:
+--------------------------------------------------------------------------------
+-- This is a proposed addition for manipulating items outside of item collections.
+
+newItem  :: StepCode (Item a)
+readItem :: Item a -> StepCode a
+putItem  :: Item a -> a -> StepCode ()
+
+#if CNC_SCHEDULER != 3 && CNC_SCHEDULER != 5
+type Item a = ()
+newItem  = error "newItem not implemented under this scheduler"
+readItem = error "readItem not implemented under this scheduler"
+putItem  = error "putItem not implemented under this scheduler"
+#endif
 
 --------------------------------------------------------------------------------
 

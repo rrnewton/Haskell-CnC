@@ -4,6 +4,7 @@
   , ScopedTypeVariables
   , DeriveDataTypeable
   , MultiParamTypeClasses
+  , CPP
   #-}
 -- State monad transformer is needed for both step & graph:
 #ifndef MODNAME
@@ -46,3 +47,10 @@ finalize finalAction =
 
 quiescence_support = True
 
+type Item = MVar
+newItem  = STEPLIFT newEmptyMVar
+readItem = grabWithBackup (return ())
+putItem mv x = 
+  do b <- STEPLIFT tryPutMVar mv x
+     if b then return ()
+	  else error "Violation of single assignment rule; second put on Item!"
