@@ -101,7 +101,7 @@ memoize = False
 
 
 #ifndef CNC_SCHEDULER
-#warning  "Cnc.hs -- CNC_SCHEDULER unset, defaulting to scheduler 2 "
+#warning  "CncPure.hs -- CNC_SCHEDULER unset, defaulting to scheduler 2 "
 #define CNC_SCHEDULER 2
 #endif
 

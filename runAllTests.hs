@@ -14,7 +14,7 @@ main = do
 	  cd <- getCurrentDirectory
 
 	  putStrLn$ "Running Unit tests in directory: " ++ show cd
-
+	  
 	  putStrLn$ "\n================================================================================"
 	  putStrLn$ "Running "++ show (testCaseCount Intel.CncUtil.tests) ++" tests from Intel.CncUtil"
 	  putStrLn$ "================================================================================\n"
@@ -37,6 +37,18 @@ main = do
 	  putStrLn$ "\n================================================================================"
 	  putStrLn$ "Finally running system tests in all configurations (example programs):"
 	  putStrLn$ "================================================================================\n"
+
+          b <- doesFileExist "run_all_examples.sh"
+          if not b
+           then error$ "Uh oh, the script run_all_examples.sh doesn't exist in this directory.\n"++
+		       "  If cabal installed the package you may find it in your ~/.cabal/lib directory."
+	   else return ()   
+
+          -- I have problems with cabal sdist not preserving executable flags.
+          system "chmod +x ./runcnc" 
+          system "chmod +x ./run_all_examples.sh" 
+          system "chmod +x ./ntimes" 
+          system "chmod +x ./ntimes_minmedmax" 
 
           code <- system "TRIALS=1 ./run_all_examples.sh" 
 	  let code = ExitSuccess 

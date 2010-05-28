@@ -33,22 +33,25 @@
 -- Then at finalize time we set up the workers and run them.
 finalize finalAction = 
     do joiner <- GRAPHLIFT newChan 
+       (HiddenState5 (stack, _, _, mortalthreads)) <- S.get
        let worker :: StepCode () = 
-	       do x <- STEPLIFT tryPop global_stack
+	       do x <- STEPLIFT tryPop stack
 		  case x of 
 		    Nothing -> STEPLIFT writeChan joiner ()
 		    Just action -> 
 			do action 
 			   myId <- STEPLIFT myThreadId
-			   set  <- STEPLIFT readIORef global_mortalthreads
+			   set  <- STEPLIFT readIORef mortalthreads
 			   if Set.notMember myId set
 			      then worker -- keep going
 			      else STEPLIFT writeChan joiner ()
        ver5_6_core_finalize joiner finalAction worker
 
-get col tag = ver5_6_core_get io col tag
- where io = do myId  <- myThreadId
-	       atomicModifyIORef global_mortalthreads (\s -> (Set.insert myId s, ()))
+get col tag = 
+ do (HiddenState5 (stack, _, _, mortalthreads)) <- S.get
+    let io = do myId  <- myThreadId	      
+ 	        atomicModifyIORef mortalthreads (\s -> (Set.insert myId s, ()))
+    ver5_6_core_get io col tag
 
 quiescence_support = True
 

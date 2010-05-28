@@ -4,9 +4,15 @@
  ----------------------------------------
  Author: Ryan Newton, Copyright 2009-2010
 
+
 This directory contains an implementation of the Intel Concurrent
 Collections programming model (CnC) for Haskell.  It works only with
 GHC.
+
+If you are looking in this directory, you are probably not using this
+package through cabal.  Currently, it contains a Makefile and other
+scripts that are redundant with the cabal file and will be removed in
+the future.
 
 Quick Start:
 -----------------------------------------
@@ -19,46 +25,35 @@ You can also rerun the primes executable directly after that
 (primes.exe).  To run with a particular number of threads, say 8, try:
   ./primes.exe +RTS -N8
 
-If you want to poke around in the interpreter, load the system with a
-shortcut in the Makefile:
 
-  make interact
 
 ------------------------------------------------------------
 Installing Haskell CnC 
 ------------------------------------------------------------
 
-You will need GHC 6.12.1 along with the Haskell Platform.
-(The script scaling.hs also requires the package "HSH".)
-
-
-Environment 
-
- HASKELLCNC -- should be set to the install directory.
-            (Sourcing install_environment_vars.sh is one way to
-             accomplish this.)
+  cabal install haskell-cnc
 
 ------------------------------------------------------------a
 Running Haskell CnC, Method (1): Normal method.
 ------------------------------------------------------------
 
-However, this is not to say that the system could not be used as a
-regular Haskell module.  Assuming the paths are set correctly, a
-client program need only "import Cnc" or "import CncPure" to use the
-system.  But at the point where those modules are compiled (not used)
-a scheduler will need to be selected using -DCNC_SCHEDULER and the
-"-cpp" option will need to be passed to ghc.
+CnC for Haskell can be used as a regular Haskell module.  
+Look at "hello_world.hs" in the examples directory.
 
 
 ------------------------------------------------------------
 Running Haskell CnC, Method (2): Inlined library.
 ------------------------------------------------------------
 
-Note that the way the system is currently used is heavily dependent on
-the C preprocessor to choose between different configurations at
-compile time, and to ensure that we give a single file to GHC for
-whole-program optimization.
+For testing purposes, Haskell CnC can inline the library and enable
+the user to choose between different scheduling options and runtime
+parameters statically.  Under this methodology the "runcnc" script is
+used to compile and execute CnC programs.  The following environment
+variable must be set:
 
+ HASKELLCNC -- should be set to the install directory.
+            (Sourcing install_environment_vars.sh is one way to
+             accomplish this.)
 
 
 Preprocessor variables:

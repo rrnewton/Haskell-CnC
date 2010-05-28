@@ -17,7 +17,7 @@ type GraphCode a = StepCode a
 --   (2) the number of workers for this graph
 --   (3) the "make worker" function to spawn new threads
 --   (4) the set of "mortal threads"
-newtype HiddenState5 = HiddenState5 (HotVar [StepCode ()], HotVar Int, IO (), Set ThreadId)
+newtype HiddenState5 = HiddenState5 (HotVar [StepCode ()], HotVar Int, IO (), HotVar (Set ThreadId))
   deriving Show
 
 instance Show (IORef a) where 
@@ -27,24 +27,6 @@ instance Show (IO a) where
 
 atomicIncr x = atomicModifyIORef x (\n -> (n+1, ()))
 atomicDecr x = atomicModifyIORef x (\n -> (n-1, ()))
-
-
--- This will be one hot IORef:
-global_stack :: HotVar [StepCode ()]
-global_stack = unsafePerformIO (newHotVar [])
-
-global_numworkers :: IORef Int
-global_numworkers = unsafePerformIO (newIORef 0)
-
--- A computation that forks a new worker thread:
-global_makeworker :: IORef (IO ())
-global_makeworker = unsafePerformIO$ newIORef (return ())
-
-
--- This is a bit silly, this emulates "thread local storage" to let
--- each worker thread know whether it is recursive (True) or "oneshot".
-global_mortalthreads :: IORef (Set ThreadId)
-global_mortalthreads = unsafePerformIO (newIORef Set.empty)
 
 
 -- A simple stack interface:
@@ -71,10 +53,11 @@ tryPop stack   = modifyHotVar stack tryfirst
 -- should succeed.
 
 issueReplacement = 
-  do STEPLIFT atomicIncr global_numworkers
+  do (HiddenState5 (stack, numworkers, makeworker, _)) <- S.get
+     STEPLIFT atomicIncr numworkers
      -- If this were CPS then we would just give our
      -- continuation to the forked thread.  Alas, no.
-     makeworker <- STEPLIFT readIORef global_makeworker
+     --makeworker <- STEPLIFT readIORef global_makeworker
      STEPLIFT forkIO makeworker
 
 grabWithBackup hook mvar =
@@ -93,26 +76,28 @@ grabWithBackup hook mvar =
 
 
 ver5_6_core_get hook (col) tag = 
-    do --(HiddenState5 (stack, numworkers, makeworker, _)) <- S.get
+    do (HiddenState5 (stack, numworkers, makeworker, _)) <- S.get
        mvar    <- STEPLIFT assureMvar col tag 
        grabWithBackup hook mvar
 
 --ver5_6_core_finalize :: Chan a -> IO b -> IO () -> StepCode b
 ver5_6_core_finalize :: Chan a -> StepCode b -> StepCode () -> GraphCode b
 ver5_6_core_finalize joiner finalAction worker = 
-    do --(HiddenState5 (stack, numworkers, makeworker, _)) <- S.get
-       state <- S.get 
-       let makeworker = do S.runStateT worker state; return ()
-       S.lift$ writeIORef global_makeworker makeworker
-       S.lift$ atomicModifyIORef global_numworkers (\n -> (n + numCapabilities, ()))
+    do (HiddenState5 (stack, numworkers, _, _)) <- S.get
+       --state <- S.get 
+       --GRAPHLIFT writeIORef global_makeworker makeworker
+       let mkwrkr = do S.runStateT worker state2; return ()
+           state2 = HiddenState5 (stack, numworkers, mkwrkr, undefined)
+
+       GRAPHLIFT atomicModifyIORef numworkers (\n -> (n + numCapabilities, ()))
        -- Fork one worker per thread:
 #ifdef DEBUG_HASKELL_CNC
        S.lift$ putStrLn$ "Forking "++ show numCapabilities ++" threads"
 #endif
-       S.lift$ mapM (\n -> forkIO makeworker) [0..numCapabilities-1]
+       S.lift$ mapM (\n -> forkIO mkwrkr) [0..numCapabilities-1]
 
        -- This waits for quiescense:
-       let waitloop = do num <- readIORef global_numworkers
+       let waitloop = do num <- readIORef numworkers
 	                 if num == 0
 			  then return () 
 			  else do 
@@ -120,7 +105,7 @@ ver5_6_core_finalize joiner finalAction worker =
 			          putStrLn ("=== Waiting on workers: "++ show num ++" left")
 #endif
 				  readChan joiner
-				  atomicDecr global_numworkers
+				  atomicDecr numworkers
 				  waitloop
        S.lift$ waitloop
        finalAction
@@ -128,13 +113,14 @@ ver5_6_core_finalize joiner finalAction worker =
 
 putt = proto_putt
 	(\ steps tag -> 
-	   do --(HiddenState5 (stack, numworkers, makeworker, _)) <- S.get
-              foldM (\ () step -> S.lift$ push global_stack (step tag))
+	   do (HiddenState5 (stack, _, _, _)) <- S.get
+              foldM (\ () step -> STEPLIFT push stack (step tag))
                        () steps)
 
 runGraph x = unsafePerformIO (runState x)
 runState x =
     do hv  <- newHotVar []
        hv2 <- newHotVar 0
-       (a,_) <- S.runStateT x (HiddenState5 (hv,hv2, undefined, Set.empty))
+       hv3 <- newHotVar Set.empty
+       (a,_) <- S.runStateT x (HiddenState5 (hv,hv2, undefined, hv3))
        return a

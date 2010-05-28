@@ -19,6 +19,6 @@ main = do putStrLn$ "Running Setup.hs ..."
 	  defaultMainWithHooks (simpleUserHooks {runTests = myTests}) 
 
 myTests :: Args -> Bool -> PackageDescription -> LocalBuildInfo -> IO () 
-myTests _ _ _ _ = do code <- system "./dist/build/runAllTests/runAllTests" 
+myTests _ _ _ _ = do code <- system "./dist/build/haskell-cnc-runTests/haskell-cnc-runTests"
 		     exitWith code
 
