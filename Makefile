@@ -2,11 +2,17 @@
 
 # PARGHCOPTS=-feager-blackholing
 
-all: 
+default: 
         # This target builds CnC as precompiled modules:
         # Pick default schedulers as well:
 	ghc --make -c -cpp -DCNC_SCHEDULER=2 Intel/CncPure.hs
 	ghc --make -c -cpp -DCNC_SCHEDULER=5 Intel/Cnc.hs
+
+all:
+	cabal configure
+	cabal build
+	cabal haddock
+	./Setup.hs test
 
 interact:
 	ghci -cpp -DCNC_SCHEDULER=2 Intel/CncPure.hs
@@ -31,8 +37,11 @@ wc:
 
 
 doc: 
-	mkdir html_doc
-	haddock -o html_doc -html --optghc -cpp Intel/Cnc.hs Intel/CncPure.hs
+	mkdir -p html_doc/url/Intel/
+	ls Intel/*.hs | xargs -i echo HsColour -html {} -o html_doc/url/Intel/{}
+#	haddock  --source-base=url/ --source-module=url/%F -o html_doc -html --optghc -cpp Intel/Cnc.hs Intel/CncPure.hs
+#	cp Intel/*.hs html_doc/url/Intel/
+
 
 clean:
 	rm -f Intel/*.o Intel/*.hi Intel/*~ 

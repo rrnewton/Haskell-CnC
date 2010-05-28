@@ -16,4 +16,6 @@ Things to work on:
     workers spin (maybe with some sleeping) until the finalize action
     is finished.
 
+  * Remove lingering IORef usages and replace with HotVar type.
+
 

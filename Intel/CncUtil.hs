@@ -146,25 +146,25 @@ mmToList = HT.toList
 -- Trying to use GMaps:
 type MutableMap a b = IORef (GMap a (MVar b))
 newMutableMap :: (GMapKey tag) => IO (MutableMap tag b)
-newMutableMap = newIORef GM.empty
+newMutableMap = newIORef empty
 assureMvar col tag = 
   do map <- readIORef col
-     case GM.lookup tag map of 
+     case lookup tag map of 
          Nothing -> do mvar <- newEmptyMVar
 		       atomicModifyIORef col 
 			  (\mp -> 
-			   let altered = GM.alter 
+			   let altered = alter 
 			                  (\mv -> 
 					    case mv of
 					     Nothing -> Just mvar
 					     Just mv -> Just mv)
 			                  tag mp 
 			   -- Might be able to optimize this somehow...
-			   in (altered, (GM.!) altered tag))
+			   in (altered, (!) altered tag))
 	 Just mvar -> return mvar
 mmToList col = 
     do map <- readIORef col 
-       return (GM.toList map)
+       return (toList map)
 #else
 -- A Data.Map based version:
 -- Can probably get rid of this once we build a little confidence with GMap:

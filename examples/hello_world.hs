@@ -23,7 +23,6 @@
 -- This demonstrates the normal (NOT #include) method of loading CnC:
 import Intel.Cnc
 
-
 -- Here's an odd little hello world where we communicate the two words
 -- to a computational step which puts them together.
 
