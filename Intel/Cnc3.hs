@@ -2,6 +2,9 @@
   , BangPatterns
   , MagicHash 
   , ScopedTypeVariables
+  , TypeFamilies 
+  , UndecidableInstances
+  , OverlappingInstances
   , DeriveDataTypeable
   , MultiParamTypeClasses
   #-}
@@ -13,9 +16,10 @@
 #define CNC_SCHEDULER 3
 #define STEPLIFT  id$
 #define GRAPHLIFT id$
+-- #define SUPPRESS_cncFor
 #include "Cnc.Header.hs"
 
-type TagCol  a   = (IORef (Set a), IORef [Step a])
+type TagCol  a   = (IORef (Set.Set a), IORef [Step a])
 type ItemCol a b = MutableMap a b
 
 type StepCode  = IO 
@@ -67,3 +71,23 @@ putItem mv x =
   do b <- tryPutMVar mv x
      if b then return ()
 	  else error "Violation of single assignment rule; second put on Item!"
+
+#ifdef SUPPRESS_cncFor
+-- Because this scheduler doesn't have the *nested* structure that,
+-- say, scheduler 8 does, the default definition of cncFor will not
+-- provide much benefit.  Instead, we try one that uses explicit
+-- placement of threads.
+cncFor start end body = 
+ -- With this version we don't create any additional graph nodes.
+ -- Instead, we create additional IO threads.
+ do forM_ [0..numthreads-1] fork_thread      
+ where 
+    splitfactor = 1 -- TBB uses 4, but IO threads have more overhead...
+    numthreads = numCapabilities * splitfactor
+    ranges = splitInclusiveRange numthreads (start,end)
+    fork_thread i = 
+     -- Assign the IO thread to a particular CPU:
+     forkOnIO (i `quot` splitfactor) $ 
+       let (x,y) = ranges !! i in
+       for_ x y body
+#endif

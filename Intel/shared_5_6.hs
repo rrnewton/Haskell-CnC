@@ -2,7 +2,7 @@
 -- Pieces that are common to version 5 and 6
 ------------------------------------------------------------
 
-type TagCol a   = (IORef (Set a), IORef [Step a])
+type TagCol a   = (IORef (Set.Set a), IORef [Step a])
 type ItemCol a b = MutableMap a b
 
 -- Here the hidden state keeps track of a pointer to the work-sharing
@@ -17,7 +17,7 @@ type GraphCode a = StepCode a
 --   (2) the number of workers for this graph
 --   (3) the "make worker" function to spawn new threads
 --   (4) the set of "mortal threads"
-newtype HiddenState5 = HiddenState5 (HotVar [StepCode ()], HotVar Int, IO (), HotVar (Set ThreadId))
+newtype HiddenState5 = HiddenState5 (HotVar [StepCode ()], HotVar Int, IO (), HotVar (Set.Set ThreadId))
   deriving Show
 
 instance Show (IORef a) where 

@@ -2,6 +2,9 @@
   , BangPatterns
   , MagicHash 
   , ScopedTypeVariables
+  , TypeFamilies 
+  , UndecidableInstances
+  , OverlappingInstances
   , DeriveDataTypeable
   , MultiParamTypeClasses
   #-}
@@ -16,6 +19,7 @@
 #define SUPPRESS_newItemCol
 #define SUPPRESS_initialize
 #define SUPPRESS_itemsToList
+#define SUPPRESS_graphInStep
 #include "Cnc.Header.hs"
 
 --------------------------------------------------------------------
@@ -35,6 +39,9 @@
 -- Like Concurrent Collectins for C++, this version uses exceptions to
 -- escape a step's execution upon a failed get.  An alternative is to
 -- use the ContT monad transformer.
+
+-- TODO: The Cilk-like functionality could be factored into its own
+-- reusable module.
 
 type TagCol a   = (IORef (Set a), IORef [Step a])
 --type ItemCol a b = MutableMap a b
@@ -82,8 +89,6 @@ launch_steps mls =
 -- the end of the step with a sync.  It needs a retry action to tuck
 -- into the state so that the step can store it if it needs to escape
 -- with an exception.
--- 
--- DESIGN DECISION: 
 try_stepcode :: StepCode () -> StepCode a -> IO (Maybe a)
 try_stepcode retry m = wrapped
  where
@@ -216,6 +221,9 @@ itemsToList (ItemCol icol) =
      fil (key, (Nothing, _)) = False
      fil _                   = True
 
+
+-- To execute graph code inside a step we just need to lift it into the monad transformer:
+graphInStep = S.lift
 
 quiescence_support=True ;
 

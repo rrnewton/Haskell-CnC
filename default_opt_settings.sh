@@ -6,8 +6,13 @@
 
 # -fvia-C
 #GHC_DEFAULT_FLAGS=" -fasm -O2"
-#GHC_DEFAULT_FLAGS=" -rtsopts -O2"
-GHC_DEFAULT_FLAGS=" -O2"
+
+# For 6.13:
+
+if [ "`ghc -V`" == "The Glorious Glasgow Haskell Compilation System, version 6.12.1" ];
+then GHC_DEFAULT_FLAGS=" -O2"
+else GHC_DEFAULT_FLAGS=" -rtsopts -O2"
+fi
 
  # Affinity is pretty much always good.
 GHC_DEFAULT_RTS="  -qa " 

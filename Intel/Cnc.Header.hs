@@ -2,6 +2,9 @@
   , BangPatterns
   , MagicHash 
   , ScopedTypeVariables
+  , TypeFamilies 
+  , UndecidableInstances
+  , OverlappingInstances
   , DeriveDataTypeable
   , MultiParamTypeClasses
   #-}
@@ -35,18 +38,20 @@
 {-|
   This module implements the Intel Concurrent Collections (CnC) programming model.
   The variations of this module ("Intel.Cnc3", "Intel.Cnc5", "Intel.Cnc6", and "Intel.Cnc8")
-  each implement the same programming model using different schedulers.
+  each implement the same programming model using different runtime schedulers.
   All of them internally use the IO monad but expose a pure interface.
   (The module "Intel.CncPure" is an alternative implementation that
   exposes the same interface as this module but is internally pure.)
 
 
   CnC is a data-flow like deterministic parallel programming model.
-  To use it, one constructs a /CnC graph/ of computation steps. 
-  Edges in the graph are control and data relationships, which are 
+  To use it, one constructs a /CnC graph/ of computation steps.  
+  Steps are arbitrary Haskell functions (which may themselves expose
+  parallelism through 'GHC.Conc.par').
+  Edges in the graph are control and data relationships, 
   implemented by  /tag/ and /item/ collections respectively.
 
-  A brief introduction to CnC using this module can be found at <http://software.intel.com/foobar>.
+  A brief introduction to CnC using this module can be found at <http://software.intel.com/en-us/blogs/2010/05/27/announcing-intel-concurrent-collections-for-haskell-01/>.
   General documentation on the CnC model can be found at 
    <http://software.intel.com/en-us/articles/intel-concurrent-collections-for-cc/>.
 
@@ -67,7 +72,9 @@ module MODNAME (
                   runGraph, 
 		  stepPutStr, cncPutStr, cncVariant,
 
+                  -- Undocumented experimental features:
                   Item, newItem, readItem, putItem,
+                  cncFor,
 
                   tests, 
 -- * Example Program
@@ -119,9 +126,9 @@ where
   undesirable, option.)  
 -}
 
-import Data.Set as Set
-import Data.HashTable as HT
-import Data.Map as Map
+import qualified Data.Set as Set
+import qualified Data.HashTable as HT
+import qualified Data.Map as Map
 import Data.Int
 import Data.IORef
 import Data.Word
@@ -143,7 +150,13 @@ import GHC.Exts
 
 import Test.HUnit
 
+-- Inline the utility library as well:
+#ifndef INCLUDEMETHOD
 import Intel.CncUtil as GM hiding (tests)
+#else
+import Intel.CncUtil as GM hiding (tests)
+-- #include "CncUtil.hs"
+#endif
 
 ------------------------------------------------------------
 -- Configuration Toggles:
@@ -158,11 +171,13 @@ memoize = False
 
 #ifdef HASHTABLE_TEST
 #define ITEMPREREQS (Eq tag, Ord tag, Hashable tag, Show tag)
-#elif USE_GMAP
+#else 
+#ifdef USE_GMAP
 -- #define ITEMPREREQS (Ord tag, Eq tag, GMapKey tag, Show tag)
 #define ITEMPREREQS (GMapKey tag)
 #else
 #define ITEMPREREQS (Eq tag, Ord tag, Show tag)
+#endif
 #endif
 
 ------------------------------------------------------------
@@ -251,12 +266,12 @@ proto_putt action tc@(_set,_steps) tag =
        steps <- STEPLIFT readIORef _steps
 --       if memoize 
 --        then 
+--        else 
 #ifdef MEMOIZE
        if Set.member tag set
         then return ()
         else STEPLIFT writeIORef _set (Set.insert tag set)
 #else
---        else 
        return ()
 #endif
        action steps tag
@@ -346,9 +361,10 @@ smalltest = testCase "Small test of Cnc model under Cnc.hs" $
 	     c <- itemsToList d3
 	     return (a,b,c)
 
+#ifndef INCLUDEMETHOD
 tests :: Test
 tests = TestList [ smalltest ]
-
+#endif
 
 --------------------------------------------------------------------------------
 -- EXPERIMENTAL:
@@ -364,6 +380,58 @@ type Item a = ()
 newItem  = error "newItem not implemented under this scheduler"
 readItem = error "readItem not implemented under this scheduler"
 putItem  = error "putItem not implemented under this scheduler"
+#endif
+
+
+-- Internal function. We may allow extending the graph from within a
+-- step.  I'm not sure what the best name for this is.  
+graphInStep :: GraphCode a -> StepCode a
+#ifndef SUPPRESS_graphInStep
+-- Default is to assume the monads are the same:
+graphInStep x = x
+#endif
+
+
+#ifndef SUPPRESS_cncFor
+-- | \"@cncFor start end body@\" runs @body@ in parallel over the inclusive range @[start..end]@.
+-- 
+-- Frequently, CnC graphs are serial within steps but parallel at the
+-- level of the graph.  In contrast, 'cncFor' exposes parallelism
+-- /within a step/.  Whether the body of the parallel for is doing
+-- work, or just spawning work via 'putt', 'cncFor' can help
+-- distribute the work more efficiently.
+cncFor :: Int -> Int -> (Int -> StepCode ()) -> StepCode ()
+-- Parallel for and tag-ranges can make things much more efficient for
+-- a common case. 
+-- 
+-- It may be nice under some schedulers to use forkOnIO to explicitly
+-- disseminate the ranges to processors.  This alas wouldn't work well
+-- with nested cncFor loops.  But if we disencourage those and
+-- explicitly provide cncFor2D etc...
+-- 
+cncFor start end body = 
+ do ts <- graphInStep newTagCol
+    --stepPutStr$ "Performing cncFor on range " ++ show (start,end) ++ "\n"
+    graphInStep$ prescribe ts$ \(x,y) -> 
+      do --stepPutStr$ "  Executing range segment: "++ show (x,y) ++ "\n"
+         for_ x (y+1) body
+    --stepPutStr$ "Desired segments "++ show (4*numCapabilities) ++ " putting first segment...\n"
+    let range_segments = splitInclusiveRange (4*numCapabilities) (start,end)
+    --stepPutStr$ "PUTTING RANGES "++ show (length range_segments) ++" "++ show range_segments ++"\n"
+    forM_ range_segments (putt ts)
+
+{-
+    let len = end - start + 1 -- inclusive [start,end]
+        desired = 4*numCapabilities
+	(portion, remain) = len `quotRem` desired
+    putt ts (start, start + portion - 1 + remain)
+    for_ 1 desired $ \i ->
+      do --stepPutStr$ "Putting rest of ranges... iteration " ++ show i ++ "\n"
+         let nextstart = start + i * portion + remain 
+         putt ts (nextstart, nextstart + portion - 1)
+-}
+
+    --stepPutStr$ "DONE putting ranges\n"
 #endif
 
 --------------------------------------------------------------------------------

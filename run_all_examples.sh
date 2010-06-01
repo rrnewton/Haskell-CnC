@@ -41,13 +41,16 @@
 
 #export GHC=ghc-6.13.20100511 
 #export GHC=~/bin/Linux-i686/bin/ghc-6.13.20100511
+unset HASKELLCNC
+
 
   # Which subset of schedures should we test:
 PURESCHEDS="2"
 #IOSCHEDS="8 6 5 3"
-IOSCHEDS="3 5 8"
-#IOSCHEDS="3 5 6 8"
+#IOSCHEDS="3 5 8"
+IOSCHEDS="3 5 6 8"
 
+THREADSETTINGS="0 1 2 3 4"
 #THREADSETTINGS="0 1 2 3 4 7 8"
 
 source default_opt_settings.sh
@@ -85,6 +88,9 @@ fi
 # ================================================================================
 echo "# TestName Variant Scheduler NumThreads HashHackEnabled MinTime MedianTime MaxTime" > $RESULTS
 echo "# "`date` >> $RESULTS
+echo "# "`uname -a` >> $RESULTS
+echo "# "`ghc -V` >> $RESULTS
+echo "# "
 echo "# Running each test for $TRIALS trials." >> $RESULTS
 echo "#  ... with default compiler options: $GHC_DEFAULT_FLAGS" >> $RESULTS
 echo "#  ... with default runtime options: $GHC_DEFAULT_RTS" >> $RESULTS
@@ -151,8 +157,20 @@ function runit()
 echo "Running all tests, for THREADSETTINGS in {$THREADSETTINGS}"
 echo
 
+# Build the timeout script if it hasn't been already:
+# if ! [ -e ./timeout ];
+# then ghc --make timeout.hs -threaded
+# fi
+
+# Hygiene:
+rm -f examples/*.exe
+
 # This specifies the list of tests and their arguments for a "long" run:
-for line in "embarrassingly_par 9.2" "threadring 50000000 503" "sched_tree 18" "mandel 300 300 4000" "primes2 200000" "fib 20000"; do
+
+#for line in "mandel_opt 2 4000"  ; do
+#for line in "mandel_opt 2 4000"  "mandel_opt 1 4000" "mandel 300 300 4000"  ; do
+
+for line in "embarrassingly_par 9.2" "threadring 50000000 503" "sched_tree 18" "primes2 200000" "fib 20000" "mandel 300 300 4000" "mandel_opt 2 4000"  "mandel_opt 1 4000"; do
 #for line in "mandel 300 300 4000" "primes2 200000" ; do
 #for line in "fib 20000"  "nbody 2000" ; do
 
@@ -197,8 +215,8 @@ for line in "embarrassingly_par 9.2" "threadring 50000000 503" "sched_tree 18" "
  # Finally, run once through separately compiled modules to compare performance (and make sure they build).
  # This will basically use the IO based implementation with the default scheduler.
  export CNC_VARIANT=separatemodule_io
- export CNC_SCHEDULER=8
- export NUMTHREADS=$MAXTHREADS
+ export CNC_SCHEDULER=6
+ export NUMTHREADS=4
  runit
 
  echo >> $RESULTS;

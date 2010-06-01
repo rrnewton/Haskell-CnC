@@ -22,6 +22,7 @@ import Data.Complex
 import Data.Word
 import System.Environment
 
+-- #define USE_GMAP
 -- #define MEMOIZE
 #include <haskell_cnc.h>
 
@@ -34,7 +35,9 @@ mandel max_depth c = loop 0 0 0
     | fn(z) >= 2.0   = count 
     | otherwise      = loop (i+1) (z*z + c) (count+1)
 
-type Pair = (Word16, Word16)
+-- A pair will fit in a word:
+--type Pair = (Word16, Word16)
+type Pair = (Int, Int)
 
 mandelProg :: Int -> Int -> Int -> GraphCode Int
 mandelProg max_row max_col max_depth = 
@@ -48,8 +51,19 @@ mandelProg max_row max_col max_depth =
 
        prescribe position mandelStep 
 
---        gcPrintWorld "1"
+-- #define trust_lists
+
        initialize $ 
+#ifdef trust_lists
+#warning "TRUSTING LIST FUSION OPTS"
+        forM_ [0..max_row] $ \i -> 
+         forM_ [0..max_col] $ \j ->
+          let (_i,_j) = (fromIntegral i, fromIntegral j)
+	      z = (r_scale * (fromIntegral j) + r_origin) :+ 
+  		  (c_scale * (fromIntegral i) + c_origin) in
+	  do put dat (_i,_j) z
+	     putt position (_i,_j)
+#else
         for_ 0 max_row $ \i -> 
          for_ 0 max_col $ \j ->
           let (_i,_j) = (fromIntegral i, fromIntegral j)
@@ -57,10 +71,20 @@ mandelProg max_row max_col max_depth =
   		  (c_scale * (fromIntegral i) + c_origin) in
 	  do put dat (_i,_j) z
 	     putt position (_i,_j)
---        gcPrintWorld "2"
+#endif
 
        -- Final result, count coordinates of the  pixels with a certain value:
        finalize $ 
+#ifdef trust_lists
+	foldM (\acc i -> 
+          foldM (\acc j -> 
+	           do p <- get pixel (fromIntegral i, fromIntegral j)
+		      if p == max_depth
+   		       then return (acc + (i*max_col + j))
+   		       else return acc)
+	        acc [0..max_col]
+              ) 0 [0..max_row] 
+#else
 	foldRange 0 max_row (return 0) $ \acc i -> 
 	 foldRange 0 max_col acc $ \acc j -> 
 	   do cnt <- acc
@@ -68,6 +92,8 @@ mandelProg max_row max_col max_depth =
 	      if p == max_depth
    	       then return (cnt + (i*max_col + j))
    	       else return cnt
+#endif
+
        
    where 
     r_origin = -2                            :: Double

@@ -5,6 +5,7 @@
 default: 
         # This target builds CnC as precompiled modules:
         # Pick default schedulers as well:
+	ghc --make -c -cpp                   Intel/CncUtil.hs
 	ghc --make -c -cpp -DCNC_SCHEDULER=2 Intel/CncPure.hs
 	ghc --make -c -cpp -DCNC_SCHEDULER=5 Intel/Cnc.hs
 
@@ -46,7 +47,15 @@ doc:
 
 clean:
 	rm -f Intel/*.o Intel/*.hi Intel/*~ 
+	rm -f *.aux little*.log 
 	(cd examples; $(MAKE) clean)
 
 distclean: clean
 	rm -rf distro_20*
+# DO NOT DELETE: Beginning of Haskell dependencies
+Intel/CncUtil.o : Intel/CncUtil.hs
+Intel/Cnc3.o : Intel/Cnc3.hs
+Intel/Cnc3.o : Intel/CncUtil.hi
+examples/test_parfor.o : examples/test_parfor.hs
+examples/test_parfor.o : Intel/Cnc3.hi
+# DO NOT DELETE: End of Haskell dependencies

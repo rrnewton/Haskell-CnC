@@ -989,6 +989,10 @@ itemsToList id =
       in (Just (finalmagic id (Map.toList it)),
 	  Done tags items)
 
+cncFor :: Int -> Int -> (Int -> StepCode ()) -> StepCode ()
+cncFor start end body = error "cncFor not implemented yet for Intel.CncPure"
+
+
 --------------------------------------------------------------------------------
 -- Testing:
 --------------------------------------------------------------------------------

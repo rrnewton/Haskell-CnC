@@ -80,6 +80,7 @@ EXITCODE=0
 
 # [2009.12.17] I need to get a good cross-platform process time-out system:
     if [ -e ./timeout ];
+    #then TIMEOUTRUN="./timeout $TIMEOUT"
     then TIMEOUTRUN="./timeout -t $TIMEOUT"
     else TIMEOUTRUN=
     fi

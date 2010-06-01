@@ -2,6 +2,9 @@
   , BangPatterns
   , MagicHash 
   , ScopedTypeVariables
+  , TypeFamilies 
+  , UndecidableInstances
+  , OverlappingInstances
   , DeriveDataTypeable
   , MultiParamTypeClasses
   #-}

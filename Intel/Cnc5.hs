@@ -2,9 +2,11 @@
   , BangPatterns
   , MagicHash 
   , ScopedTypeVariables
+  , TypeFamilies 
+  , UndecidableInstances
+  , OverlappingInstances
   , DeriveDataTypeable
   , MultiParamTypeClasses
-  , CPP
   #-}
 -- State monad transformer is needed for both step & graph:
 #ifndef MODNAME
@@ -55,3 +57,4 @@ putItem mv x =
   do b <- STEPLIFT tryPutMVar mv x
      if b then return ()
 	  else error "Violation of single assignment rule; second put on Item!"
+

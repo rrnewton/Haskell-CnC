@@ -30,7 +30,7 @@
 -- |An internal utility module that supports the CnC implementations.
 #ifndef INCLUDEMETHOD
 module Intel.CncUtil (
-		      foldRange, for_, splitN, forkJoin, 
+		      foldRange, for_, splitN, splitInclusiveRange, forkJoin, 
 		      doTrials, FitInWord (..), 
 		      GMapKey (..), 
 		      Hashable (..),
@@ -43,6 +43,8 @@ module Intel.CncUtil (
 
 		      )
 where
+#else
+#warning "Loading CncUtil.hs through include method..."
 #endif
 
 import GHC.Conc
@@ -61,7 +63,7 @@ import qualified Data.HashTable as HT
 import Debug.Trace
 
 import Test.HUnit
-import Test.QuickCheck (quickCheck, (==>))
+-- import Test.QuickCheck (quickCheck, (==>))
 
 --------------------------------------------------------------------------------
 -- Miscellaneous Utilities
@@ -94,6 +96,30 @@ splitN n ls = loop n ls
     loop n ls = hd : loop (n-1) tl
        where (hd,tl) = splitAt sz ls
 
+-- Similar to splitN but for a (start,end) range not an actual list.
+-- The first segment gets the extras and the rest are evenly sized:
+-- splitInclusiveRange pieces (start,end) = 
+--   (start, start + portion - 1 + remain) : map fn [1 .. pieces-1]
+--  where 	
+--    len = end - start + 1 -- inclusive [start,end]
+--    (portion, remain) = len `quotRem` pieces
+--    fn i = let nextstart = start + i * portion + remain
+--           in (nextstart, nextstart + portion - 1) 
+
+-- Instead of having one oversized piece, spread the remainder one per
+-- segment:
+splitInclusiveRange pieces (start,end) = 
+  map largepiece [0..remain-1] ++ 
+  map smallpiece [remain..pieces-1]
+ where 	
+   len = end - start + 1 -- inclusive [start,end]
+   (portion, remain) = len `quotRem` pieces
+   largepiece i = 
+       let offset = start + (i * (portion + 1))
+       in (offset, offset + portion)
+   smallpiece i = 
+       let offset = start + (i * portion) + remain
+       in (offset, offset + portion - 1)
 
 
 -- |Run IO threads in parallel and wait till they're done.
@@ -141,7 +167,8 @@ assureMvar col tag =
 mmToList = HT.toList
 #warning "Enabling HashTable item collections.  These are not truly thread safe (yet)."
 
-#elif USE_GMAP
+#else 
+#ifdef USE_GMAP
 #warning "Using experimental indexed type family GMap implementation..."
 -- Trying to use GMaps:
 type MutableMap a b = IORef (GMap a (MVar b))
@@ -189,6 +216,7 @@ assureMvar col tag =
 mmToList col = 
     do map <- readIORef col 
        return (DM.toList map)
+#endif
 #endif
 
 ------------------------------------------------------------
@@ -461,7 +489,8 @@ instance (GMapKey a, GMapKey b) => GMapKey (a, b) where
   data GMap (a, b) v            = GMapPair (GMap a (GMap b v))
   empty		                = GMapPair empty
   lookup (a, b) (GMapPair gm)   = lookup a gm >>= lookup b 
-  insert (a, b) v (GMapPair gm) = GMapPair $ case lookup a gm of
+  insert (a, b) v (GMapPair gm) = trace "CONSTRUCTED GMAP USING NESTED MAPS!" $
+                                  GMapPair $ case lookup a gm of
 				    Nothing  -> insert a (insert b v empty) gm
 				    Just gm2 -> insert a (insert b v gm2  ) gm
   alter fn (a, b) (GMapPair gm) = GMapPair $ alter newfun a gm
@@ -542,6 +571,8 @@ intMap = insert 3 "Entry 3"    $
 -- We also switch to a mutable data structure here:
 --------------------------------------------------------------------------------
 
+-- UNFINISHED:
+
 -- A key/value pair that works inside a GMap2.
 class GMapKeyVal k v where
   data GMap2 k v :: *
@@ -604,8 +635,13 @@ test2gmap = putStrLn $ maybe "Couldn't find key!" id $ lookup 3 intMap
 testCase str io = TestLabel str $ TestCase$ do putStrLn$ "\n *** Running unit test: "++str; io; putStrLn ""
 
 test1 = testCase "Spot check list lengths"$ assertEqual "splitN" [[1,2], [3,4,5]] (splitN 2 [1..5]) 
-test2 = testCase "Quickcheck splitN - varying split size"$ 
-	quickCheck$ (\ (n::Int) -> n>0 ==> 
-		     (\ (l::[Int]) -> concat (splitN n l) == l)) 
 
-tests = TestList [test1, test2]
+
+-- [2010.05.31] I don't have quickcheck working under 6.13.xx
+-- test2 = testCase "Quickcheck splitN - varying split size"$ 
+-- 	quickCheck$ (\ (n::Int) -> n>0 ==> 
+-- 		     (\ (l::[Int]) -> concat (splitN n l) == l)) 
+
+-- tests = TestList [test1, test2]
+
+tests = TestList [test1]
