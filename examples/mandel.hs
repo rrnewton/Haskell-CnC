@@ -51,11 +51,8 @@ mandelProg max_row max_col max_depth =
 
        prescribe position mandelStep 
 
-#define trust_lists
 
        initialize $ 
-#ifdef trust_lists
-#warning "TRUSTING LIST FUSION OPTS"
         forM_ [0..max_row] $ \i -> 
          forM_ [0..max_col] $ \j ->
           let (_i,_j) = (fromIntegral i, fromIntegral j)
@@ -63,19 +60,9 @@ mandelProg max_row max_col max_depth =
   		  (c_scale * (fromIntegral i) + c_origin) in
 	  do put dat (_i,_j) z
 	     putt position (_i,_j)
-#else
-        for_ 0 max_row $ \i -> 
-         for_ 0 max_col $ \j ->
-          let (_i,_j) = (fromIntegral i, fromIntegral j)
-	      z = (r_scale * (fromIntegral j) + r_origin) :+ 
-  		  (c_scale * (fromIntegral i) + c_origin) in
-	  do put dat (_i,_j) z
-	     putt position (_i,_j)
-#endif
 
        -- Final result, count coordinates of the  pixels with a certain value:
        finalize $ 
-#ifdef trust_lists
 	foldM (\acc i -> 
           foldM (\acc j -> 
 	           do p <- get pixel (fromIntegral i, fromIntegral j)
@@ -84,23 +71,12 @@ mandelProg max_row max_col max_depth =
    		       else return acc)
 	        acc [0..max_col]
               ) 0 [0..max_row] 
-#else
-	foldRange 0 max_row (return 0) $ \acc i -> 
-	 foldRange 0 max_col acc $ \acc j -> 
-	   do cnt <- acc
-	      p <- get pixel (fromIntegral i, fromIntegral j)
-	      if p == max_depth
-   	       then return (cnt + (i*max_col + j))
-   	       else return cnt
-#endif
-
        
    where 
     r_origin = -2                            :: Double
     r_scale  = 4.0 / (fromIntegral max_row)  :: Double
     c_origin = -2.0                          :: Double
     c_scale = 4.0 / (fromIntegral max_col)   :: Double
-
 
 
 runMandel a b c = 
