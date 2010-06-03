@@ -226,8 +226,6 @@ type Step     a   = a -> StepCode ()
 --                             Implementation                                 --
 --------------------------------------------------------------------------------
 
-cncVariant="io/" ++ show (CNC_SCHEDULER :: Int)
-
 -- These 'new' functions need an argument if we don't want to run in
 -- to the monomorphism restriction (-fno-monomorphism-restriction)
 #ifndef SUPPRESS_newItemCol
@@ -319,7 +317,29 @@ cncPutStr  str = cncUnsafeIO  (putStr str)
 
 -- |An informal identifier of the CnC version presently in use (for example, identifying a scheduler implementation).
 cncVariant :: String
---cncVariant="io/" ++ show (CNC_SCHEDULER :: Int)
+cncVariant ="io-based, scheduler " ++ show (CNC_SCHEDULER :: Int)  
+#ifdef USE_GMAP
+       ++ ", gmap enabled"
+#else 
+       ++ ", gmap disabled"
+#endif
+#ifdef MEMOIZE
+       ++ ", memoize enabled"
+#else 
+       ++ ", memoize disabled"
+#endif
+#ifdef INCLUDEMETHOD
+       ++ ", #include method"
+#endif
+#ifdef REPEAT_PUT_ALLOWED
+       ++ ", repeated identical puts permitted"
+#endif
+#ifdef DEBUG_HASKELL_CNC
+       ++ ", DEBUG enabled"
+#endif
+
+
+
 
 --------------------------------------------------------------------------------
 --  Testing
