@@ -45,7 +45,7 @@ library
 -- -Wall 
   -- Unfortunately these go in the include/ subdirectory once cabal installs the package.
   install-includes: ntimes ntimes_minmedmax README.txt haskell_cnc.h Makefile install_environment_vars.sh 
-                    default_opt_settings.sh runcnc run_all_examples.sh scaling.hs 
+                    default_opt_settings.sh runcnc run_all_examples.sh scaling.hs timeout.hs
                     examples/hello_world.hs examples/mandel.hs examples/mandel_opt.hs examples/primes.hs examples/primes2.hs 
                     examples/sched_tree.hs examples/threadring_onestep.hs examples/threadring.hs 
                     examples/embarrassingly_par.hs examples/fib.hs examples/nbody.hs
