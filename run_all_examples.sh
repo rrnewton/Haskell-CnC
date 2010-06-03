@@ -50,9 +50,8 @@ PURESCHEDS="2"
 IOSCHEDS="3 5 6 8"
 
 if [ "$THREADSETTINGS" == "" ] 
-#then THREADSETTINGS="1 4"
-then THREADSETTINGS="0 1 2 3 4"
-#THREADSETTINGS="0 1 2 3 4 7 8"
+then THREADSETTINGS="4"
+#then THREADSETTINGS="0 1 2 3 4"
 fi
 
 source default_opt_settings.sh
