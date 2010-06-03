@@ -21,15 +21,7 @@ source-repository head
   type:     darcs
   location: http://darcs.haskell.org/haskell-cnc/
 
-Data-Files: ntimes ntimes_minmedmax README.txt haskell_cnc.h Makefile install_environment_vars.sh 
-                    default_opt_settings.sh runcnc run_all_examples.sh scaling.hs 
-                    examples/hello_world.hs examples/mandel.hs examples/primes.hs examples/primes2.hs 
-                    examples/sched_tree.hs examples/threadring_onestep.hs examples/threadring.hs 
-                    examples/embarrassingly_par.hs examples/fib.hs examples/nbody.hs
-                    Intel/Cnc.Header.hs Intel/shared_5_6.hs 
-                    Intel/CncUtil.hs
-                    Intel/Cnc.hs Intel/CncPure.hs Intel/Cnc3.hs Intel/Cnc5.hs Intel/Cnc6.hs Intel/Cnc8.hs
-
+--Data-Files: ntimes ntimes_minmedmax README.txt haskell_cnc.h Makefile install_environment_vars.sh 
 
 library
   build-depends:  base, mtl, containers, time, random, array, ghc-prim, extensible-exceptions, HUnit, QuickCheck
@@ -51,7 +43,14 @@ library
   cpp-options: -DUSE_GMAP 
 -- -Wall 
   -- Unfortunately these go in the include/ subdirectory once cabal installs the package.
---  install-includes: ntimes ntimes_minmedmax README.txt haskell_cnc.h Makefile install_environment_vars.sh 
+  install-includes: ntimes ntimes_minmedmax README.txt haskell_cnc.h Makefile install_environment_vars.sh 
+                    default_opt_settings.sh runcnc run_all_examples.sh scaling.hs 
+                    examples/hello_world.hs examples/mandel.hs examples/primes.hs examples/primes2.hs 
+                    examples/sched_tree.hs examples/threadring_onestep.hs examples/threadring.hs 
+                    examples/embarrassingly_par.hs examples/fib.hs examples/nbody.hs
+                    Intel/Cnc.Header.hs Intel/shared_5_6.hs 
+                    Intel/CncUtil.hs
+                    Intel/Cnc.hs Intel/CncPure.hs Intel/Cnc3.hs Intel/Cnc5.hs Intel/Cnc6.hs Intel/Cnc8.hs
 
   -- This seems to be completly ignored by cabal currently:
   -- Test testit
