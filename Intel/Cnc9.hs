@@ -49,7 +49,6 @@ import System.IO
 -- reportResult s = do
 --   putStrLn ("You entered: " ++ s)
 
-
 --------------------------------------------------------------------------------
 
 
