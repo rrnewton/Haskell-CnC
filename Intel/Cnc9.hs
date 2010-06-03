@@ -12,7 +12,8 @@
 #define MODNAME Intel.Cnc8
 #endif
 #define CNC_SCHEDULER 8
-#define STEPLIFT  S.lift$
+-- Double lift through continuation and state monads:
+#define STEPLIFT  S.lift$ S.lift$
 #define GRAPHLIFT id$
 #define SUPPRESS_put
 #define SUPPRESS_newItemCol
@@ -31,8 +32,8 @@
 -- TODO??? Get COULD explicitly capture the continuation to avoid replay from the beginning.
 
 -- Combining continuation monad with IO:
--- import Control.Monad.Cont
--- import System.IO
+import Control.Monad.Cont
+import System.IO
 
 -- main = do
 --   hSetBuffering stdout NoBuffering
@@ -47,17 +48,7 @@
 -- reportResult :: String -> IO ()
 -- reportResult s = do
 --   putStrLn ("You entered: " ++ s)
-{-# LANGUAGE FlexibleInstances
-  , BangPatterns
-  , MagicHash 
-  , ScopedTypeVariables
-  , TypeFamilies 
-  , UndecidableInstances
-  , OverlappingInstances
-  , DeriveDataTypeable
-  , MultiParamTypeClasses
-  #-}
--- State monad transformer is needed for both step & graph:
+
 
 --------------------------------------------------------------------------------
 
