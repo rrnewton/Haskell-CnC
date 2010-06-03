@@ -66,10 +66,11 @@ module MODNAME (
                   -- running inside individual nodes of CnC graphs (in parallel).		      
 		  StepCode(..), 
 		  newItemCol, newTagCol, prescribe, 
-		  putt, put, get, itemsToList,
+		  putt, put, get, 
 		  initialize, finalize,
-
                   runGraph, 
+
+                  itemsToList,
 		  stepPutStr, cncPutStr, cncVariant,
 
                   -- Undocumented experimental features:
@@ -209,6 +210,11 @@ newTagCol  :: GraphCode (TagCol tag)
 -- |Construct a new item collection.
 newItemCol :: ITEMPREREQS => GraphCode (ItemCol tag val)
 
+-- |Convert an entire item collection into an association list.  In
+-- general, this can only be done from the 'finalize' step and
+-- requires selecting a runtime scheduler which supports /quiescence/, that is,
+-- a scheduler that waits for all active steps to complete before executing 'finalize'.
+-- (Currently, all schedulers but version 3 support quiescence.)
 itemsToList :: ITEMPREREQS => ItemCol tag b -> StepCode [(tag,b)]
 
 -- |Steps are functions that take a single 'tag' as input and perform
@@ -276,10 +282,6 @@ proto_putt action tc@(_set,_steps) tag =
        action steps tag
 
 #ifndef SUPPRESS_itemsToList
--- | Convert an entire item collection into an association list.  In
--- general, this can only be done from the 'finalize' step and
--- requires selecting a runtime scheduler which supports /quiescence/, that is,
--- a scheduler that waits for all active steps to complete before executing 'finalize'.
 itemsToList ht = 
  do if not quiescence_support 
        then error "need to use a scheduler with quiescence support for itemsToList" 
@@ -298,7 +300,7 @@ itemsToList ht =
 initialize x = x
 #endif
 
--- | Construct a CnC graph and execute it to completion.  Completion
+-- |Construct a CnC graph and execute it to completion.  Completion
 --   is defined as the 'finalize' action having completed.
 runGraph :: GraphCode a -> a
 #ifndef SUPPRESS_runGraph
