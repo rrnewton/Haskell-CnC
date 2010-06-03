@@ -80,7 +80,8 @@ EXITCODE=0
 
 # [2009.12.17] I need to get a good cross-platform process time-out system:
     if [ -e ./timeout ];
-    then TIMEOUTRUN="./timeout $TIMEOUT"
+    # [2010.06.03] --RTS is a hack for working around a problem with +RTS flags:
+    then TIMEOUTRUN="./timeout $TIMEOUT --RTS "
     #then TIMEOUTRUN="./timeout -t $TIMEOUT"
     else TIMEOUTRUN=
     fi
