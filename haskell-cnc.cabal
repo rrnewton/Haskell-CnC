@@ -1,5 +1,5 @@
 Name:           haskell-cnc
-Version:        0.1.3
+Version:        0.1.3.1
 License: LGPL
 License-file:   LICENSE
 Stability: Beta
@@ -19,7 +19,7 @@ build-type: Simple
 
 source-repository head
   type:     darcs
-  location: http://darcs.haskell.org/haskell-cnc/
+  location: http://code.haskell.org/haskell-cnc/
 
 --Data-Files: ntimes ntimes_minmedmax README.txt haskell_cnc.h Makefile install_environment_vars.sh 
 
