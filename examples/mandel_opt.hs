@@ -21,14 +21,10 @@ import Data.Bits
 #define USE_GMAP
 #include <haskell_cnc.h>
 
+-- Constants for this benchmark:
 max_row = 300
 max_col = 300
 
-#if 0
-pack (r,c) = r * max_row + c
-unpack n = (r,c)
-  where (r,c) = n `quotRem` max_row
-#else
 -- Here we manually pack our pairs into scalars.
 -- In the future the ItemCol data type may do this for us auto-magically.
 type Pair = (Word16, Word16)
@@ -36,7 +32,6 @@ pack   :: Pair -> Int
 unpack :: Int -> Pair
 pack (a,b) = shiftL (fromIntegral a) 16 + (fromIntegral b)
 unpack n   = (fromIntegral$ shiftR n 16, fromIntegral$ n .&. 0xFFFF)
-#endif
 
 mandel :: Int -> Complex Double -> Int
 mandel max_depth c = loop 0 0 0

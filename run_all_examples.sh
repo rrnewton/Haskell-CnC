@@ -161,9 +161,9 @@ echo "Running all tests, for THREADSETTINGS in {$THREADSETTINGS}"
 echo
 
 # Build the timeout script if it hasn't been already:
-# if ! [ -e ./timeout ];
-# then ghc --make timeout.hs -threaded
-# fi
+if ! [ -e ./timeout ];
+then ghc --make timeout.hs -threaded
+fi
 
 # Hygiene:
 rm -f examples/*.exe

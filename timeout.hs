@@ -23,18 +23,28 @@ main =
             in
 	    do putStrLn$ "++ Running command with timeout = "++ show timeout ++" seconds:\n  " ++ cmd
 	       pid <- runCommand  cmd
-	       forkIO $ do waitForProcess pid
-			   writeIORef ref True
-			   putStrLn "++ Command completed without timing out."
-			   exitWith ExitSuccess
+
+               sync <- newEmptyMVar
+
 	       let loop acc = 
 		    if acc > (timeout :: Int)
 		    then do putStrLn$ "\nERROR: TIMED OUT!"
 	 		    exitWith (ExitFailure 88)
 	 	    else do sleep polltime
-			    --b <- readIORef ref
-			    code <- getProcessExitCode
-			    if b then exitWith ExitSuccess
-			         else do putStrLn$ "++ Polling, approximately "++ show (acc+polltime) ++" seconds have elapsed..."
-					 loop (acc+polltime)
-	       loop 0
+			    x <- getProcessExitCode pid
+			    case x of 
+	                      Nothing -> do putStrLn$ "++ Polling, approximately "++ 
+						      show (acc+polltime) ++" seconds have elapsed..."
+				            loop (acc+polltime)
+			      Just code -> putMVar sync code
+	       let poll_thread = loop 0
+	       let wait_thread = 
+                        do waitForProcess pid
+			   writeIORef ref True
+			   putStrLn "++ Command completed without timing out."
+			   putMVar sync ExitSuccess
+	       forkIO wait_thread
+	       forkIO poll_thread
+	       final <- readMVar sync
+	       exitWith final
+	       
