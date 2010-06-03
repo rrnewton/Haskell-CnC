@@ -16,7 +16,8 @@
 #define CNC_SCHEDULER 3
 #define STEPLIFT  id$
 #define GRAPHLIFT id$
--- #define SUPPRESS_cncFor
+#define SUPPRESS_cncFor
+#define SUPPRESS_cncFor2D
 #include "Cnc.Header.hs"
 
 type TagCol  a   = (IORef (Set.Set a), IORef [Step a])
@@ -62,8 +63,8 @@ quiescence_support=False;
 --------------------------------------------------------------------------------
 -- EXPERIMENTAL:
 --------------------------------------------------------------------------------
--- This is a proposed addition for manipulating items outside of item collections.
 
+-- This is a proposed addition for manipulating items outside of item collections.
 type Item = MVar
 newItem  = newEmptyMVar
 readItem = readMVar
@@ -73,6 +74,7 @@ putItem mv x =
 	  else error "Violation of single assignment rule; second put on Item!"
 
 #ifdef SUPPRESS_cncFor
+#warning "Selecting specialized version of cncFor for Scheduler 3"
 -- Because this scheduler doesn't have the *nested* structure that,
 -- say, scheduler 8 does, the default definition of cncFor will not
 -- provide much benefit.  Instead, we try one that uses explicit
@@ -80,7 +82,8 @@ putItem mv x =
 cncFor start end body = 
  -- With this version we don't create any additional graph nodes.
  -- Instead, we create additional IO threads.
- do forM_ [0..numthreads-1] fork_thread      
+ do --stepPutStr$ "FORKING THREADS FOR CNCFOR!! Ranges: "++ show ranges++"\n"
+    forM_ [0..numthreads-1] fork_thread      
  where 
     splitfactor = 1 -- TBB uses 4, but IO threads have more overhead...
     numthreads = numCapabilities * splitfactor
@@ -89,5 +92,17 @@ cncFor start end body =
      -- Assign the IO thread to a particular CPU:
      forkOnIO (i `quot` splitfactor) $ 
        let (x,y) = ranges !! i in
-       for_ x y body
+       for_ x (y+1) body
+#endif
+
+#ifdef SUPPRESS_cncFor2D
+-- cncFor2D (s1,s2) (e1,e2) body =
+--   cncFor s1 e1 $ \ i ->  
+--    cncFor s2 e2 (body i)
+
+-- When using the default cncFor his one does vastly worse.  But with
+-- the custom cncFor above, it is better.
+cncFor2D (s1,s2) (e1,e2) body =
+  cncFor s1 e1 $ \ i ->  
+    for_ s2 (e2+1) (body i)
 #endif

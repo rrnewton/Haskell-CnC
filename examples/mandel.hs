@@ -19,8 +19,9 @@
 -- Author: Ryan Newton 
 
 import Data.Complex
-import Data.Word
+import Data.Int
 import System.Environment
+import Control.Monad
 
 -- #define USE_GMAP
 -- #define MEMOIZE
@@ -36,8 +37,7 @@ mandel max_depth c = loop 0 0 0
     | otherwise      = loop (i+1) (z*z + c) (count+1)
 
 -- A pair will fit in a word:
---type Pair = (Word16, Word16)
-type Pair = (Int, Int)
+type Pair = (Int16, Int16)
 
 mandelProg :: Int -> Int -> Int -> GraphCode Int
 mandelProg max_row max_col max_depth = 
@@ -51,7 +51,7 @@ mandelProg max_row max_col max_depth =
 
        prescribe position mandelStep 
 
--- #define trust_lists
+#define trust_lists
 
        initialize $ 
 #ifdef trust_lists

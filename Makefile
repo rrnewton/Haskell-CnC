@@ -25,7 +25,7 @@ test:
 	THREADS=1 ./run_all_tests.sh
 
 longtest: 
-	NONSTRICT=1 LONGRUN=1 THREADSETTINGS="0 1 2 3 4 8" ./run_all_tests.sh | tee all_tests.log
+	NONSTRICT=1 LONGRUN=1 THREADSETTINGS="0 1 2 3 4 8" ./run_all_tests.sh &> /dev/stdout | tee all_tests.log
 #	LONGRUN=1 THREADSETTINGS="0 1 2 3 4 8" ./run_all_tests.sh &> /dev/stdout | tee all_tests.log
 
 distro: pkg 

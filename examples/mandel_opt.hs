@@ -14,6 +14,8 @@
 import Data.Complex
 import Data.Word
 import System.Environment
+import Control.Monad
+import Data.Bits
 
 -- #define MEMOIZE
 #define USE_GMAP
@@ -22,10 +24,19 @@ import System.Environment
 max_row = 300
 max_col = 300
 
-compress (r,c) = r * max_row + c
-decompress n = (r,c)
+#if 0
+pack (r,c) = r * max_row + c
+unpack n = (r,c)
   where (r,c) = n `quotRem` max_row
-
+#else
+-- Here we manually pack our pairs into scalars.
+-- In the future the ItemCol data type may do this for us auto-magically.
+type Pair = (Word16, Word16)
+pack   :: Pair -> Int
+unpack :: Int -> Pair
+pack (a,b) = shiftL (fromIntegral a) 16 + (fromIntegral b)
+unpack n   = (fromIntegral$ shiftR n 16, fromIntegral$ n .&. 0xFFFF)
+#endif
 
 mandel :: Int -> Complex Double -> Int
 mandel max_depth c = loop 0 0 0
@@ -48,25 +59,30 @@ mandelProg optlvl max_depth =
 
        prescribe position mandelStep 
 
-       let kernel i j =
-                     let (_i,_j) = (fromIntegral i, fromIntegral j)
- 	                 z = (r_scale * (fromIntegral j) + r_origin) :+ 
-  		             (c_scale * (fromIntegral i) + c_origin) 
-                         cmprsd = compress (_i,_j)
-  	             in do put dat cmprsd z
-       	                   putt position cmprsd
+       let packit i j = (pack (_i,_j), z)
+             where (_i,_j) = (fromIntegral i, fromIntegral j)
+       	           z = (r_scale * (fromIntegral j) + r_origin) :+
+       		       (c_scale * (fromIntegral i) + c_origin)
 
-       let init1 = for_ 0 max_row $ \i -> 
-                    for_ 0 max_col $ \j ->
-                     kernel i j
+       let kernel i j = do let (packed,z) = packit i j 
+ 		       	   put  dat packed z
+       	                   putt position packed
 
+       let init1 = forM_ [0..max_row] $ \i -> 
+                     forM_ [0..max_col] $ \j ->
+  	               kernel i j 
+
+       -- This version uses cncFor to structure the work spawning.
        let init2 = 
-                 do stepPutStr "Choosing cncFor implementation...\n"
-		    cncFor 0 max_row $ \i ->
-		     cncFor 0 max_col $ \j ->
-		       kernel i j
+                 do stepPutStr "mandel_opt: Using cncFor implementation...\n"
+                    cncFor2D (0,0) (max_row, max_col)  $ \ i j ->
+		       kernel i j			  
 
-       let init3 = do return ()
+       -- This version uses cncFor to do the actual work.
+       let init3 = do stepPutStr "mandel_opt: Using even better cncFor method...\n"
+       		      cncFor2D (0,0) (max_row, max_col)  $ \ i j ->
+			 do let (packed,z) = packit i j
+       	                    put pixel packed (mandel max_depth z)
 
        initialize $ 
         case optlvl of 
@@ -79,7 +95,7 @@ mandelProg optlvl max_depth =
 	foldRange 0 max_row (return 0) $ \acc i -> 
 	 foldRange 0 max_col acc $ \acc j -> 
 	   do cnt <- acc
-	      p <- get pixel (compress (fromIntegral i, fromIntegral j))
+	      p <- get pixel (pack (fromIntegral i, fromIntegral j))
 	      if p == max_depth
    	       then return (cnt + (i*max_col + j))
    	       else return cnt

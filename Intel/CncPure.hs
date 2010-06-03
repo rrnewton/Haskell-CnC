@@ -992,6 +992,12 @@ itemsToList id =
 cncFor :: Int -> Int -> (Int -> StepCode ()) -> StepCode ()
 cncFor start end body = error "cncFor not implemented yet for Intel.CncPure"
 
+cncFor2D :: (Int,Int) -> (Int,Int) -> (Int -> Int -> StepCode ()) -> StepCode ()
+cncFor2D (s1,s2) (e1,e2) body =
+  cncFor s1 e1 $ \ i ->  
+   cncFor s2 e2 (body i)
+
+
 
 --------------------------------------------------------------------------------
 -- Testing:

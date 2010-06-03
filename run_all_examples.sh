@@ -47,11 +47,14 @@ unset HASKELLCNC
   # Which subset of schedures should we test:
 PURESCHEDS="2"
 #IOSCHEDS="8 6 5 3"
-#IOSCHEDS="3 5 8"
-IOSCHEDS="3 5 6 8"
+IOSCHEDS="3"
+#IOSCHEDS="3 5 6 8"
 
-THREADSETTINGS="0 1 2 3 4"
+if [ "$THREADSETTINGS" == "" ] 
+#then THREADSETTINGS="1 4"
+then THREADSETTINGS="0 1 2 3 4"
 #THREADSETTINGS="0 1 2 3 4 7 8"
+fi
 
 source default_opt_settings.sh
 
@@ -168,9 +171,10 @@ rm -f examples/*.exe
 # This specifies the list of tests and their arguments for a "long" run:
 
 #for line in "mandel_opt 2 4000"  ; do
-#for line in "mandel_opt 2 4000"  "mandel_opt 1 4000" "mandel 300 300 4000"  ; do
+#for line in "mandel_opt 1 4000" "mandel_opt 2 4000" "mandel_opt 3 4000" "mandel 300 300 4000"; do
+for line in "mandel_opt 2 4000" "mandel_opt 3 4000"; do
 
-for line in "embarrassingly_par 9.2" "threadring 50000000 503" "sched_tree 18" "primes2 200000" "fib 20000" "mandel 300 300 4000" "mandel_opt 2 4000"  "mandel_opt 1 4000"; do
+#for line in "embarrassingly_par 9.2" "threadring 50000000 503" "sched_tree 18" "primes2 200000" "fib 20000" "mandel 300 300 4000" "mandel_opt 2 4000"  "mandel_opt 1 4000"; do
 #for line in "mandel 300 300 4000" "primes2 200000" ; do
 #for line in "fib 20000"  "nbody 2000" ; do
 
@@ -187,6 +191,8 @@ for line in "embarrassingly_par 9.2" "threadring 50000000 503" "sched_tree 18" "
   echo "================================================================================"
   echo "                           Running Test: $test.exe $ARGS                        "
   echo "================================================================================"
+
+  echo "# *** Config [$cnt ..], testing with command/args: $test.exe $ARGS " >> $RESULTS
 
  export CNC_VARIANT=pure
  # Currently running the pure scheduler only in single threaded mode:

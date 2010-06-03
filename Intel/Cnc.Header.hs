@@ -66,7 +66,7 @@ module MODNAME (
                   -- running inside individual nodes of CnC graphs (in parallel).		      
 		  StepCode(..), 
 		  newItemCol, newTagCol, prescribe, 
-		  putt, put, get,
+		  putt, put, get, itemsToList,
 		  initialize, finalize,
 
                   runGraph, 
@@ -74,7 +74,7 @@ module MODNAME (
 
                   -- Undocumented experimental features:
                   Item, newItem, readItem, putItem,
-                  cncFor,
+                  cncFor, cncFor2D,
 
                   tests, 
 -- * Example Program
@@ -93,7 +93,7 @@ myStep items tag =
 cncGraph = 
   do tags  <- 'newTagCol'
      items <- 'newItemCol'
-     'prescribe' tags (mystep items)
+     'prescribe' tags (myStep items)
      'initialize' $
         do 'put' items \"left\"  \"hello \"
            'put' items \"right\" \"world \"
@@ -154,8 +154,7 @@ import Test.HUnit
 #ifndef INCLUDEMETHOD
 import Intel.CncUtil as GM hiding (tests)
 #else
-import Intel.CncUtil as GM hiding (tests)
--- #include "CncUtil.hs"
+#include "CncUtil.hs"
 #endif
 
 ------------------------------------------------------------
@@ -277,6 +276,10 @@ proto_putt action tc@(_set,_steps) tag =
        action steps tag
 
 #ifndef SUPPRESS_itemsToList
+-- | Convert an entire item collection into an association list.  In
+-- general, this can only be done from the 'finalize' step and
+-- requires selecting a runtime scheduler which supports /quiescence/, that is,
+-- a scheduler that waits for all active steps to complete before executing 'finalize'.
 itemsToList ht = 
  do if not quiescence_support 
        then error "need to use a scheduler with quiescence support for itemsToList" 
@@ -419,49 +422,27 @@ cncFor start end body =
     let range_segments = splitInclusiveRange (4*numCapabilities) (start,end)
     --stepPutStr$ "PUTTING RANGES "++ show (length range_segments) ++" "++ show range_segments ++"\n"
     forM_ range_segments (putt ts)
-
-{-
-    let len = end - start + 1 -- inclusive [start,end]
-        desired = 4*numCapabilities
-	(portion, remain) = len `quotRem` desired
-    putt ts (start, start + portion - 1 + remain)
-    for_ 1 desired $ \i ->
-      do --stepPutStr$ "Putting rest of ranges... iteration " ++ show i ++ "\n"
-         let nextstart = start + i * portion + remain 
-         putt ts (nextstart, nextstart + portion - 1)
--}
-
-    --stepPutStr$ "DONE putting ranges\n"
 #endif
 
---------------------------------------------------------------------------------
+#ifndef SUPPRESS_cncFor2D
+-- | A two dimensional loop.
+{-# INLINE cncFor2D #-}
+cncFor2D :: (Int,Int) -> (Int,Int) -> (Int -> Int -> StepCode ()) -> StepCode ()
+-- In this version we don't do anything special for 2D loops:
+cncFor2D (s1,s2) (e1,e2) body =
+  cncFor s1 e1 $ \ i ->  
+   cncFor s2 e2 (body i)
 
-------------------------------------------------------------
---Version 1: Serial
--- (This version has been disabled/removed.)
+-- Stripe distribution -- only parallelize the outer loop.
+-- (Tiles would be better but slightly more complex.)
+-- Oddly... this doesn't do better in any scheduler on the current benchmark...
+-- cncFor2D (s1,s2) (e1,e2) body =
+--   cncFor s1 e1 $ \ i ->  
+--    for_ s2 (e2+1) (body i)
+#endif
 
--- Version 2: 
--- (This version has been disabled/removed.)
-
--- Here we do the tail call optimization for the common case of a single prescribed step.
-
-
-------------------------------------------------------------
--- TODO  TODO TODO TODO TODO TODO TODO TODO TODO TODO  -- 
-------------------------------------------------------------
-
--- [2010.02.11] I need to look at unecessary control-flow
--- back-and-forth.  Currently, because of this "depth-first"
--- optimization, I will call down to a child and then probably return
--- (unless GHC manages to turn it into a tail call, maybe it does).  I
--- could help out GHC by just queueing a list of spawned downstream
--- tasks as I go through a step.  When the step is done, the list can
--- be spawned.  At that point if there is only one downstream it can
--- definitely be a tail call.
 
 --------------------------------------------------------------------------------
-
-
 
 
 -- <eof> *** This file will be included into the per-scheduler implementations. *** 

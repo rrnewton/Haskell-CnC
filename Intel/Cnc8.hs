@@ -43,7 +43,7 @@
 -- TODO: The Cilk-like functionality could be factored into its own
 -- reusable module.
 
-type TagCol a   = (IORef (Set a), IORef [Step a])
+type TagCol a   = (IORef (Set.Set a), IORef [Step a])
 --type ItemCol a b = MutableMap a b
 
 -- Here the hidden state keeps track of 
@@ -57,7 +57,7 @@ type GraphCode = IO
 newtype HiddenState8 = HiddenState8 (StepCode (), [()])
 
 -- In this version we don't use MVars because gets don't block:
-newtype ItemCol a b = ItemCol (IORef (Map a ((Maybe b), WaitingSteps)))
+newtype ItemCol a b = ItemCol (IORef (Map.Map a ((Maybe b), WaitingSteps)))
 type WaitingSteps = [StepCode ()]
 
 data EscapeStep = EscapeStep  deriving (Show, Typeable)

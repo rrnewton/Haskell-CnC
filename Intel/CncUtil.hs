@@ -71,6 +71,7 @@ import Test.HUnit
 
 -- |A simple loop construct to use if you don't trust rewrite based deforestation.
 -- Usage foldRange start end acc, where start is inclusive, end uninclusive.
+{-# INLINE foldRange #-}
 foldRange start end acc fn = loop start acc
  where
   loop !i !acc
@@ -79,6 +80,7 @@ foldRange start end acc fn = loop start acc
 
 -- |My own forM, again, less trusting of optimizations.
 -- Inclusive start, exclusive end.
+{-# INLINE for_ #-}
 for_ start end fn | start > end = error "for_: start is greater than end"
 for_ start end fn = loop start 
  where 
@@ -108,6 +110,7 @@ splitN n ls = loop n ls
 
 -- Instead of having one oversized piece, spread the remainder one per
 -- segment:
+{-# INLINE splitInclusiveRange #-}
 splitInclusiveRange pieces (start,end) = 
   map largepiece [0..remain-1] ++ 
   map smallpiece [remain..pieces-1]
@@ -350,9 +353,14 @@ instance FitInWord Word64 where
 #endif
 
 -- Pairs can fit in words too!
--- TODO: Use some code generation method to generate instances for all
+-- FIXME TODO: Use some code generation method to generate instances for all
 -- combinations of small words/ints that fit in a machine word (a lot).
 instance FitInWord (Word16,Word16) where
+  toWord (a,b) = shiftL (fromIntegral a) 16 + (fromIntegral b)
+  fromWord n = (fromIntegral$ shiftR n 16, 
+		fromIntegral$ n .&. 0xFFFF)
+
+instance FitInWord (Int16,Int16) where
   toWord (a,b) = shiftL (fromIntegral a) 16 + (fromIntegral b)
   fromWord n = (fromIntegral$ shiftR n 16, 
 		fromIntegral$ n .&. 0xFFFF)
@@ -376,16 +384,13 @@ class (Ord k, Eq k, Show k) => GMapKey k where
 
 --------------------------------------------------------------------------------
 
+-- What problems was I running into here:
+-- It's hard to avoid conflicting instances, for example with the tuple instance.
+-- I think I may need a NotFitInWord class constraint..
 #if 0
 instance FitInWord t => GMapKey t where
-  -- data GMap t v            = GMapWord (GMap t v) deriving Show
-  -- empty                    = GMapWord empty
-  -- lookup k    (GMapWord m) = lookup (ord k) m
-  -- insert k v  (GMapWord m) = GMapWord (insert (ord k) v m)
-  -- alter  fn k (GMapWord m) = GMapWord (alter fn (ord k) m)
-  -- toList      (GMapWord m) = map (\ (i,v) -> (chr i,v)) (toList m)
   data GMap t v           = GMapInt (DI.IntMap v) deriving Show
-  --empty                   = trace "\n <<<<< Empty FitInWord Gmap... >>>>\n"$ GMapInt DI.empty
+  --empty                   = trace "\n <<<<< FitInWord Gmap... >>>>\n"$ GMapInt DI.empty
   empty                   = GMapInt DI.empty
   lookup k    (GMapInt m) = DI.lookup (wordToInt$ toWord k) m
   insert k v  (GMapInt m) = GMapInt (DI.insert (wordToInt$ toWord k) v m)
@@ -393,9 +398,44 @@ instance FitInWord t => GMapKey t where
   toList      (GMapInt m) = map (\ (i,v) -> (fromWord$ intToWord i, v)) $ 
 			    DI.toList m
 
-
 #else
 
+-- Unit and Bool can have specialized implementations, but because
+-- they also "FitInWord", these result in conflicts.
+------------------------------------------------------------
+instance GMapKey () where
+  data GMap () v           = GMapUnit (Maybe v)
+  empty                    = GMapUnit Nothing
+  lookup ()   (GMapUnit v) = v
+  insert () v (GMapUnit _) = GMapUnit $ Just v
+  alter fn () (GMapUnit v) = GMapUnit $ fn v
+  toList (GMapUnit Nothing) = []
+  toList (GMapUnit (Just v)) = [((),v)]
+instance GMapKey Bool where
+  data GMap Bool v              = GMapBool (Maybe v) (Maybe v)
+  empty                       = GMapBool Nothing Nothing
+  lookup True  (GMapBool v _) = v
+  lookup False (GMapBool _ v) = v
+  insert True v  (GMapBool a b) = GMapBool (Just v) b
+  insert False v (GMapBool a b) = GMapBool a (Just v)
+  alter fn True  (GMapBool a b) = GMapBool (fn a) b
+  alter fn False (GMapBool a b) = GMapBool a (fn b)
+  toList (GMapBool Nothing Nothing)   = []
+  toList (GMapBool (Just a) Nothing)  = [(True,a)]
+  toList (GMapBool Nothing (Just b))  = [(False,b)]
+  toList (GMapBool (Just a) (Just b)) = [(True,a),(False,b)]
+------------------------------------------------------------
+
+-- GMaps on Int keys become Data.IntMaps:
+instance GMapKey Int where
+  data GMap Int v         = GMapInt (DI.IntMap v) deriving Show
+  empty                   = GMapInt DI.empty
+  lookup k    (GMapInt m) = DI.lookup k m
+  insert k v  (GMapInt m) = GMapInt (DI.insert k v m)
+  alter  fn k (GMapInt m) = GMapInt (DI.alter fn k m)
+  toList      (GMapInt m) = DI.toList m
+
+-- Then other scalar keys can be converted to Ints:
 -- CODE DUPLICATION
 instance GMapKey Char where
   data GMap Char v         = GMapChar (GMap Int v) deriving Show
@@ -429,14 +469,6 @@ instance GMapKey Word where
   alter  fn k (GMapWord m) = GMapWord (alter fn (fromIntegral k) m)
   toList      (GMapWord m) = map (\ (i,v) -> (fromIntegral i,v)) (toList m)
 
-instance GMapKey Int where
-  data GMap Int v         = GMapInt (DI.IntMap v) deriving Show
-  empty                   = GMapInt DI.empty
-  lookup k    (GMapInt m) = DI.lookup k m
-  insert k v  (GMapInt m) = GMapInt (DI.insert k v m)
-  alter  fn k (GMapInt m) = GMapInt (DI.alter fn k m)
-  toList      (GMapInt m) = DI.toList m
-
 instance GMapKey Int8 where
   data GMap Int8 v        = GMapInt8 (GMap Int v) deriving Show
   empty                    = GMapInt8 empty
@@ -454,43 +486,30 @@ instance GMapKey Int16 where
   toList      (GMapInt16 m) = map (\ (i,v) -> (fromIntegral i,v)) (toList m)
 
 -- TODO IFDEF 64 BIT THEN WE CAN FIT AN INT64 AND WORD64 TOO!!
+
+-- Can't get past the "Conflicting family instance declarations"
+-- instance GMapKey (Int16, Int16) where
+--   data GMap (Int16,Int16) v         = GMapInt16Pair (GMap Int v) deriving Show
+--   empty                     = trace "<<< Constructing Double-Int16 GMAP (Intmap) >>>> " $ 
+-- 			      GMapInt16Pair empty
+--   lookup k (GMapInt16Pair m)    = lookup (fromIntegral k) m
+--   insert k v (GMapInt16Pair m)  = GMapInt16Pair (insert (fromIntegral k) v m)
+--   alter  fn k (GMapInt16Pair m) = GMapInt16Pair (alter fn (fromIntegral k) m)
+--   toList      (GMapInt16Pair m) = map (\ (i,v) -> (fromIntegral i,v)) (toList m)
+
+
 #endif
 
 
 --------------------------------------------------------------------------------
 
-
-instance GMapKey () where
-  data GMap () v           = GMapUnit (Maybe v)
-  empty                    = GMapUnit Nothing
-  lookup ()   (GMapUnit v) = v
-  insert () v (GMapUnit _) = GMapUnit $ Just v
-  alter fn () (GMapUnit v) = GMapUnit $ fn v
-  toList (GMapUnit Nothing) = []
-  toList (GMapUnit (Just v)) = [((),v)]
-
-instance GMapKey Bool where
-  data GMap Bool v              = GMapBool (Maybe v) (Maybe v)
-  empty                       = GMapBool Nothing Nothing
-  lookup True  (GMapBool v _) = v
-  lookup False (GMapBool _ v) = v
-  insert True v  (GMapBool a b) = GMapBool (Just v) b
-  insert False v (GMapBool a b) = GMapBool a (Just v)
-  alter fn True  (GMapBool a b) = GMapBool (fn a) b
-  alter fn False (GMapBool a b) = GMapBool a (fn b)
-  toList (GMapBool Nothing Nothing)   = []
-  toList (GMapBool (Just a) Nothing)  = [(True,a)]
-  toList (GMapBool Nothing (Just b))  = [(False,b)]
-  toList (GMapBool (Just a) (Just b)) = [(True,a),(False,b)]
-
-
 -- |GMaps over pairs are implemented by nested GMaps.
 instance (GMapKey a, GMapKey b) => GMapKey (a, b) where
   data GMap (a, b) v            = GMapPair (GMap a (GMap b v))
-  empty		                = GMapPair empty
+  empty		                = --trace "CONSTRUCTED GMAP USING NESTED MAPS!"$ 
+                                  GMapPair empty
   lookup (a, b) (GMapPair gm)   = lookup a gm >>= lookup b 
-  insert (a, b) v (GMapPair gm) = trace "CONSTRUCTED GMAP USING NESTED MAPS!" $
-                                  GMapPair $ case lookup a gm of
+  insert (a, b) v (GMapPair gm) = GMapPair $ case lookup a gm of
 				    Nothing  -> insert a (insert b v empty) gm
 				    Just gm2 -> insert a (insert b v gm2  ) gm
   alter fn (a, b) (GMapPair gm) = GMapPair $ alter newfun a gm
