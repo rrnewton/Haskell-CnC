@@ -30,9 +30,9 @@ library
   -- , judy>=0.2.2
 
   exposed-modules:  Intel.Cnc Intel.CncPure 
-                    -- Intel.CncUtil
 	            -- Various alternative schedulers:
                     Intel.Cnc3 Intel.Cnc5 Intel.Cnc6 Intel.Cnc8
+  other-modules: Intel.CncUtil
   extensions: CPP, 
        -- These extensions are needed for Cnc.hs
        FlexibleInstances, BangPatterns, MagicHash, ScopedTypeVariables, DeriveDataTypeable, MultiParamTypeClasses,
@@ -64,4 +64,3 @@ Executable haskell-cnc-runTests
   extensions: CPP
   GHC-Options: -O2 -threaded 
   cpp-options: -DUSE_GMAP
--- Intel.CncUtil

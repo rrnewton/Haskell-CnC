@@ -46,9 +46,8 @@ unset HASKELLCNC
 
   # Which subset of schedures should we test:
 PURESCHEDS="2"
-#IOSCHEDS="8 6 5 3"
-IOSCHEDS="3"
-#IOSCHEDS="3 5 6 8"
+#IOSCHEDS="3"
+IOSCHEDS="3 5 6 8"
 
 if [ "$THREADSETTINGS" == "" ] 
 #then THREADSETTINGS="1 4"
@@ -68,7 +67,7 @@ fi
 
 # How many times to run a process before taking the best time:
 if [ "$TRIALS" == "" ]; then 
-  TRIALS=5
+  TRIALS=1
 fi
 
 # Determine number of hardware threads on the machine:
@@ -170,13 +169,9 @@ rm -f examples/*.exe
 
 # This specifies the list of tests and their arguments for a "long" run:
 
-#for line in "mandel_opt 2 4000"  ; do
-#for line in "mandel_opt 1 4000" "mandel_opt 2 4000" "mandel_opt 3 4000" "mandel 300 300 4000"; do
-for line in "mandel_opt 2 4000" "mandel_opt 3 4000"; do
+#for line in "mandel_opt 1 300 300 4000" "mandel_opt 2 300 300 4000" "mandel_opt 3 300 300 4000" "mandel 300 300 4000"; do
 
-#for line in "embarrassingly_par 9.2" "threadring 50000000 503" "sched_tree 18" "primes2 200000" "fib 20000" "mandel 300 300 4000" "mandel_opt 2 4000"  "mandel_opt 1 4000"; do
-#for line in "mandel 300 300 4000" "primes2 200000" ; do
-#for line in "fib 20000"  "nbody 2000" ; do
+for line in "embarrassingly_par 9.2" "threadring 50000000 503" "sched_tree 18" "primes2 200000" "fib 20000" "mandel 300 300 4000" "mandel_opt 1 300 300 4000"; do
 
   set -- $line
   test=$1; shift

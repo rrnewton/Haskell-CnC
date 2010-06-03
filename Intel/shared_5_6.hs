@@ -83,11 +83,10 @@ ver5_6_core_get hook (col) tag =
 --ver5_6_core_finalize :: Chan a -> IO b -> IO () -> StepCode b
 ver5_6_core_finalize :: Chan a -> StepCode b -> StepCode () -> GraphCode b
 ver5_6_core_finalize joiner finalAction worker = 
-    do (HiddenState5 (stack, numworkers, _, _)) <- S.get
-       --state <- S.get 
+    do (HiddenState5 (stack, numworkers, _, mortal)) <- S.get
        --GRAPHLIFT writeIORef global_makeworker makeworker
        let mkwrkr = do S.runStateT worker state2; return ()
-           state2 = HiddenState5 (stack, numworkers, mkwrkr, undefined)
+           state2 = HiddenState5 (stack, numworkers, mkwrkr, mortal)
 
        GRAPHLIFT atomicModifyIORef numworkers (\n -> (n + numCapabilities, ()))
        -- Fork one worker per thread:
@@ -122,5 +121,5 @@ runState x =
     do hv  <- newHotVar []
        hv2 <- newHotVar 0
        hv3 <- newHotVar Set.empty
-       (a,_) <- S.runStateT x (HiddenState5 (hv,hv2, undefined, hv3))
+       (a,_) <- S.runStateT x (HiddenState5 (hv,hv2, error "Intel.Cnc6 internal error: makeworker thunk used before initalized", hv3))
        return a

@@ -723,7 +723,7 @@ distScheduler graph inittags world =
 	     then putStr "EMPTIED\n"
 	     else threadloop worldref blockedref newprimed (fresh ++ intags)
 -}
-            return undefined
+            return (error "CncPure distScheduler not complete yet")
 
 --------------------------------------------------------------------------------
 -- Run some steps, accumulate output, and then return to synchronize/schedule.
@@ -989,8 +989,9 @@ itemsToList id =
       in (Just (finalmagic id (Map.toList it)),
 	  Done tags items)
 
+-- This is just a serial loop for now:
 cncFor :: Int -> Int -> (Int -> StepCode ()) -> StepCode ()
-cncFor start end body = error "cncFor not implemented yet for Intel.CncPure"
+cncFor start end body = for_ start (end+1) body
 
 cncFor2D :: (Int,Int) -> (Int,Int) -> (Int -> Int -> StepCode ()) -> StepCode ()
 cncFor2D (s1,s2) (e1,e2) body =

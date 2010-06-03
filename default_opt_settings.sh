@@ -11,6 +11,7 @@
 
 if [ "`ghc -V`" == "The Glorious Glasgow Haskell Compilation System, version 6.12.1" ];
 then GHC_DEFAULT_FLAGS=" -O2"
+#then GHC_DEFAULT_FLAGS=" "
 else GHC_DEFAULT_FLAGS=" -rtsopts -O2"
 fi
 

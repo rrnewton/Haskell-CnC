@@ -20,10 +20,9 @@
 
 import System.Environment
 import Data.Int
-import Intel.CncUtil
+import Control.Monad
 
 #include "haskell_cnc.h"
-
 
 run n = runGraph $  
        do tags  :: TagCol  Int       <- newTagCol
@@ -35,8 +34,8 @@ run n = runGraph $
 	  initialize $ 
 	     do put items 0 0 		
 		put items 1 1 
-		for_ 2 (n+1) (putt tags)
-		--forM_ [2..n] (putt tags)
+		--for_ 2 (n+1) (putt tags)
+		forM_ [2..n] (putt tags)
 		--forM_ (reverse [2..n]) (putt tags)
  	  finalize $ 
 	     do get items n

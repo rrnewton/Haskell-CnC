@@ -29,7 +29,6 @@ import GHC.Conc
 import Debug.Trace
 import Control.Monad
 import System.Environment
-import Intel.CncUtil
 
 import qualified  Control.Monad.State.Strict as S 
 
@@ -85,4 +84,4 @@ main = do args <- getArgs
        case args of 
 	   []  -> runit $ 50*1000*1000
 	   [n] -> runit $ round (10 ** read n)
-	   [trials, n] -> doTrials (read trials) (loop [n])
+--	   [trials, n] -> doTrials (read trials) (loop [n])

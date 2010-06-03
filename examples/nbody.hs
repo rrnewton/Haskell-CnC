@@ -31,7 +31,6 @@
   
 import System.Environment
 import Data.Int
-import Intel.CncUtil
 import Data.List
 
 #include "haskell_cnc.h"

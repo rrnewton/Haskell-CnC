@@ -21,10 +21,6 @@ import Data.Bits
 #define USE_GMAP
 #include <haskell_cnc.h>
 
--- Constants for this benchmark:
-max_row = 300
-max_col = 300
-
 -- Here we manually pack our pairs into scalars.
 -- In the future the ItemCol data type may do this for us auto-magically.
 type Pair = (Word16, Word16)
@@ -42,8 +38,8 @@ mandel max_depth c = loop 0 0 0
     | fn(z) >= 2.0   = count 
     | otherwise      = loop (i+1) (z*z + c) (count+1)
 
-mandelProg :: Int -> Int -> GraphCode Int
-mandelProg optlvl max_depth = 
+mandelProg :: Int -> Int -> Int -> Int -> GraphCode Int
+mandelProg optlvl max_row max_col max_depth = 
     do position :: TagCol  Int                  <- newTagCol
        dat      :: ItemCol Int (Complex Double) <- newItemCol
        pixel    :: ItemCol Int Int              <- newItemCol
@@ -87,13 +83,14 @@ mandelProg optlvl max_depth =
 
        -- Final result, count coordinates of the  pixels with a certain value:
        finalize $ 
-	foldRange 0 max_row (return 0) $ \acc i -> 
-	 foldRange 0 max_col acc $ \acc j -> 
-	   do cnt <- acc
-	      p <- get pixel (pack (fromIntegral i, fromIntegral j))
-	      if p == max_depth
-   	       then return (cnt + (i*max_col + j))
-   	       else return cnt
+	foldM (\acc i -> 
+          foldM (\acc j -> 
+	           do p <- get pixel (pack (fromIntegral i, fromIntegral j))
+		      if p == max_depth
+   		       then return (acc + (i*max_col + j))
+   		       else return acc)
+	        acc [0..max_col]
+              ) 0 [0..max_row] 
        
    where 
     r_origin = -2                            :: Double
@@ -102,17 +99,12 @@ mandelProg optlvl max_depth =
     c_scale = 4.0 / (fromIntegral max_col)   :: Double
 
 
-runMandel optlvl c = 
-	do --env <- getEnvironment
-	   --let optlvl = case Prelude.lookup "MANDELOPT" env of 
-	   --		 Nothing -> 1
-	   --		 Just n  -> read n
-	   putStrLn$ "Running mandel with opt level: "++ show optlvl
-	   let check = runGraph $ mandelProg optlvl c 
+runMandel optlvl a b c = 
+	do putStrLn$ "Running mandel with opt level: "++ show optlvl
+	   let check = runGraph $ mandelProg optlvl a b c 
 	   putStrLn ("Mandel check " ++ show check)
 
 main = do args <- getArgs  
 	  case args of
-	   []     -> runMandel 1 3  
-	   [a]    -> runMandel 1 (read a)
-	   [o, a] -> runMandel (read o) (read a)
+	   []         -> runMandel 1 3 3 3   -- Should output 24.
+	   [o, a,b,c] -> runMandel (read o) (read a) (read b) (read c)
