@@ -138,7 +138,7 @@ function runit()
   CODE=$?
   check_error $CODE "ERROR: compilation failed."
 
-  echo "Executing ./examples/$test.exe $ARGS +RTS $RTS "
+  echo "Executing ./ntimes_minmedmax "$TRIALS" ./examples/$test.exe $ARGS +RTS $RTS -RTS "
   if [ "$LONGRUN" == "" ]; then export HIDEOUTPUT=1; fi
   times=`./ntimes_minmedmax "$TRIALS" ./examples/$test.exe $ARGS +RTS $RTS -RTS`
   CODE=$?

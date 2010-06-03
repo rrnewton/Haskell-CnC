@@ -3,12 +3,13 @@ import System.Directory
 import qualified Intel.Cnc
 import qualified Intel.CncPure
 import qualified Intel.CncUtil
-
 import System.Cmd(system) 
 import System.Exit
 
+import HSH
 import Test.HUnit
 
+import Data.String.Utils -- from MissingH package
 
 main = do 
 	  cd <- getCurrentDirectory
@@ -38,11 +39,19 @@ main = do
 	  putStrLn$ "Finally running system tests in all configurations (example programs):"
 	  putStrLn$ "================================================================================\n"
 
-          b <- doesFileExist "run_all_examples.sh"
-          if not b
-           then error$ "Uh oh, the script run_all_examples.sh doesn't exist in this directory.\n"++
-		       "  If cabal installed the package you may find it in your ~/.cabal/lib directory."
-	   else return ()   
+          b1 <- doesFileExist "run_all_examples.sh"
+          if b1
+           then putStrLn "!!! run_all_examples.sh found in current directory, using that!\n\n"
+           else do [ver] <- run "ghc-pkg latest haskell-cnc"
+                   dir <- run$ ("ghc-pkg field "++ver++" include-dirs ") -|- replace "include-dirs:" ""
+                   putStrLn$ "Switching to directory: " ++ dir
+                   setCurrentDirectory dir
+	   
+          b2 <- doesFileExist "run_all_examples.sh"
+          if not b2
+            then error$ "Uh oh, the script run_all_examples.sh doesn't exist in this directory.\n"
+    -- 		             "  If cabal installed the package you may find it in your ~/.cabal/lib directory."
+	    else return ()   
 
           -- I have problems with cabal sdist not preserving executable flags.
           system "chmod +x ./runcnc" 

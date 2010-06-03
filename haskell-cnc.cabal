@@ -24,7 +24,7 @@ source-repository head
 --Data-Files: ntimes ntimes_minmedmax README.txt haskell_cnc.h Makefile install_environment_vars.sh 
 
 library
-  build-depends:  base, mtl, containers, time, random, array, ghc-prim, extensible-exceptions, HUnit
+  build-depends:  base, mtl, containers, time, random, array, ghc-prim, extensible-exceptions, HUnit, MissingH, HSH
   -- QuickCheck -- I haven't got quickcheck working under 6.13.xx right now.
   -- Needed for the scaling.hs plotting script:
   --   HSH, gnuplot
@@ -46,7 +46,7 @@ library
   -- Unfortunately these go in the include/ subdirectory once cabal installs the package.
   install-includes: ntimes ntimes_minmedmax README.txt haskell_cnc.h Makefile install_environment_vars.sh 
                     default_opt_settings.sh runcnc run_all_examples.sh scaling.hs 
-                    examples/hello_world.hs examples/mandel.hs examples/primes.hs examples/primes2.hs 
+                    examples/hello_world.hs examples/mandel.hs examples/mandel_opt.hs examples/primes.hs examples/primes2.hs 
                     examples/sched_tree.hs examples/threadring_onestep.hs examples/threadring.hs 
                     examples/embarrassingly_par.hs examples/fib.hs examples/nbody.hs
                     Intel/Cnc.Header.hs Intel/shared_5_6.hs 
