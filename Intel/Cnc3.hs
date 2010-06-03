@@ -16,8 +16,8 @@
 #define CNC_SCHEDULER 3
 #define STEPLIFT  id$
 #define GRAPHLIFT id$
-#define SUPPRESS_cncFor
-#define SUPPRESS_cncFor2D
+-- #define SUPPRESS_cncFor
+-- #define SUPPRESS_cncFor2D
 #include "Cnc.Header.hs"
 
 type TagCol  a   = (IORef (Set.Set a), IORef [Step a])
