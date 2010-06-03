@@ -2,7 +2,6 @@
 
 import Data.List
 import Data.IORef
-import System
 import System.Exit
 import System.Process
 import System.Environment

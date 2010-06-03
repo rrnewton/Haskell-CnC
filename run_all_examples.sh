@@ -159,8 +159,12 @@ echo "Running all tests, for THREADSETTINGS in {$THREADSETTINGS}"
 echo
 
 # Build the timeout script if it hasn't been already:
-if ! [ -e ./timeout ];
-then ghc --make timeout.hs -threaded
+if ! [ -e ./timeout ]; then 
+  ghc --make timeout.hs -threaded
+  if [ "$?" != "0" ];
+  then echo "GHC build of timeout.hs returned error."
+       exit 1
+  fi
 fi
 
 # Hygiene:
