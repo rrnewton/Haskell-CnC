@@ -44,14 +44,14 @@ main = do
            then putStrLn "!!! run_all_examples.sh found in current directory, using that!\n\n"
            else do [ver] <- run "ghc-pkg latest haskell-cnc"
                    dir <- run$ ("ghc-pkg field "++ver++" include-dirs ") -|- replace "include-dirs:" ""
-                   putStrLn$ "Switching to directory: " ++ dir
-                   setCurrentDirectory dir
+                   putStrLn$ "Switching to directory: " ++ show (strip dir)
+                   setCurrentDirectory (strip dir)
 	   
-          b2 <- doesFileExist "run_all_examples.sh"
-          if not b2
-            then error$ "Uh oh, the script run_all_examples.sh doesn't exist in this directory.\n"
+                   b2 <- doesFileExist "run_all_examples.sh"
+                   if not b2
+                    then error$ "Uh oh, the script run_all_examples.sh doesn't exist in this directory.\n"
     -- 		             "  If cabal installed the package you may find it in your ~/.cabal/lib directory."
-	    else return ()   
+    	            else return ()   
 
           -- I have problems with cabal sdist not preserving executable flags.
           system "chmod +x ./runcnc" 
