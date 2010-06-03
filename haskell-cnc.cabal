@@ -17,6 +17,10 @@ Cabal-Version: >=1.2.3
 
 build-type: Simple
 
+source-repository head
+  type:     darcs
+  location: http://darcs.haskell.org/haskell-cnc/
+
 Data-Files: ntimes ntimes_minmedmax README.txt haskell_cnc.h Makefile install_environment_vars.sh 
                     default_opt_settings.sh runcnc run_all_examples.sh scaling.hs 
                     examples/hello_world.hs examples/mandel.hs examples/primes.hs examples/primes2.hs 
