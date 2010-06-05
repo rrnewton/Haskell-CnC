@@ -57,7 +57,13 @@ compute vectors accels n tag =
              multTriple c (x,y,z) = (c*x,c*y,c*z)
              g = 9.8
 
+
+type Float3D = (Float, Float, Float)
+
 -- This describes the graph-- The same tag collection prescribes the two step collections.             
+--run :: Int -> (b, c)
+--run :: Int -> ([(Int, (Float, Float, Float))], [(Int, (Float, Float, Float))])
+run :: Int -> ([Float3D], [Float3D])
 run n = runGraph $  
         do tags    <- newTagCol
            vectors <- newItemCol
@@ -68,19 +74,19 @@ run n = runGraph $
                do sequence_ (List.map (putt tags) [1..n])
            finalize $ 
                do stepPutStr "Begin finalize action.\n"
-		  vecList <- itemsToList vectors
-                  accList <- itemsToList accels
+		  vecList <- sequence (List.map (get vectors) [1..n])
+		  accList <- sequence (List.map (get accels) [1..n])
                   return (vecList, accList)
 
 main = 
     do args <- getArgs 
        let (vecList, accList) = case args of 
-                                  []  -> run 3
+                                  []  -> run (3::Int)
 				  [s] -> run (read s)
        --putStrLn $ show vecList; putStrLn $ show accList;
        -- Do a meaningless sum to generate a small output:
        --putStrLn $ show (foldl (\sum (_,(x,y,z)) -> sum + x+y+z) 0 vecList)
        --putStrLn $ show (foldl (\sum (_,(x,y,z)) -> sum + x+y+z) 0 accList)
-       putStrLn $ show (foldl (\sum (_,(x,y,z)) -> if x>0.1 then sum+1 else sum) 0 vecList)
-       putStrLn $ show (foldl (\sum (_,(x,y,z)) -> if x>0 then sum+1 else sum) 0 accList)
+       putStrLn $ show (foldl (\sum (x,y,z) -> if x>0.1 then sum+1 else sum) 0 vecList)
+       putStrLn $ show (foldl (\sum (x,y,z) -> if x>0 then sum+1 else sum) 0 accList)
 
