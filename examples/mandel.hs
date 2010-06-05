@@ -36,7 +36,6 @@ mandel max_depth c = loop 0 0 0
     | fn(z) >= 2.0   = count 
     | otherwise      = loop (i+1) (z*z + c) (count+1)
 
--- A pair will fit in a word:
 type Pair = (Int16, Int16)
 
 mandelProg :: Int -> Int -> Int -> GraphCode Int

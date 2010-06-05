@@ -38,10 +38,10 @@ main =
 			      Just code -> putMVar sync code
 	       let poll_thread = loop 0
 	       let wait_thread = 
-                        do waitForProcess pid
+                        do code <- waitForProcess pid
 			   writeIORef ref True
 			   putStrLn "++ Command completed without timing out."
-			   putMVar sync ExitSuccess
+			   putMVar sync code
 	       forkIO wait_thread
 	       forkIO poll_thread
 	       final <- readMVar sync

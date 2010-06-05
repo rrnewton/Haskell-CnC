@@ -372,8 +372,8 @@ instance FitInWord (Int16,Int16) where
 --------------------------------------------------------------------------------
 
 -- |Class for generic map key types.  By using indexed type families,
--- |each key type may correspond to a different data structure that
--- |implements it.
+-- each key type may correspond to a different data structure that
+-- implements it.
 class (Ord k, Eq k, Show k) => GMapKey k where
   data GMap k :: * -> *
   empty       :: GMap k v
@@ -485,18 +485,19 @@ instance GMapKey Int16 where
   alter  fn k (GMapInt16 m) = GMapInt16 (alter fn (fromIntegral k) m)
   toList      (GMapInt16 m) = map (\ (i,v) -> (fromIntegral i,v)) (toList m)
 
--- TODO IFDEF 64 BIT THEN WE CAN FIT AN INT64 AND WORD64 TOO!!
+-- TODO: Int64 + Word64
 
 -- Can't get past the "Conflicting family instance declarations"
 -- instance GMapKey (Int16, Int16) where
---   data GMap (Int16,Int16) v         = GMapInt16Pair (GMap Int v) deriving Show
---   empty                     = trace "<<< Constructing Double-Int16 GMAP (Intmap) >>>> " $ 
--- 			      GMapInt16Pair empty
---   lookup k (GMapInt16Pair m)    = lookup (fromIntegral k) m
---   insert k v (GMapInt16Pair m)  = GMapInt16Pair (insert (fromIntegral k) v m)
---   alter  fn k (GMapInt16Pair m) = GMapInt16Pair (alter fn (fromIntegral k) m)
---   toList      (GMapInt16Pair m) = map (\ (i,v) -> (fromIntegral i,v)) (toList m)
-
+#if 0
+  data GMap (Int16,Int16) v         = GMapInt16Pair (GMap Int v) deriving Show
+  empty                     = trace "<<< Constructing Double-Int16 GMAP (Intmap) >>>> " $ 
+			      GMapInt16Pair empty
+  lookup k (GMapInt16Pair m)    = lookup (fromIntegral k) m
+  insert k v (GMapInt16Pair m)  = GMapInt16Pair (insert (fromIntegral k) v m)
+  alter  fn k (GMapInt16Pair m) = GMapInt16Pair (alter fn (fromIntegral k) m)
+  toList      (GMapInt16Pair m) = map (\ (i,v) -> (fromIntegral i,v)) (toList m)
+#endif
 
 #endif
 
@@ -523,20 +524,6 @@ instance (GMapKey a, GMapKey b) => GMapKey (a, b) where
 
   toList (GMapPair gm) = L.foldl' (\ acc (a,m) -> map (\ (b,v) -> ((a,b),v)) (toList m) ++ acc) [] $ 
 			 toList gm
-{-
--- Here's a traditional Data.Map implementation:
-instance (Ord a, Ord b) => GMapKey (a, b) where
-  newtype GMap (a, b) v         = GMapPair (DM.Map (a,b) v)
-  empty		                = GMapPair DM.empty
-  lookup pr   (GMapPair gm) = DM.lookup pr gm
-  insert pr v (GMapPair gm) = GMapPair $ DM.insert pr v gm
--}
-
--- -- Here's a traditional Data.Map implementation:
--- instance (Ord a, Ord b) => GMapKey (a, b) where
---   empty	= DM.empty
---   lookup = DM.lookup
---   insert = DM.insert
 
 -- |Sum types are represented by separate GMaps for the separate variants.
 instance (GMapKey a, GMapKey b) => GMapKey (Either a b) where
@@ -553,7 +540,7 @@ instance (GMapKey a, GMapKey b) => GMapKey (Either a b) where
       map (\ (b,v) -> (Right b, v)) (toList gm2)
 
 -- |GMaps with list indices could be treated like tuples (nested
--- |maps).  Instead, we put them in a regular Data.Map.
+-- maps).  Instead, we put them in a regular Data.Map.
 instance (GMapKey a) => GMapKey [a] where
   data GMap [a] v         = GMapList (DM.Map [a] v) deriving Show
   empty                   = GMapList DM.empty
