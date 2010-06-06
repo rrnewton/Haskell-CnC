@@ -22,7 +22,8 @@
 
 ------------------------------------------------------------
 -- Version 4: Global work queue and worker threads that spin until
--- execution is finished.
+-- execution is finished.  Note, this ALSO includes the mortal threads
+-- business from version 6.
 
 #include "shared_5_6.hs"
 
@@ -34,27 +35,44 @@
  
 get col tag = ver5_6_core_get (return ()) col tag
 
+-- get col tag = 
+--  do (HiddenState5 { stack, mortal }) <- S.get
+--     let io = do myId  <- myThreadId	      
+--  	        modifyHotVar_ mortal (Set.insert myId)
+--     ver5_6_core_get io col tag
+
+
 -- At finalize time we set up the workers and run them.
 finalize userFinalAction = 
-    do (state @ HiddenState5 { stack, numworkers } ) <- S.get
-       joiner <- GRAPHLIFT newChan 
+    do (state @ HiddenState5 { stack, numworkers, mortal } ) <- S.get
+       
        let worker id = 
 	       do x <- STEPLIFT tryPop stack
+                  let lifecheck = 
+		        do myId <- STEPLIFT myThreadId
+			   set  <- STEPLIFT readHotVar mortal
+			   return (Set.notMember myId set)
 		  case x of 
 		    Nothing -> do n <- STEPLIFT readHotVar numworkers
 				  --STEPLIFT putStrLn$ "NUM WORKERS IS " ++ show n++"\n"
 				  if n == 0 
 				   then do --STEPLIFT putStrLn$ "================ SHUTTING DOWN "++ show id ++"=============="
-					   return ()
-				   else do -- Should we be cooperative by sleeping a little?
-					   --System.Posix.usleep 1000
-					   STEPLIFT yield
-					   worker id
+					   return ()					
+				   else do -- A mortal thread should never spin:
+					   b <- lifecheck
+					   if b 
+					    -- Should we be cooperative by sleeping a little?
+					    --System.Posix.usleep 1000
+					    then do STEPLIFT yield
+						    worker id
+					    else return ()
 		    Just action -> do action
-				      worker id
+				      b <- lifecheck
+				      if b then worker id else return ()
 
        let finalAction = 
-	    do S.put$ state { myid = numCapabilities-1 }
+	    do S.modify$ \stt -> stt { myid = numCapabilities-1 }
+
                val <- userFinalAction
 	       -- UGLY Convention: reusing numworkers variable that's already in the type:
 	       -- This variable becomes a "command" rather than diagnosing the current state.  Zero means stop working.
@@ -69,8 +87,9 @@ finalize userFinalAction =
        -- 
        -- FIXME: TODO: Currently having inexplicable problems on embarassingly_par with the N-1 approach.
        -- For now oversubscribing intentionally as the lesser of evils:
-       ver5_6_core_finalize joiner finalAction worker False numCapabilities (\_ -> return ())
+       ver5_6_core_finalize (error "joiner unused") finalAction worker False numCapabilities (\_ -> return ())
 
 ------------------------------------------------------------
 
 quiescence_support = False
+

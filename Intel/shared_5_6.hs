@@ -118,6 +118,8 @@ ver5_6_core_finalize joiner finalAction worker shouldWait numDesired joinerHook 
            state2 id = state1 { makeworker = mkwrkr, myid = id }
        -- Write it back for the "finalAction" below:
        S.put (state2 myid)
+       mtid <- GRAPHLIFT  myThreadId
+       cncPutStr$ "   ON thread " ++ show mtid ++ " just put state2\n"
 
        GRAPHLIFT modifyHotVar_ numworkers (+ numDesired)
 
