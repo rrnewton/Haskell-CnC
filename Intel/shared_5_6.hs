@@ -20,13 +20,10 @@ type GraphCode a = StepCode a
 newtype HiddenState5 = HiddenState5 (HotVar [StepCode ()], HotVar Int, IO (), HotVar (Set.Set ThreadId))
   deriving Show
 
-instance Show (IORef a) where 
-  show ref = "<ioref>"
-instance Show (IO a) where 
-  show ref = "<io>"
-
-atomicIncr x = atomicModifyIORef x (\n -> (n+1, ()))
-atomicDecr x = atomicModifyIORef x (\n -> (n-1, ()))
+atomicIncr :: Num n => HotVar n -> IO ()
+atomicDecr :: Num n => HotVar n -> IO ()
+atomicIncr x = modifyHotVar_ x (+ 1)
+atomicDecr x = modifyHotVar_ x (\n -> n-1)
 
 
 -- A simple stack interface:
@@ -88,7 +85,7 @@ ver5_6_core_finalize joiner finalAction worker =
        let mkwrkr = do S.runStateT worker state2; return ()
            state2 = HiddenState5 (stack, numworkers, mkwrkr, mortal)
 
-       GRAPHLIFT atomicModifyIORef numworkers (\n -> (n + numCapabilities, ()))
+       GRAPHLIFT modifyHotVar_ numworkers (+ numCapabilities)
        -- Fork one worker per thread:
 #ifdef DEBUG_HASKELL_CNC
        S.lift$ putStrLn$ "Forking "++ show numCapabilities ++" threads"
@@ -96,7 +93,7 @@ ver5_6_core_finalize joiner finalAction worker =
        S.lift$ mapM (\n -> forkIO mkwrkr) [0..numCapabilities-1]
 
        -- This waits for quiescense:
-       let waitloop = do num <- readIORef numworkers
+       let waitloop = do num <- readHotVar numworkers
 	                 if num == 0
 			  then return () 
 			  else do 

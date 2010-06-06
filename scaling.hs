@@ -276,7 +276,7 @@ plot_benchmark2 root [io, pure] = action (io ++ pure)
       -- runIO$ "(cd "++root++"; ps2pdf "++ filebase ++".eps )"
 
 
-plot_benchmark2 root _ = putStrLn "plot_benchmark2: Unexpected input"		       
+plot_benchmark2 root ls = putStrLn$ "plot_benchmark2: Unexpected input, list len: "++ show (length ls)
 
 isMatch rg str = case matchRegex rg str of { Nothing -> False; _ -> True }
 

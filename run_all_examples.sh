@@ -174,7 +174,8 @@ rm -f examples/*.exe
 
 #for line in "mandel_opt 1 300 300 4000" "mandel_opt 2 300 300 4000" "mandel_opt 3 300 300 4000" "mandel 300 300 4000"; do
 
-for line in "nbody 1200" "primes 200000" "embarrassingly_par 9.2" "threadring 50000000 503" "sched_tree 18" "primes2 200000" "fib 20000" "mandel 300 300 4000" "mandel_opt 1 300 300 4000"; do
+#  "primes 200000"
+for line in  "embarrassingly_par 9.2" "primes2 200000" "mandel 300 300 4000" "mandel_opt 1 300 300 4000" "sched_tree 18" "fib 20000" "threadring 50000000 503" "nbody 1200"; do
 
   set -- $line
   test=$1; shift

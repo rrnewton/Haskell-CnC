@@ -44,7 +44,7 @@ finalize finalAction =
 		    Just action -> 
 			do action 
 			   myId <- STEPLIFT myThreadId
-			   set  <- STEPLIFT readIORef mortalthreads
+			   set  <- STEPLIFT readHotVar mortalthreads
 			   if Set.notMember myId set
 			      then worker -- keep going
 			      else STEPLIFT writeChan joiner ()
@@ -53,15 +53,8 @@ finalize finalAction =
 get col tag = 
  do (HiddenState5 (stack, _, _, mortalthreads)) <- S.get
     let io = do myId  <- myThreadId	      
- 	        atomicModifyIORef mortalthreads (\s -> (Set.insert myId s, ()))
+ 	        modifyHotVar_ mortalthreads (Set.insert myId)
     ver5_6_core_get io col tag
 
 quiescence_support = True
-
-
-------------------------------------------------------------
--- Version 7: Now with healing -- bring back worker threads that died
--- prematurely.
-
--- TODO: Improve on 6 by correcting premature deaths.
 

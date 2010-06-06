@@ -39,7 +39,7 @@ module Intel.CncUtil (
 		      tests,
 
                       MutableMap, newMutableMap, assureMvar, mmToList,
-		      HotVar, newHotVar, modifyHotVar, modifyHotVar_,
+		      HotVar, newHotVar, readHotVar, modifyHotVar, modifyHotVar_, 
 
 		      )
 where
@@ -232,7 +232,9 @@ mmToList col =
 
 -- We want to experiment with all three of these. 
 
-#define HOTVAR 1
+#ifndef HOTVAR
+#define HOTVAR 3
+#endif
 newHotVar     :: a -> IO (HotVar a)
 modifyHotVar  :: HotVar a -> (a -> (a,b)) -> IO b
 modifyHotVar_ :: HotVar a -> (a -> a) -> IO ()
@@ -242,6 +244,9 @@ type HotVar a = IORef a
 newHotVar     = newIORef
 modifyHotVar  = atomicModifyIORef
 modifyHotVar_ v fn = atomicModifyIORef v (\a -> (fn a, ()))
+readHotVar    = readIORef
+instance Show (IORef a) where 
+  show ref = "<ioref>"
 
 #elif HOTVAR == 2 
 #warning "Using MVars for hot atomic variables."
@@ -249,7 +254,9 @@ type HotVar a = MVar a
 newHotVar     = newMVar
 modifyHotVar  v fn = modifyMVar  v (return . fn)
 modifyHotVar_ v fn = modifyMVar_ v (return . fn)
-
+readHotVar    = readMVar
+instance Show (MVar a) where 
+  show ref = "<mvar>"
 #elif HOTVAR == 3
 #warning "Using TVars for hot atomic variables."
 -- Simon Marlow said he saw better scaling with TVars (surprise to me):
@@ -260,8 +267,13 @@ modifyHotVar  tv fn = atomically (do x <- readTVar tv
 				     writeTVar tv x2
 				     return b)
 modifyHotVar_ tv fn = atomically (do x <- readTVar tv; writeTVar tv (fn x))
+readHotVar x = atomically $ readTVar x
+instance Show (TVar a) where 
+  show ref = "<tvar>"
 #endif
 
+instance Show (IO a) where 
+  show ref = "<io>"
 
 
 --------------------------------------------------------------------------------
