@@ -16,6 +16,7 @@
 #define STEPLIFT  S.lift$
 #define GRAPHLIFT S.lift$
 #define SUPPRESS_runGraph
+#define DEFINED_free_items
 #include "Cnc.Header.hs"
 
 ------------------------------------------------------------
@@ -32,7 +33,7 @@
 -- TODO: we should do a better job here by using a monad transformer on top of IO:
 -- But if we must keep the same CnC interface... This is expedient:
  
-get col tag = ver5_6_core_get (return ()) col tag
+get col tag = ver5_6_core_get (return ()) col tag 
 
 -- At finalize time we set up the workers and run them.
 finalize finalAction = 
@@ -44,17 +45,9 @@ finalize finalAction =
 		    Nothing -> STEPLIFT writeChan joiner ()
 		    Just action -> do action
 				      worker      
-       ver5_6_core_finalize joiner finalAction worker 
+       ver5_6_core_finalize joiner finalAction worker True
 
 ------------------------------------------------------------
 
 quiescence_support = True
-
-type Item = MVar
-newItem  = STEPLIFT newEmptyMVar
-readItem = grabWithBackup (return ())
-putItem mv x = 
-  do b <- STEPLIFT tryPutMVar mv x
-     if b then return ()
-	  else error "Violation of single assignment rule; second put on Item!"
 

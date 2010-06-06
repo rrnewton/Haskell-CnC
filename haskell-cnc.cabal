@@ -24,7 +24,7 @@ source-repository head
 --Data-Files: ntimes ntimes_minmedmax README.txt haskell_cnc.h Makefile install_environment_vars.sh 
 
 library
-  build-depends:  base, mtl, containers, time, random, array, ghc-prim, extensible-exceptions, HUnit, MissingH, HSH
+  build-depends:  base, mtl, containers, time, random, array, ghc-prim, extensible-exceptions, HUnit, MissingH, HSH, unix
   -- QuickCheck -- I haven't got quickcheck working under 6.13.xx right now.
   -- Needed for the scaling.hs plotting script:
   --   HSH, gnuplot

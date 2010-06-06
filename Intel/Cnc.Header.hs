@@ -130,6 +130,8 @@ where
 import qualified Data.Set as Set
 import qualified Data.HashTable as HT
 import qualified Data.Map as Map
+import qualified System.Posix
+
 import Data.Int
 import Data.IORef
 import Data.Word
@@ -305,6 +307,9 @@ runGraph :: GraphCode a -> a
 runGraph x = unsafePerformIO x
 #endif
 
+stepUnsafeIO :: IO a -> StepCode a 
+cncUnsafeIO  :: IO a -> GraphCode a 
+
 stepUnsafeIO io = STEPLIFT  io
 cncUnsafeIO  io = GRAPHLIFT io
 
@@ -400,7 +405,8 @@ newItem  :: StepCode (Item a)
 readItem :: Item a -> StepCode a
 putItem  :: Item a -> a -> StepCode ()
 
-#if CNC_SCHEDULER != 3 && CNC_SCHEDULER != 5
+-- #if CNC_SCHEDULER != 3 && CNC_SCHEDULER != 5
+#ifndef DEFINED_free_items
 type Item a = ()
 newItem  = error "newItem not implemented under this scheduler"
 readItem = error "readItem not implemented under this scheduler"

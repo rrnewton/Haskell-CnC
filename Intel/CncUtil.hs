@@ -39,7 +39,7 @@ module Intel.CncUtil (
 		      tests,
 
                       MutableMap, newMutableMap, assureMvar, mmToList,
-		      HotVar, newHotVar, readHotVar, modifyHotVar, modifyHotVar_, 
+		      HotVar, newHotVar, readHotVar, writeHotVar, modifyHotVar, modifyHotVar_, 
 
 		      )
 where
@@ -245,16 +245,19 @@ newHotVar     = newIORef
 modifyHotVar  = atomicModifyIORef
 modifyHotVar_ v fn = atomicModifyIORef v (\a -> (fn a, ()))
 readHotVar    = readIORef
+writeHotVar   = writeIORef
 instance Show (IORef a) where 
   show ref = "<ioref>"
 
 #elif HOTVAR == 2 
 #warning "Using MVars for hot atomic variables."
+-- This uses MVars that are always full with *something*
 type HotVar a = MVar a
-newHotVar     = newMVar
+newHotVar   x = do v <- newMVar; putMVar v x; return v
 modifyHotVar  v fn = modifyMVar  v (return . fn)
 modifyHotVar_ v fn = modifyMVar_ v (return . fn)
 readHotVar    = readMVar
+writeHotVar v x = do swapMVar v x; return ()
 instance Show (MVar a) where 
   show ref = "<mvar>"
 #elif HOTVAR == 3
@@ -268,6 +271,7 @@ modifyHotVar  tv fn = atomically (do x <- readTVar tv
 				     return b)
 modifyHotVar_ tv fn = atomically (do x <- readTVar tv; writeTVar tv (fn x))
 readHotVar x = atomically $ readTVar x
+writeHotVar v x = atomically $ writeTVar v x
 instance Show (TVar a) where 
   show ref = "<tvar>"
 #endif

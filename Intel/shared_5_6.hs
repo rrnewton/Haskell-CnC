@@ -37,7 +37,12 @@ tryPop stack   = modifyHotVar stack tryfirst
     tryfirst (a:b) = (b,  Just a)
 ----------------------------------------
 
-
+issueReplacement = 
+  do (HiddenState5 (stack, numworkers, makeworker, _)) <- S.get
+     STEPLIFT atomicIncr numworkers
+     -- If this were CPS then we would just give our
+     -- continuation to the forked thread.  Alas, no.
+     STEPLIFT forkIO makeworker
 
 -- FIXME: [2010.05.05] I believe this has a problem.
 -- tryTakeMVar can fail spuriously if there's a collision with another
@@ -49,14 +54,7 @@ tryPop stack   = modifyHotVar stack tryfirst
 -- good reason).  When the code below falls back to readMVar that
 -- should succeed.
 
-issueReplacement = 
-  do (HiddenState5 (stack, numworkers, makeworker, _)) <- S.get
-     STEPLIFT atomicIncr numworkers
-     -- If this were CPS then we would just give our
-     -- continuation to the forked thread.  Alas, no.
-     --makeworker <- STEPLIFT readIORef global_makeworker
-     STEPLIFT forkIO makeworker
-
+-- Grab an mvar, but bring in reinforcements if we need to go down:
 grabWithBackup hook mvar =
     do hopeful <- STEPLIFT tryTakeMVar mvar
        case hopeful of 
@@ -77,13 +75,14 @@ ver5_6_core_get hook (col) tag =
        mvar    <- STEPLIFT assureMvar col tag 
        grabWithBackup hook mvar
 
---ver5_6_core_finalize :: Chan a -> IO b -> IO () -> StepCode b
-ver5_6_core_finalize :: Chan a -> StepCode b -> StepCode () -> GraphCode b
-ver5_6_core_finalize joiner finalAction worker = 
+
+ver5_6_core_finalize :: Chan a -> StepCode b -> StepCode () -> Bool -> GraphCode b
+ver5_6_core_finalize joiner finalAction worker shouldWait = 
     do (HiddenState5 (stack, numworkers, _, mortal)) <- S.get
-       --GRAPHLIFT writeIORef global_makeworker makeworker
        let mkwrkr = do S.runStateT worker state2; return ()
            state2 = HiddenState5 (stack, numworkers, mkwrkr, mortal)
+       -- Write it back for the "finalAction" below:
+       S.put state2
 
        GRAPHLIFT modifyHotVar_ numworkers (+ numCapabilities)
        -- Fork one worker per thread:
@@ -91,6 +90,7 @@ ver5_6_core_finalize joiner finalAction worker =
        S.lift$ putStrLn$ "Forking "++ show numCapabilities ++" threads"
 #endif
        S.lift$ mapM (\n -> forkIO mkwrkr) [0..numCapabilities-1]
+       --S.lift$ mapM (\n -> forkOnIO n mkwrkr) [0..numCapabilities-1]
 
        -- This waits for quiescense:
        let waitloop = do num <- readHotVar numworkers
@@ -103,7 +103,7 @@ ver5_6_core_finalize joiner finalAction worker =
 				  readChan joiner
 				  atomicDecr numworkers
 				  waitloop
-       S.lift$ waitloop
+       if shouldWait then S.lift$ waitloop else return ()
        finalAction
 
 
@@ -118,5 +118,16 @@ runState x =
     do hv  <- newHotVar []
        hv2 <- newHotVar 0
        hv3 <- newHotVar Set.empty
-       (a,_) <- S.runStateT x (HiddenState5 (hv,hv2, error "Intel.Cnc6 internal error: makeworker thunk used before initalized", hv3))
+       (a,_) <- S.runStateT x (HiddenState5 (hv,hv2, error$"Intel.Cnc"++ show CNC_SCHEDULER ++" internal error: makeworker thunk used before initalized", hv3))
        return a
+
+------------------------------------------------------------
+-- Experimental:  Free floating items:
+
+type Item = MVar
+newItem  = STEPLIFT newEmptyMVar
+readItem = grabWithBackup (return ())
+putItem mv x = 
+  do b <- STEPLIFT tryPutMVar mv x
+     if b then return ()
+	  else error "Violation of single assignment rule; second put on Item!"

@@ -16,6 +16,7 @@
 #define STEPLIFT  S.lift$
 #define GRAPHLIFT S.lift$
 #define SUPPRESS_runGraph
+#define DEFINED_free_items
 #include "Cnc.Header.hs"
 
 ------------------------------------------------------------
@@ -48,7 +49,7 @@ finalize finalAction =
 			   if Set.notMember myId set
 			      then worker -- keep going
 			      else STEPLIFT writeChan joiner ()
-       ver5_6_core_finalize joiner finalAction worker
+       ver5_6_core_finalize joiner finalAction worker True
 
 get col tag = 
  do (HiddenState5 (stack, _, _, mortalthreads)) <- S.get

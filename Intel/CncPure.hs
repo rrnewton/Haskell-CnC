@@ -960,17 +960,17 @@ gcPrintWorld str =
 -- stepPutStr' msg = 
 --    CC$ \w nt ni -> trace msg (Just (), Done nt ni)
 
-cncUnsafeIO :: IO () -> GraphCode ()
+cncUnsafeIO :: IO a -> GraphCode a
 cncUnsafeIO action = 
   GC$ \w g it -> 
-     seq (unsafePerformIO action)
-	 (w,g,it,())
+     let v = unsafePerformIO action
+     in seq v (w,g,it,v)
 
-stepUnsafeIO :: IO () -> StepCode ()
+stepUnsafeIO :: IO a -> StepCode a
 stepUnsafeIO action = 
   CC$ \w nt ni -> 
-     seq (unsafePerformIO action)
-	 (Just (), Done nt ni)
+     let v = unsafePerformIO action
+     in seq v (Just v, Done nt ni)
 
 stepPutStr str = stepUnsafeIO (putStr str)
 cncPutStr  str = cncUnsafeIO  (putStr str)

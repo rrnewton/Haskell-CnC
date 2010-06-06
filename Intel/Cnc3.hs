@@ -16,6 +16,7 @@
 #define CNC_SCHEDULER 3
 #define STEPLIFT  id$
 #define GRAPHLIFT id$
+#define DEFINED_free_items
 -- #define SUPPRESS_cncFor
 -- #define SUPPRESS_cncFor2D
 #include "Cnc.Header.hs"

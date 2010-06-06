@@ -44,13 +44,7 @@ runit total = runGraph graph `pseq` return ()
   oneshare = total `quot` numCapabilities
   mystep items jid =
      do 
-#if CNC_VARIANT == 1
-        let tid = -99
-#elif CNC_SCHEDULER == 8 || CNC_SCHEDULER == 5 || CNC_SCHEDULER == 6
-        tid <- S.lift$ myThreadId 
-#else
-        tid <- myThreadId 
-#endif
+        tid <- stepUnsafeIO myThreadId 
 	stepPutStr (show tid++" job "++show jid++":  About to do big work ("++ show oneshare ++" iterations)...\n")
         let res = work (oneshare * jid) oneshare 0.0
 	--tid2 <- S.lift$ myThreadId 
