@@ -50,7 +50,7 @@ finalize finalAction =
 			   if Set.notMember myId set
 			      then worker id -- keep going
 			      else STEPLIFT writeChan joiner id
-       ver5_6_core_finalize joiner finalAction worker True numCapabilities
+       ver5_6_core_finalize joiner finalAction worker True numCapabilities (\_ -> return ())
 
 get col tag = 
  do (HiddenState5 { stack, mortal }) <- S.get

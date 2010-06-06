@@ -46,7 +46,7 @@ finalize finalAction =
 		    Nothing -> STEPLIFT writeChan joiner id
 		    Just action -> do action
 				      worker id     
-       ver5_6_core_finalize joiner finalAction worker True numCapabilities
+       ver5_6_core_finalize joiner finalAction worker True numCapabilities (\_ -> return ())
 
 ------------------------------------------------------------
 

@@ -65,7 +65,7 @@ finalize userFinalAction =
        -- 
        -- FIXME: TODO: Currently having inexplicable problems on embarassingly_par with the N-1 approach.
        -- For now oversubscribing intentionally as the lesser of evils:
-       ver5_6_core_finalize joiner finalAction worker False numCapabilities
+       ver5_6_core_finalize joiner finalAction worker False numCapabilities (\_ -> return ())
 
 ------------------------------------------------------------
 
