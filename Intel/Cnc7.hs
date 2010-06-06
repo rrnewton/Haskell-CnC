@@ -74,7 +74,18 @@ stepcode_push :: HotVar [a] -> a -> StepCode ()
 stepcode_push stack val = 
   -- If push onto an empty stack, wake up deadset.  
   do old <- STEPLIFT modifyHotVar stack (\ls -> (val:ls, ls))
-     STEPLIFT putStrLn ("OLD WAS length "++ show (length old))
+     STEPLIFT putStrLn ("      OLD WAS length "++ show (length old))
+     if null old
+      -- Wake up the dead:
+      then do (HiddenState5 (_, numworkers, makeworker, _, deadset)) <- S.get
+	      dead <- STEPLIFT readHotVar deadset
+	      let len = Set.size dead
+              STEPLIFT putStrLn$ "Waking the dead: " ++ show dead 
+	      if len > 0 
+	       then do STEPLIFT modifyHotVar_ numworkers (+ len)
+		       STEPLIFT forM_ (Set.toList dead) (forkIO . makeworker)
+	       else return ()
+      else return () 
 
 ----------------------------------------
 
