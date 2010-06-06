@@ -40,7 +40,7 @@ main =
 	       let wait_thread = 
                         do code <- waitForProcess pid
 			   writeIORef ref True
-			   putStrLn "++ Command completed without timing out."
+			   putStrLn$ "++ Command completed without timing out, exit code: "++ show code
 			   putMVar sync code
 	       forkIO wait_thread
 	       forkIO poll_thread

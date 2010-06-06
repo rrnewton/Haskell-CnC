@@ -32,20 +32,21 @@
 import System.Environment
 import Data.Int
 import qualified Data.List as List
+import qualified Data.Array as Array
 
 #include "haskell_cnc.h"
 
 -- This step generates the bodies in the system.
-genVectors vectors tag = 
-    do put vectors tag (tag' * 1.0, tag' * 0.2, tag' * 30.0)
-       where tag' = fromIntegral tag
+genVector tag = (tag' * 1.0, tag' * 0.2, tag' * 30.0)
+   where tag' = fromIntegral tag
 
+-- Only doing the O(N^2) part in parallel:
 -- This step computes the accelerations of the bodies.       
-compute vectors accels n tag =
-    do vecList <- sequence (List.map (get vectors) [1..n])
-       vector <- get vectors tag
-       put accels tag (accel vector vecList)
-       where accel vector vecList = multTriple g $ sumTriples $ List.map (pairWiseAccel vector) vecList
+compute vecList accels tag =
+    do let myvector = vecList !! (tag-1)
+       put accels tag (accel myvector vecList)
+       where --vecList = elems vecArr
+	     accel vector vecList = multTriple g $ sumTriples $ List.map (pairWiseAccel vector) vecList
              pairWiseAccel (x,y,z) (x',y',z') = let dx = x'-x
                                                     dy = y'-y
                                                     dz = z'-z
@@ -63,30 +64,32 @@ type Float3D = (Float, Float, Float)
 -- This describes the graph-- The same tag collection prescribes the two step collections.             
 --run :: Int -> (b, c)
 --run :: Int -> ([(Int, (Float, Float, Float))], [(Int, (Float, Float, Float))])
-run :: Int -> ([Float3D], [Float3D])
+--run :: Int -> ([Float3D], [Float3D])
+run :: Int -> [Float3D]
 run n = runGraph $  
         do tags    <- newTagCol
-           vectors <- newItemCol
            accels  <- newItemCol
-           prescribe tags (genVectors vectors)
-           prescribe tags (compute vectors accels n)
+
+           --let initArr = array (0,n-1) [ (i, genVector i) | i <- [0..n-1] ]
+           let initVecs = List.map genVector [1..n]
+
+           prescribe tags (compute initVecs accels)
+
            initialize $
                do sequence_ (List.map (putt tags) [1..n])
+
            finalize $ 
                do stepPutStr "Begin finalize action.\n"
-		  vecList <- sequence (List.map (get vectors) [1..n])
 		  accList <- sequence (List.map (get accels) [1..n])
-                  return (vecList, accList)
+                  return accList 
 
 main = 
     do args <- getArgs 
-       let (vecList, accList) = case args of 
-                                  []  -> run (3::Int)
-				  [s] -> run (read s)
-       --putStrLn $ show vecList; putStrLn $ show accList;
+       let accList = case args of 
+                      []  -> run (3::Int)
+		      [s] -> run (read s)
+       --putStrLn $ show accList;
        -- Do a meaningless sum to generate a small output:
-       --putStrLn $ show (foldl (\sum (_,(x,y,z)) -> sum + x+y+z) 0 vecList)
        --putStrLn $ show (foldl (\sum (_,(x,y,z)) -> sum + x+y+z) 0 accList)
-       putStrLn $ show (foldl (\sum (x,y,z) -> if x>0.1 then sum+1 else sum) 0 vecList)
        putStrLn $ show (foldl (\sum (x,y,z) -> if x>0 then sum+1 else sum) 0 accList)
 
