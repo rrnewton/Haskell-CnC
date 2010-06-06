@@ -26,6 +26,10 @@
 
 #include "shared_5_6.hs"
 
+
+-- FIXME: TODO: This version needs the Mortal threads mechanism in version 6...
+-- Otherwise it creates extra threads that SPIN, which is terrible.
+
 ----------------------------------------------------------------------------------------------------
  
 get col tag = ver5_6_core_get (return ()) col tag

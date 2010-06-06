@@ -36,7 +36,7 @@ data HiddenState5 =
 		   makeworker :: Int -> IO (), 
 		   mortal :: HotVar (Set.Set ThreadId),
 		   myid :: Int,
-		   deadset :: HotVar (Set.Set Int)
+		   deadset :: HotVar [Int]
 		 }
   deriving Show
 
@@ -44,7 +44,7 @@ defaultState =
   do hv  <- newHotVar []
      hv2 <- newHotVar 0
      hv3 <- newHotVar Set.empty
-     hv4 <- newHotVar Set.empty
+     hv4 <- newHotVar []
      let msg = "Intel.Cnc"++ show CNC_SCHEDULER ++" internal error: makeworker thunk used before initalized"
      return$ HiddenState5 { stack = hv, numworkers = hv2, makeworker= error msg, 
 			    mortal = hv3, myid = -1, 
@@ -58,12 +58,12 @@ stepcode_push stack val =
      if null old
       -- Wake up the dead:
       then do (HiddenState5 { numworkers, makeworker, deadset }) <- S.get
-	      dead <- STEPLIFT modifyHotVar deadset (\old -> (Set.empty, old))
-	      let len = Set.size dead
+	      dead <- STEPLIFT modifyHotVar deadset (\old -> ([], old))
+	      let len = length dead
               --STEPLIFT putStrLn$ "        **********    Waking the dead: " ++ show dead 
 	      if len > 0 
 	       then do STEPLIFT modifyHotVar_ numworkers (+ len)
-		       STEPLIFT forM_ (Set.toList dead) (forkIO . makeworker)
+		       STEPLIFT forM_ dead (forkIO . makeworker)
 	       else return ()
       else return () 
 
@@ -86,7 +86,7 @@ finalize userFinalAction =
 		    Just action -> do action
 				      worker id
 
-       let joinerHook id = modifyHotVar_ deadset (Set.insert id)
+       let joinerHook id = modifyHotVar_ deadset (id:)
 
        ver5_6_core_finalize joiner userFinalAction worker True numCapabilities joinerHook
 
