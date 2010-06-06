@@ -72,6 +72,7 @@ module MODNAME (
 
                   itemsToList,
 		  stepPutStr, cncPutStr, cncVariant,
+		  stepUnsafeIO, cncUnsafeIO,
 
                   -- Undocumented experimental features:
                   Item, newItem, readItem, putItem,
@@ -307,9 +308,9 @@ runGraph :: GraphCode a -> a
 runGraph x = unsafePerformIO x
 #endif
 
+-- Currently these are undocumented and unofficial:
 stepUnsafeIO :: IO a -> StepCode a 
 cncUnsafeIO  :: IO a -> GraphCode a 
-
 stepUnsafeIO io = STEPLIFT  io
 cncUnsafeIO  io = GRAPHLIFT io
 

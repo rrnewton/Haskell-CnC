@@ -7,6 +7,7 @@
   , OverlappingInstances
   , DeriveDataTypeable
   , MultiParamTypeClasses
+  , NamedFieldPuns
   #-}
 -- State monad transformer is needed for both step & graph:
 #ifndef MODNAME
@@ -31,14 +32,16 @@ get col tag = ver5_6_core_get (return ()) col tag
 
 -- At finalize time we set up the workers and run them.
 finalize userFinalAction = 
-    do (HiddenState5 (stack, numworkers, _, _, _)) <- S.get
+    do (state @ HiddenState5 { stack, numworkers } ) <- S.get
        joiner <- GRAPHLIFT newChan 
        let worker id = 
 	       do x <- STEPLIFT tryPop stack
 		  case x of 
-		    Nothing -> do b <- STEPLIFT readHotVar numworkers
-				  if b == 0 
-				   then return ()
+		    Nothing -> do n <- STEPLIFT readHotVar numworkers
+				  --STEPLIFT putStrLn$ "NUM WORKERS IS " ++ show n++"\n"
+				  if n == 0 
+				   then do --STEPLIFT putStrLn$ "================ SHUTTING DOWN "++ show id ++"=============="
+					   return ()
 				   else do -- Should we be cooperative by sleeping a little?
 					   --System.Posix.usleep 1000
 					   STEPLIFT yield
@@ -47,13 +50,22 @@ finalize userFinalAction =
 				      worker id
 
        let finalAction = 
-	    do val <- userFinalAction
+	    do S.put$ state { myid = numCapabilities-1 }
+               val <- userFinalAction
 	       -- UGLY Convention: reusing numworkers variable that's already in the type:
 	       -- This variable becomes a "command" rather than diagnosing the current state.  Zero means stop working.
 	       STEPLIFT writeHotVar numworkers 0 -- Shut workers down (eventually).
+	       --STEPLIFT putStrLn$ " ..............>>>>>>>>>>>>>>>>>>> Initiated shutdown...........\n"
 	       return val
 
-       ver5_6_core_finalize joiner finalAction worker False
+       -- The final action will itself be one of the threads and it
+       -- will replace itself when it blocks on a get.  Therefore we
+       -- request one fewer worker:
+       --ver5_6_core_finalize joiner finalAction worker False (numCapabilities-1)
+       -- 
+       -- FIXME: TODO: Currently having inexplicable problems on embarassingly_par with the N-1 approach.
+       -- For now oversubscribing intentionally as the lesser of evils:
+       ver5_6_core_finalize joiner finalAction worker False numCapabilities
 
 ------------------------------------------------------------
 

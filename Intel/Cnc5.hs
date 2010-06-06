@@ -7,6 +7,7 @@
   , OverlappingInstances
   , DeriveDataTypeable
   , MultiParamTypeClasses
+  , NamedFieldPuns
   #-}
 -- State monad transformer is needed for both step & graph:
 #ifndef MODNAME
@@ -37,7 +38,7 @@ get col tag = ver5_6_core_get (return ()) col tag
 
 -- At finalize time we set up the workers and run them.
 finalize finalAction = 
-    do (HiddenState5 (stack, _, _, _, _)) <- S.get
+    do (HiddenState5 { stack }) <- S.get
        joiner <- GRAPHLIFT newChan 
        let worker id = 
 	       do x <- STEPLIFT tryPop stack
@@ -45,7 +46,7 @@ finalize finalAction =
 		    Nothing -> STEPLIFT writeChan joiner id
 		    Just action -> do action
 				      worker id     
-       ver5_6_core_finalize joiner finalAction worker True
+       ver5_6_core_finalize joiner finalAction worker True numCapabilities
 
 ------------------------------------------------------------
 

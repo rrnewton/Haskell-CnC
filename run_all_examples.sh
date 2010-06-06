@@ -47,7 +47,7 @@ unset HASKELLCNC
   # Which subset of schedures should we test:
 PURESCHEDS="2"
 #IOSCHEDS="3"
-IOSCHEDS="3 5 6 8"
+IOSCHEDS="3 4 5 6 7 8"
 
 if [ "$THREADSETTINGS" == "" ] 
 then THREADSETTINGS="4"
