@@ -12,13 +12,24 @@ type StepCode a = (S.StateT (HiddenState5) IO a)
 -- In this version we need to thread the state through the graph code as well:
 type GraphCode a = StepCode a
 
+-- Individual threads have numeric IDs.
 -- Here the hidden state keeps four things:
 --   (1) the stack used for this graph
 --   (2) the number of workers for this graph
---   (3) the "make worker" function to spawn new threads
+--   (3) the "make worker" function to spawn new threads (given ID as input)
 --   (4) the set of "mortal threads"
-newtype HiddenState5 = HiddenState5 (HotVar [StepCode ()], HotVar Int, IO (), HotVar (Set.Set ThreadId))
+--   (5) the ID of the current thread
+newtype HiddenState5 = 
+    HiddenState5 (HotVar [StepCode ()], 
+		  HotVar Int, 
+		  Int -> IO (), 
+		  HotVar (Set.Set ThreadId),
+		  Int 
+		 )
   deriving Show
+
+instance Show (Int -> IO ()) where
+  show _ = "<int to IO unit function>"
 
 atomicIncr :: Num n => HotVar n -> IO ()
 atomicDecr :: Num n => HotVar n -> IO ()
@@ -38,11 +49,11 @@ tryPop stack   = modifyHotVar stack tryfirst
 ----------------------------------------
 
 issueReplacement = 
-  do (HiddenState5 (stack, numworkers, makeworker, _)) <- S.get
+  do (HiddenState5 (stack, numworkers, makeworker, _, id)) <- S.get
      STEPLIFT atomicIncr numworkers
      -- If this were CPS then we would just give our
      -- continuation to the forked thread.  Alas, no.
-     STEPLIFT forkIO makeworker
+     STEPLIFT forkIO (makeworker id)
 
 -- FIXME: [2010.05.05] I believe this has a problem.
 -- tryTakeMVar can fail spuriously if there's a collision with another
@@ -71,26 +82,28 @@ grabWithBackup hook mvar =
 
 
 ver5_6_core_get hook (col) tag = 
-    do (HiddenState5 (stack, numworkers, makeworker, _)) <- S.get
+    do (HiddenState5 (stack, numworkers, makeworker, _, _)) <- S.get
        mvar    <- STEPLIFT assureMvar col tag 
        grabWithBackup hook mvar
 
 
-ver5_6_core_finalize :: Chan a -> StepCode b -> StepCode () -> Bool -> GraphCode b
+ver5_6_core_finalize :: Chan Int -> StepCode b -> (Int -> StepCode ()) -> Bool -> GraphCode b
 ver5_6_core_finalize joiner finalAction worker shouldWait = 
-    do (HiddenState5 (stack, numworkers, _, mortal)) <- S.get
-       let mkwrkr = do S.runStateT worker state2; return ()
-           state2 = HiddenState5 (stack, numworkers, mkwrkr, mortal)
+    do (HiddenState5 (stack, numworkers, _, mortal, id)) <- S.get
+
+       -- Here we install the makeworker funciton in the monad state:
+       let mkwrkr id = do S.runStateT (worker id) (state2 id); return ()
+           state2 id = HiddenState5 (stack, numworkers, mkwrkr, mortal, id)
        -- Write it back for the "finalAction" below:
-       S.put state2
+       S.put (state2 id)
 
        GRAPHLIFT modifyHotVar_ numworkers (+ numCapabilities)
        -- Fork one worker per thread:
 #ifdef DEBUG_HASKELL_CNC
-       S.lift$ putStrLn$ "Forking "++ show numCapabilities ++" threads"
-#endif
-       S.lift$ mapM (\n -> forkIO mkwrkr) [0..numCapabilities-1]
-       --S.lift$ mapM (\n -> forkOnIO n mkwrkr) [0..numCapabilities-1]
+       GRAPHLIFT putStrLn$ "Forking "++ show numCapabilities ++" threads"
+#endif 
+       GRAPHLIFT forM_ [0..numCapabilities-1] (\n -> forkIO (mkwrkr n)) 
+       --GRAPHLIFT forM_ [0..numCapabilities-1] (\n -> forkOnIO n (mkwrkr n)) 
 
        -- This waits for quiescense:
        let waitloop = do num <- readHotVar numworkers
@@ -103,13 +116,13 @@ ver5_6_core_finalize joiner finalAction worker shouldWait =
 				  readChan joiner
 				  atomicDecr numworkers
 				  waitloop
-       if shouldWait then S.lift$ waitloop else return ()
+       if shouldWait then GRAPHLIFT waitloop else return ()
        finalAction
 
 
 putt = proto_putt
 	(\ steps tag -> 
-	   do (HiddenState5 (stack, _, _, _)) <- S.get
+	   do (HiddenState5 (stack, _, _, _, _)) <- S.get
               foldM (\ () step -> STEPLIFT push stack (step tag))
                        () steps)
 
@@ -118,7 +131,8 @@ runState x =
     do hv  <- newHotVar []
        hv2 <- newHotVar 0
        hv3 <- newHotVar Set.empty
-       (a,_) <- S.runStateT x (HiddenState5 (hv,hv2, error$"Intel.Cnc"++ show CNC_SCHEDULER ++" internal error: makeworker thunk used before initalized", hv3))
+       let msg = "Intel.Cnc"++ show CNC_SCHEDULER ++" internal error: makeworker thunk used before initalized"
+       (a,_) <- S.runStateT x (HiddenState5 (hv,hv2, error msg, hv3, -1))
        return a
 
 ------------------------------------------------------------

@@ -37,14 +37,14 @@ get col tag = ver5_6_core_get (return ()) col tag
 
 -- At finalize time we set up the workers and run them.
 finalize finalAction = 
-    do (HiddenState5 (stack, _, _, _)) <- S.get
+    do (HiddenState5 (stack, _, _, _, _)) <- S.get
        joiner <- GRAPHLIFT newChan 
-       let worker = 
+       let worker id = 
 	       do x <- STEPLIFT tryPop stack
 		  case x of 
-		    Nothing -> STEPLIFT writeChan joiner ()
+		    Nothing -> STEPLIFT writeChan joiner id
 		    Just action -> do action
-				      worker      
+				      worker id     
        ver5_6_core_finalize joiner finalAction worker True
 
 ------------------------------------------------------------

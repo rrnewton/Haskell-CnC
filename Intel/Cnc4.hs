@@ -31,9 +31,9 @@ get col tag = ver5_6_core_get (return ()) col tag
 
 -- At finalize time we set up the workers and run them.
 finalize userFinalAction = 
-    do (HiddenState5 (stack, numworkers, _, _)) <- S.get
+    do (HiddenState5 (stack, numworkers, _, _, _)) <- S.get
        joiner <- GRAPHLIFT newChan 
-       let worker = 
+       let worker id = 
 	       do x <- STEPLIFT tryPop stack
 		  case x of 
 		    Nothing -> do b <- STEPLIFT readHotVar numworkers
@@ -42,9 +42,9 @@ finalize userFinalAction =
 				   else do -- Should we be cooperative by sleeping a little?
 					   --System.Posix.usleep 1000
 					   STEPLIFT yield
-					   worker
+					   worker id
 		    Just action -> do action
-				      worker
+				      worker id
 
        let finalAction = 
 	    do val <- userFinalAction
@@ -54,37 +54,6 @@ finalize userFinalAction =
 	       return val
 
        ver5_6_core_finalize joiner finalAction worker False
-
-
--- --ver5_6_core_finalize :: Chan a -> StepCode b -> StepCode () -> GraphCode b
--- --ver5_6_core_finalize joiner finalAction worker = 
--- --    do (HiddenState5 (stack, numworkers, _, mortal)) <- S.get
---        --GRAPHLIFT writeIORef global_makeworker makeworker
-
---        let mkwrkr = do S.runStateT worker state2; return ()
---            state2 = HiddenState5 (stack, numworkers, mkwrkr, mortal)
-
---        GRAPHLIFT modifyHotVar_ numworkers (+ numCapabilities)
---        -- Fork one worker per thread:
--- #ifdef DEBUG_HASKELL_CNC
---        S.lift$ putStrLn$ "Forking "++ show numCapabilities ++" threads"
--- #endif
---        S.lift$ mapM (\n -> forkIO mkwrkr) [0..numCapabilities-1]
-
---        -- This waits for quiescense:
---        let waitloop = do num <- readHotVar numworkers
--- 	                 if num == 0
--- 			  then return () 
--- 			  else do 
--- #ifdef DEBUG_HASKELL_CNC
--- 			          putStrLn ("=== Waiting on workers: "++ show num ++" left")
--- #endif
--- 				  readChan joiner
--- 				  atomicDecr numworkers
--- 				  waitloop
---        S.lift$ waitloop
---        finalAction
-
 
 ------------------------------------------------------------
 
