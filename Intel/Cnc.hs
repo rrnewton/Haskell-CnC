@@ -7,6 +7,7 @@
   , OverlappingInstances
   , DeriveDataTypeable
   , MultiParamTypeClasses
+  , NamedFieldPuns
   #-}
 {-# OPTIONS_HADDOCK prune #-}
 {-

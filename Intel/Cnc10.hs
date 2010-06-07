@@ -29,6 +29,9 @@
 #define SUPPRESS_graphInStep
 
 -- #define DEFINED_free_items
+
+-- USE_GMAP is just to trigger the right type class prereqs:
+#define USE_GMAP
 #include "Cnc.Header.hs"
 
 -- import Control.Monad.Cont
@@ -48,26 +51,49 @@
 -- The idea here is to verify that the attempt to use sparks in
 -- version 9 isn't shooting us in the foot.
 
--- newtype GraphCode a = GC (S.StateT (HiddenState5) IO a)
+--------------------------------------------------------------------------------
 
--- -- Annoying.  Almost wish we could "derive" monad here.
--- instance Monad GraphCode where
---   (GC m) >>= f = GC (m >>= (\x -> case f x of GC v -> v))
---   return v = GC (return v)
+type StateOnly a = (S.StateT (HiddenState5) IO a)
 
--- type StepCode a = ContT a GraphCode a
+type GraphCode a = StateOnly a
 
+type StepCode a = ContT ContResult (S.StateT (HiddenState5) IO) a
 
--- #define SUPPRESS_HiddenState5
--- #define SUPPRESS_AllTypes
+data ContResult = ContResult
 
--- #include "shared_5_6.hs"
+-- Contains the escape continuation to jump out of the current step.
+data EscapeCont = EC (() -> StepCode ())
+
+data HiddenState5 = 
+    HiddenState5 { stack :: HotVar [StateOnly ()],
+		   numworkers :: HotVar Int, 
+		   makeworker :: Int -> IO (), 
+		   myid :: Int,
+		   escapeCont :: EscapeCont
+		 }
+  deriving Show
+
+type TagCol a   = (IORef (Set.Set a), IORef [Step a])
+
+-- In this version we don't use MVars in the RHS because gets don't block:
+--newtype ItemCol a b = ItemCol (IORef (GMap a ((Maybe b), WaitingSteps b)))
+--newtype ItemCol a b = ItemCol (IORef (Map.Map a ((Maybe b), WaitingSteps b)))
+newtype ItemCol a b = ItemCol (HotVar (Map.Map a ((Maybe b), WaitingSteps b)))
+
+type WaitingSteps b = [b -> StepCode ()]
+
+--------------------------------------------------------------------------------
+
+instance Show (ItemCol a b) where
+  show _ = "<itemcol>"
+instance Show EscapeCont where
+  show _ = "<escapeCont>"
+instance Show (Int -> IO ()) where
+  show _ = "<int to IO unit function>"
 
 atomicIncr x = modifyHotVar_ x (+ 1)
 atomicDecr x = modifyHotVar_ x (\n -> n-1)
 atomicModifyIORef_ ref fn = atomicModifyIORef ref (\x -> (fn x, ()))
-
---newItemCol :: (Ord tag, Show tag, Eq tag) => GraphCode (ItemCol tag val)
 
 -- A simple stack interface:
 ----------------------------------------
@@ -80,47 +106,6 @@ tryPop stack   = modifyHotVar stack tryfirst
     tryfirst (a:b) = (b,  Just a)
 ----------------------------------------
 
-
--- -================================================================================
-
-type StateOnly a = (S.StateT (HiddenState5) IO a)
-
-type GraphCode a = StateOnly a
-
-data ContResult = ContResult
-
-type StepCode a = ContT ContResult (S.StateT (HiddenState5) IO) a
---type StepCode a = ContT a (S.StateT (HiddenState5) IO) a
---type StepCode a = ContT a (S.StateT (HiddenState5) IO) ()
-
---type StepCode b = forall a . ContT b (S.StateT (HiddenState5) IO) a
-
-type TagCol a   = (IORef (Set.Set a), IORef [Step a])
---type ItemCol a b = MutableMap a b
-
--- Contains the escape continuation to jump out of the current step.
---newtype HiddenState5 a = HiddenState5 (() -> StepCode a)
---newtype HiddenState5 = HiddenState5 (EscapeCont)
---data EscapeCont = forall a . EC (() -> a)
---type EscapeCont = forall a . (() -> a)
-data EscapeCont = EC (() -> StepCode ())
-
-instance Show EscapeCont where
-  show _ = "<escapeCont>"
-
-instance Show (Int -> IO ()) where
-  show _ = "<int to IO unit function>"
-
-data HiddenState5 = 
---    HiddenState5 { stack :: HotVar [StepCode ()], 
-    HiddenState5 { stack :: HotVar [StateOnly ()],
-		   numworkers :: HotVar Int, 
-		   makeworker :: Int -> IO (), 
-		   myid :: Int,
-		   escapeCont :: EscapeCont
-		 }
-  deriving Show
-
 defaultState = 
   do hv  <- newHotVar []
      hv2 <- newHotVar 0
@@ -129,22 +114,10 @@ defaultState =
      return$ HiddenState5 { stack = hv, numworkers = hv2, makeworker= error msg, myid = -1,
 			    escapeCont = EC$ error "unitialized escape continuation" }
 
+--------------------------------------------------------------------------------
 
 
--- In this version we don't use MVars because gets don't block:
-newtype ItemCol a b = ItemCol (IORef (Map.Map a ((Maybe b), WaitingSteps b)))
---newtype ItemCol a b = ItemCol (MutableMap a ((Maybe b), WaitingSteps))
-type WaitingSteps b = [b -> StepCode ()]
-
---data EscapeStep = EscapeStep  deriving (Show, Typeable)
---instance Exception EscapeStep
-
-instance Show (ItemCol a b) where
-  show _ = "<itemcol>"
-
-
-
-newItemCol = do ref <- GRAPHLIFT newIORef Map.empty
+newItemCol = do ref <- GRAPHLIFT newHotVar Map.empty
  		return (ItemCol ref)
 
 get (ItemCol icol) tag = 
@@ -154,13 +127,12 @@ get (ItemCol icol) tag =
 
        let addquit ls = 
 	    do -- If it's not there, store k for later and escape:
-   	       S.lift$ S.lift$ atomicModifyIORef_ icol (Map.insert tag (Nothing, k:ls))
-	       
+	       STEPLIFT modifyHotVar_ icol (Map.insert tag (Nothing, k:ls))
    	       -- After adding ourself to the wait list, jump out of this step:
 	       escape ()
 	       error "Should never reach this"
 
-       map <- S.lift$ S.lift$ readIORef icol 
+       map <- STEPLIFT readHotVar icol 
        case Map.lookup tag map of
    	 Nothing                 -> addquit [] 
    	 Just (Nothing, waiting) -> addquit waiting
@@ -168,31 +140,58 @@ get (ItemCol icol) tag =
    	 Just (Just v, a:b)      -> error "CnC: internal invariant violated"
 
 
-put = undefined
-itemsToList = undefined
-initialize = undefined
-graphInStep = undefined
-putt = undefined
-runGraph = undefined
-
--- initfin :: String -> StepCode a -> GraphCode a
--- initfin str m = do let err = error str
--- 	           x <- try_stepcode err m
--- 	           case x of Nothing -> err
--- 		  	     Just v  -> return v
-
--- initialize = initfin "Get failed within initialize action!"
--- finalize   = initfin "Get failed within finalize action!"
+foo :: Int -> Int
+foo x = x 
 
 
+put (ItemCol icol) tag (!item) = 
+    do waiting <- STEPLIFT modifyHotVar icol mod 
 
---executeStep :: StepCode a -> StepCode a
+       -- Wake up waiting steps:
+       (HiddenState5 {stack}) <- lift S.get
+       STEPLIFT modifyHotVar_ stack ((map (\f -> runStep (f item)) waiting) ++)
+
+   where 
+       mod map = 
+	 let new = (Just item, [])
+	     f key _ (Nothing, _) = new
+#ifdef REPEAT_PUT_ALLOWED
+	     f key _ old@(Just v, ls) = old
+#else
+	     f key _ (Just v, _)  = error ("Single assignment violated at tag: "++ show tag)
+#endif
+	     (old, map') = Map.insertLookupWithKey f tag new map
+	 in case old of
+	      Nothing                 -> (map', [])
+	      Just (Nothing, waiting) -> (map', waiting)
+#ifdef REPEAT_PUT_ALLOWED
+	      Just (Just _, waiting)  -> (map , waiting)
+#else
+	      Just (Just _, _)        ->  error ("Single assignment violated at tag: "++ show tag)
+#endif
+
+
+
 executeStep :: StepCode () -> StepCode ()
 executeStep step = 
   callCC $ \ escape -> 
     do S.lift$ S.modify (\r -> r { escapeCont = EC escape })
 --    do S.lift$ S.put (HiddenState5 undefined)
        step
+
+
+-- Remove the continuation monad
+runStep :: StepCode () -> StateOnly ()
+runStep m = do runContT m (\() -> return ContResult); return ()
+
+--executeStep :: StepCode a -> StepCode a
+
+itemsToList = undefined
+initialize = undefined
+graphInStep = undefined
+putt = undefined
+runGraph = undefined
+
 
 
 finalize finalAction = 

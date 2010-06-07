@@ -316,8 +316,6 @@ instance Hashable a => Hashable [a] where
 --     hash = hashInt . fromEnum 
 
 
-
-
 --------------------------------------------------------------------------------
 -- Class of types that fit in a machine word.
 --------------------------------------------------------------------------------
@@ -371,18 +369,51 @@ instance FitInWord Word64 where
 -- Pairs can fit in words too!
 -- FIXME TODO: Use some code generation method to generate instances for all
 -- combinations of small words/ints that fit in a machine word (a lot).
-instance FitInWord (Word16,Word16) where
+-- instance FitInWord (Word16,Word16) where
+--   toWord (a,b) = shiftL (fromIntegral a) 16 + (fromIntegral b)
+--   fromWord n = (fromIntegral$ shiftR n 16, 
+-- 		fromIntegral$ n .&. 0xFFFF)
+
+-- instance FitInWord (Int16,Int16) where
+--   toWord (a,b) = shiftL (fromIntegral a) 16 + (fromIntegral b)
+--   fromWord n = (fromIntegral$ shiftR n 16, 
+-- 		fromIntegral$ n .&. 0xFFFF)
+
+newtype PairTag a b = PairTag a b
+
+instance FitInWord (PairTag Word16 Word16) where
   toWord (a,b) = shiftL (fromIntegral a) 16 + (fromIntegral b)
   fromWord n = (fromIntegral$ shiftR n 16, 
 		fromIntegral$ n .&. 0xFFFF)
 
-instance FitInWord (Int16,Int16) where
+instance FitInWord (PairTag Int16 Int16) where
   toWord (a,b) = shiftL (fromIntegral a) 16 + (fromIntegral b)
   fromWord n = (fromIntegral$ shiftR n 16, 
 		fromIntegral$ n .&. 0xFFFF)
 
 
+--------------------------------------------------------------------------------
+-- Types that are simplifiable to other types
+--------------------------------------------------------------------------------
 
+class Simplifyable a b where 
+  simplify   :: a -> b
+  complicate :: b -> a
+
+instance Simplifyable (a,b,c) (a,(b,c)) where 
+  simplify    (a,b,c)  = (a,(b,c))
+  complicate (a,(b,c)) = (a,b,c)
+
+instance (Simplifyable a b, GMapKey a) => GMapKey b where
+  data GMap b v           = GMapSmpl (GMap b v) deriving Show
+  empty                   = GMapSmpl empty
+  lookup k    (GMapSmpl m) = lookup (simplify k) m
+  insert k v  (GMapSmpl m) = GMapSmpl (insert (simplify k) v m)
+  alter  fn k (GMapSmpl m) = GMapSmpl (alter fn (simplify k) m)
+  toList      (GMapSmpl m) = map (\ (i,v) -> (complicate i, v)) $ 
+			         toList m
+
+  
 --------------------------------------------------------------------------------
 -- ADT definition for generic Maps:
 --------------------------------------------------------------------------------
