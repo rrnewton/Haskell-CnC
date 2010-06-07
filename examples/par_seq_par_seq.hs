@@ -22,6 +22,10 @@
 -- This benchmark models a workload that has alternating parallel and serial phases.
 -- It is similar to embarassingly_par.hs
 
+-- Incidentally, this example also demonstrates how to
+-- /programattically/ construct a CnC graph rather than describing it
+-- directly.
+
 import GHC.Conc
 import Debug.Trace
 import Control.Monad
@@ -30,6 +34,7 @@ import System.Environment
 import qualified  Control.Monad.State.Strict as S 
 
 #include <haskell_cnc.h> 
+
 
 
 -- Compute sum_n(1/n)

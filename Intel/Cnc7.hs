@@ -50,7 +50,7 @@ defaultState =
 			    mortal = hv3, myid = -1, 
 			    deadset = hv4 }
 
-
+-- A push that also wakes the dead.
 stepcode_push :: HotVar [a] -> a -> StepCode ()
 stepcode_push stack val = 
   -- If push onto an empty stack, wake up deadset.  

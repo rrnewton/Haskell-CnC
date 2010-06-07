@@ -139,6 +139,7 @@ import Data.Word
 import Data.Typeable
 import Control.Monad
 import Control.Monad.Trans
+import Control.Monad.Cont
 import qualified  Control.Monad.State.Strict as S 
 --import qualified  Control.Monad.State.Lazy as S 
 import Control.Concurrent.MVar
@@ -207,6 +208,7 @@ initialize :: StepCode a -> GraphCode a
 -- |Run a final step which collects outputs of the graph that are of interest to the larger application.
 --  Presently only a single finalize is allowed within a graph execution.
 finalize   :: StepCode a -> GraphCode a
+--finalize   :: StepCode a -> GraphCode ()
 
 -- |Construct a new tag collection.
 newTagCol  :: GraphCode (TagCol tag)

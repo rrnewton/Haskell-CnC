@@ -2,6 +2,7 @@
 -- Pieces that are common to version 5 and 6
 ------------------------------------------------------------
 
+#ifndef SUPPRESS_AllTypes
 type TagCol a   = (IORef (Set.Set a), IORef [Step a])
 type ItemCol a b = MutableMap a b
 
@@ -11,6 +12,7 @@ type StepCode a = (S.StateT (HiddenState5) IO a)
 
 -- In this version we need to thread the state through the graph code as well:
 type GraphCode a = StepCode a
+#endif
 
 -- Individual threads have numeric IDs.
 -- Here the hidden state keeps four things:
@@ -118,9 +120,6 @@ ver5_6_core_finalize joiner finalAction worker shouldWait numDesired joinerHook 
            state2 id = state1 { makeworker = mkwrkr, myid = id }
        -- Write it back for the "finalAction" below:
        S.put (state2 myid)
-       mtid <- GRAPHLIFT  myThreadId
-       cncPutStr$ "   ON thread " ++ show mtid ++ " just put state2\n"
-
        GRAPHLIFT modifyHotVar_ numworkers (+ numDesired)
 
        -- Fork one worker per thread:
