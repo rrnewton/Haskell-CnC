@@ -73,4 +73,4 @@ main = do args <- getArgs
 	  case args of 
 	   []  -> run 1000 -- Should output 168
 	   [n] -> run (read n)
-	   [trials, n] -> doTrials (read trials) (run (read n))
+--	   [trials, n] -> doTrials (read trials) (run (read n))

@@ -379,23 +379,27 @@ instance FitInWord Word64 where
 --   fromWord n = (fromIntegral$ shiftR n 16, 
 -- 		fromIntegral$ n .&. 0xFFFF)
 
-newtype PairTag a b = PairTag a b
+
+-- Let's add a custom pair type to avoid conflicts:
+data PairTag a b = PairTag a b
 
 instance FitInWord (PairTag Word16 Word16) where
-  toWord (a,b) = shiftL (fromIntegral a) 16 + (fromIntegral b)
-  fromWord n = (fromIntegral$ shiftR n 16, 
-		fromIntegral$ n .&. 0xFFFF)
+  toWord (PairTag a b) = shiftL (fromIntegral a) 16 + (fromIntegral b)
+  fromWord n = PairTag (fromIntegral$ shiftR n 16)
+		       (fromIntegral$ n .&. 0xFFFF)
 
 instance FitInWord (PairTag Int16 Int16) where
-  toWord (a,b) = shiftL (fromIntegral a) 16 + (fromIntegral b)
-  fromWord n = (fromIntegral$ shiftR n 16, 
-		fromIntegral$ n .&. 0xFFFF)
+  toWord (PairTag a b) = shiftL (fromIntegral a) 16 + (fromIntegral b)
+  fromWord n = PairTag (fromIntegral$ shiftR n 16)
+		       (fromIntegral$ n .&. 0xFFFF)
 
 
 --------------------------------------------------------------------------------
 -- Types that are simplifiable to other types
 --------------------------------------------------------------------------------
 
+-- Same problem with overlaps:
+{-
 class Simplifyable a b where 
   simplify   :: a -> b
   complicate :: b -> a
@@ -412,7 +416,7 @@ instance (Simplifyable a b, GMapKey a) => GMapKey b where
   alter  fn k (GMapSmpl m) = GMapSmpl (alter fn (simplify k) m)
   toList      (GMapSmpl m) = map (\ (i,v) -> (complicate i, v)) $ 
 			         toList m
-
+-}
   
 --------------------------------------------------------------------------------
 -- ADT definition for generic Maps:

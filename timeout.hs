@@ -9,7 +9,7 @@ import System.Posix.Unistd
 
 import Control.Concurrent
 
-polltime = 2 -- in seconds
+polltime = 10 -- in seconds
 
 main = 
     do args <- getArgs 
@@ -28,7 +28,9 @@ main =
 	       let loop acc = 
 		    if acc > (timeout :: Int)
 		    then do putStrLn$ "\nERROR: TIMED OUT!"
-	 		    exitWith (ExitFailure 88)
+			    putMVar sync (ExitFailure 88)
+	 		    --exitWith (ExitFailure 88)
+                            
 	 	    else do sleep polltime
 			    x <- getProcessExitCode pid
 			    case x of 

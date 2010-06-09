@@ -79,10 +79,12 @@ EXITCODE=0
     TMP2=`mytempfile 2`
 
 # [2009.12.17] I need to get a good cross-platform process time-out system:
-    if [ -e ./timeout ];
+     # HACK: Sometimes I run this on systems WITHOUT a working GHC:
+    if [ -e ./timeout.sh ];
+    then TIMEOUTRUN="./timeout.sh -t $TIMEOUT"
+    elif [ -e ./timeout ];
     # [2010.06.03] --RTS is a hack for working around a problem with +RTS flags:
     then TIMEOUTRUN="./timeout $TIMEOUT --RTS "
-    #then TIMEOUTRUN="./timeout -t $TIMEOUT"
     else TIMEOUTRUN=
     fi
 
