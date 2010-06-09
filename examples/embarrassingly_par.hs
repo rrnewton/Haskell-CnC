@@ -40,7 +40,7 @@ work offset 0 n = n
 work offset (!i) (!n) = work offset (i-1) (n + 1 / fromIntegral (i+offset))
 
 runit total = runGraph graph `pseq` return ()
- where
+ where  
   oneshare = total `quot` numCapabilities
   mystep items jid =
      do 
@@ -54,6 +54,8 @@ runit total = runGraph graph `pseq` return ()
    do items <- newItemCol
       tags  <- newTagCol
       cncPutStr$  "Running embarassingly parallel benchmark.  CnC Variant: "++ show cncVariant ++"\n"
+      cncPutStr$  "Running "++ show total ++" total iterations\n"
+
       prescribe tags (mystep items)
       initialize $ 
 	do stepPutStr$ "Begin initialize.  Splitting work into "++show numCapabilities++" pieces\n"
@@ -77,5 +79,9 @@ main = do args <- getArgs
     loop args = 
        case args of 
 	   []  -> runit $ 50*1000*1000
-	   [n] -> runit $ round (10 ** read n)
+	   [n] -> runit $ let num = read n in 
+		          -- Here's a bit of a hack, if the input is inexact treat it as an exponent.  Otherwise as a plain scalar.
+			  if num == fromIntegral (round num)
+                          then round num
+		          else round (10 ** read n)
 --	   [trials, n] -> doTrials (read trials) (loop [n])
