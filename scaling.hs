@@ -41,6 +41,8 @@ import Graphics.Gnuplot.Plot.TwoDimensional (linearScale, )
 import Data.Array (listArray, )
 import Data.Monoid (mappend, )
 
+import Debug.Trace
+
 
 --import qualified Graphics.Gnuplot.Private.LineSpecification as LineSpec
 import qualified Graphics.Gnuplot.LineSpecification as LineSpec
@@ -87,6 +89,9 @@ myoverlay =
    circle2d
 
 
+
+round_2digits :: Double -> Double
+round_2digits n = (fromIntegral $round (n * 100)) / 100
 
 
 --x11 = terminal Terminal.X11.cons
@@ -137,14 +142,16 @@ data Entry = Entry {
   hashhack :: Bool, 
   tmin     :: Double,
   tmed     :: Double,
-  tmax     :: Double
+  tmax     :: Double,
+  normfactor :: Double
 }
   deriving Show
 
 instance Pretty Entry where
   --pPrint x = pPrint$ show x
-  pPrint Entry { name, variant, sched, threads, tmin, tmed, tmax } = 
-       pPrint ("ENTRY", name, variant, sched, threads, tmin, tmed, tmax)
+  pPrint Entry { name, variant, sched, threads, tmin, tmed, tmax, normfactor } = 
+       pPrint ("ENTRY", name, variant, sched, threads, (tmin, tmed, tmax), normfactor )
+--       pPrint ("ENTRY", name, variant, sched, threads, tmin, tmed, tmax, normfactor)
 
 
 parse [a,b,c,d,e,f,g,h] =
@@ -155,9 +162,14 @@ parse [a,b,c,d,e,f,g,h] =
 	  hashhack = not (e == "0"),
 	  tmin     = read f,
 	  tmed     = read g,
-	  tmax     = read h
-	} 
-parse other = error$ "Cannot parse, wrong number of fields, "++ show (length other) ++" expected 8: "++ show other
+	  tmax     = read h,
+	  normfactor = 1.0
+	}
+
+parse [a,b,c,d,e,f,g,h,i] = 
+--   trace ("Got line with norm factor: "++ show [a,b,c,d,e,f,g,h,i])
+   (parse [a,b,c,d,e,f,g,h]) { normfactor = read i }
+parse other = error$ "Cannot parse, wrong number of fields, "++ show (length other) ++" expected 8 or 9: "++ show other
 
 groupSort fn = 
    (groupBy ((==) `on` fn)) . 
@@ -176,7 +188,7 @@ newtype Mystr = Mystr String
 instance Show Mystr where
   show (Mystr s) = s
 
-
+-- I ended up giving up on using the gnuplot package on hackage:
 -- mypath :: Graph2D.T 
 --Plot2D.T
 --plot_benchmark :: [[[Entry]]] -> IO ()
@@ -221,15 +233,21 @@ plot_benchmark [io, pure] =
       Plot2D.list quads
 
 
--- Ok, yuck, giving up on the Cabal gnuplot package and generating the gnuplot output myself.
+-- Plot a single benchmark as a gnuplot script:
 plot_benchmark2 root [io, pure] = action (io ++ pure)
  where 
   benchname = name $ head $ head io 
   -- What was the best single-threaded execution time across variants/schedulers:
-  basetime = foldl1 min $ map tmed $
+  basetime = foldl1 min $ map (\x -> tmed x / normfactor x) $
 	     filter ((== 0) . threads) $
 	     (concat io ++ concat pure)
   (filebase,_) = break (== '.') $ basename benchname 
+
+  -- If all normfactors are the default 1.0 we print a different message:
+  --let is_norm = not$ all (== 1.0) $ map normfactor ponits
+  norms = map normfactor (concat io ++ concat pure)
+  default_norms = all (== 1.0) $ norms
+  max_norm = foldl1 max norms
 
   scrub '_' = ' '
   scrub x = x
@@ -241,50 +259,65 @@ plot_benchmark2 root [io, pure] = action (io ++ pure)
    do 
       let scriptfile = root ++ filebase ++ ".gp"
       putStrLn$ "Dumping gnuplot script to: "++ scriptfile
+
+      putStrLn$ "NORM FACTORS "++ show norms
+
+
       runIO$ echo "set terminal postscript enhanced color\n"         -|- appendTo scriptfile
       runIO$ echo ("set output \""++filebase++".eps\"\n")            -|- appendTo scriptfile
       runIO$ echo ("set title \"Benchmark: "++ map scrub filebase ++
-		   ", speedup relative to serial time " ++ show basetime ++" seconds\"\n") -|- appendTo scriptfile
+		   ", speedup relative to serial time " ++ show (round_2digits $ basetime * max_norm) ++" seconds "++ 
+--		   "for input size " ++ show (round_2digits max_norm)
+		   (if default_norms then "" else "for input size " ++ show (round max_norm))
+		   --if is_norm then "normalized to work unit"
+		   --if default_norms then "" else " per unit benchmark input"
+		   ++"\"\n") -|- appendTo scriptfile
       runIO$ echo ("set xlabel \"Number of Threads\"\n")             -|- appendTo scriptfile
       runIO$ echo ("set ylabel \"Parallel Speedup\"\n")              -|- appendTo scriptfile
       runIO$ echo ("plot \\\n")                                      -|- appendTo scriptfile
+
       -- In this loop lets do the errorbars:
       forM_ (zip [1..] lines) $ \(i,points) -> do 
           let datfile = root ++ filebase ++ show i ++".dat"
 	  runIO$ echo ("   \""++ basename datfile ++"\" using 1:2:3:4 with errorbars title \"\", \\\n") -|- appendTo scriptfile
 
-      -- Now a second loop for the lines themselves and to dump the actual data:
+      -- Now a second loop for the lines themselves and to dump the actual data to the .dat file:
       forM_ (zip [1..] lines) $ \(i,points) -> do 
           let datfile = root ++ filebase ++ show i ++".dat"          
-	  let schd = sched$   head points
-	  let var  = variant$ head points
+	  let schd = sched$   head points  -- should be the same across all point
+	  let var  = variant$ head points  -- should be the same across all point
 	  let nickname = var ++"/"++ show schd
 	  runIO$ echo ("# Data for variant "++ nickname ++"\n") -|- appendTo datfile
           forM_ points $ \x -> do 
+
+              -- Here we print a line of output:
 	      runIO$ echo (show (fromIntegral (threads x)) ++" "++
-			   show (basetime / tmed x)        ++" "++
-                           show (basetime / tmax x)        ++" "++ 
-			   show (basetime / tmin x)        ++" \n") -|- appendTo datfile
+			   show (basetime / (tmed x / normfactor x))        ++" "++
+                           show (basetime / (tmax x / normfactor x))        ++" "++ 
+			   show (basetime / (tmin x / normfactor x))        ++" \n") -|- appendTo datfile
 
 	  let comma = if i == length lines then "" else ",\\"
 	  runIO$ echo ("   \""++ basename datfile ++
 		       "\" using 1:2 with lines linewidth 4.0 lt "++ show i ++" title \""++nickname++"\" "++comma++"\n")
 		   -|- appendTo scriptfile
 
-      putStrLn$ "Finally, running gnuplot..."
-      -- runIO$ "(cd "++root++"; gnuplot "++basename scriptfile++")"
-      -- runIO$ "(cd "++root++"; ps2pdf "++ filebase ++".eps )"
+      --putStrLn$ "Finally, running gnuplot..."
+      --runIO$ "(cd "++root++"; gnuplot "++basename scriptfile++")"
+      --runIO$ "(cd "++root++"; ps2pdf "++ filebase ++".eps )"
 
 
 --plot_benchmark2 root ls = putStrLn$ "plot_benchmark2: Unexpected input, list len: "++ show (length ls)
 plot_benchmark2 root [io] = plot_benchmark2 root [io,[]]
+
+
 
 isMatch rg str = case matchRegex rg str of { Nothing -> False; _ -> True }
 
 main = do 
  dat <- run$ catFrom ["results.dat"] -|- remComments "#" 
 
- let parsed = map (parse . splitRegex (mkRegex "[ \t]+")) 
+-- let parsed = map (parse . filter (not (== "")) . splitRegex (mkRegex "[ \t]+")) 
+ let parsed = map (parse . filter (not . (== "")) . splitRegex (mkRegex "[ \t]+")) 
 	          (filter (not . isMatch (mkRegex "ERR")) $
 		   filter (not . null) dat)
  let organized = organize_data$ filter ((`elem` ["io","pure"]) . variant) parsed
