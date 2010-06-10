@@ -23,29 +23,28 @@ import HSH
 
 
 
-import qualified Graphics.Gnuplot.Simple as Simple
+-- import qualified Graphics.Gnuplot.Simple as Simple
 
-import qualified Graphics.Gnuplot.Advanced as Plot
-import qualified Graphics.Gnuplot.Terminal.X11 as X11
+-- import qualified Graphics.Gnuplot.Advanced as Plot
+-- import qualified Graphics.Gnuplot.Terminal.X11 as X11
 
-import qualified Graphics.Gnuplot.Frame as Frame
-import qualified Graphics.Gnuplot.Frame.Option as Opt
-import qualified Graphics.Gnuplot.Frame.OptionSet as Opts
+-- import qualified Graphics.Gnuplot.Frame as Frame
+-- import qualified Graphics.Gnuplot.Frame.Option as Opt
+-- import qualified Graphics.Gnuplot.Frame.OptionSet as Opts
 
-import qualified Graphics.Gnuplot.Plot.ThreeDimensional as Plot3D
+-- import qualified Graphics.Gnuplot.Plot.ThreeDimensional as Plot3D
 
-import qualified Graphics.Gnuplot.Plot.TwoDimensional as Plot2D
-import qualified Graphics.Gnuplot.Graph.TwoDimensional as Graph2D
-import Graphics.Gnuplot.Plot.TwoDimensional (linearScale, )
+-- import qualified Graphics.Gnuplot.Plot.TwoDimensional as Plot2D
+-- import qualified Graphics.Gnuplot.Graph.TwoDimensional as Graph2D
+-- import Graphics.Gnuplot.Plot.TwoDimensional (linearScale, )
 
 import Data.Array (listArray, )
 import Data.Monoid (mappend, )
 
 import Debug.Trace
 
-
---import qualified Graphics.Gnuplot.Private.LineSpecification as LineSpec
-import qualified Graphics.Gnuplot.LineSpecification as LineSpec
+{-
+--import qualified Graphics.Gnuplot.LineSpecification as LineSpec
 
 simple2d :: Plot2D.T
 simple2d =
@@ -88,7 +87,7 @@ myoverlay =
    `mappend`
    circle2d
 
-
+-}
 
 round_2digits :: Double -> Double
 round_2digits n = (fromIntegral $round (n * 100)) / 100
@@ -188,6 +187,7 @@ newtype Mystr = Mystr String
 instance Show Mystr where
   show (Mystr s) = s
 
+{-
 -- I ended up giving up on using the gnuplot package on hackage:
 -- mypath :: Graph2D.T 
 --Plot2D.T
@@ -231,7 +231,7 @@ plot_benchmark [io, pure] =
       --Plot2D.path (map ( \ (a,b,c,d) -> (a,b)) pairs)
       --fmap (Graph2D.typ Graph2D.errorBars) $
       Plot2D.list quads
-
+-}
 
 -- Plot a single benchmark as a gnuplot script:
 plot_benchmark2 root [io, pure] = action (io ++ pure)

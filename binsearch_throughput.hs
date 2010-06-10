@@ -46,22 +46,26 @@ main =
     case args of
        []  -> usage
        [t] -> usage
-       (trials:rest) -> do putStrLn$ "Searching input sizes for ("++ show trials ++" trials): " ++ show rest 
-		           loop rest (read trials) 1
+       (trials:rest) -> do putStrLn$ "Searching input sizes for ("++ trials ++" trials): " ++ show rest 
+		           loop True rest (read trials) 1 []
 
 showTime t = show ((fromRational $ toRational t) :: Double)
 
-loop :: [String] -> Int -> Integer -> IO ()
-loop args 0 n = return ()
-loop args trial n | n > 2 ^ 100 = error "This executable doesn't seem to scale in proportion to its last argument."
-loop args@(file:extra) trial n = do 
+--loop :: Bool -> [String] -> Int -> Integer -> IO ()
+loop _ args 0 n log = do putStrLn$ " ALLTRIALS: "++ (concat $ intersperse " " (map showTime $ sort log))
+                         return ()
+loop _ args trial n _ | n > 2 ^ 100 = error "This executable doesn't seem to scale in proportion to its last argument."
+loop startupmode args@(file:extra) trial n log = do 
 		 putStr$ show n ++ " "
 		 hFlush stdout
 		 --time <- timeit$ rawSystem file [show n] 
                  -- This added it as a first argument:
 		 --time <- timeit$ system$ file ++" "++ show n ++(concat $ intersperse " " extra)++" > /dev/null"
 		 -- Instead lets add it as a last argument:
-		 time <- timeit$ system$ file ++" "++ (concat $ intersperse " " extra)++  " "++show n++" > /dev/null"
+		 let redirect = if startupmode then " > /dev/null" else ""
+		     total_cmd = file ++" "++ (concat $ intersperse " " extra)++  " "++show n++ redirect
+		 --putStrLn$ "\n **** TOTAL COMMAND: " ++ show total_cmd 
+		 time <- timeit$ system total_cmd
 
 		 putStrLn$ "Time consumed: "++ show time
 		 hFlush stdout
@@ -72,17 +76,19 @@ loop args@(file:extra) trial n = do
 		 let initial_fudge_factor = 1.10
 		     fudge_factor = 1.01 -- Even in the steady state we fudge a little
 		     guess = desired_exec_length * rate 
+		     timeperunit = time / fromIntegral n
 		 if time >= desired_exec_length
-		  then do putStrLn$ "  TRIAL: "++show trial++
-				    " secPerUnit: "++ showTime (time / fromIntegral n) ++ 
+		  then do putStrLn$ "------------------------------------------------------------"
+			  putStrLn$ "  TRIAL: "++show trial++
+				    " secPerUnit: "++ showTime timeperunit ++ 
 				    " ratePerSec: "++ show (rate) ++ 
                                     " seconds: "++showTime time++"\n"
 			  hFlush stdout
-		          loop (file:extra) (trial-1) (round$ guess * fudge_factor)			  
+		          loop False (file:extra) (trial-1) (round$ guess * fudge_factor) (timeperunit : log)
 		 
                   -- Here we're still in the doubling phase:
 		  else if time < 0.100 
-		  then loop args trial (2*n)
+		  then loop True args trial (2*n) log
 
                   else do putStrLn$ "\n Estimated rate to be "++show (round$ rate)++
 				    " per second.  Trying to scale up:"
@@ -90,9 +96,9 @@ loop args@(file:extra) trial n = do
 		          -- Here we've exited the doubling phase, but we're making our first guess as to how big a real execution should be:
 			  if time > 0.100 && time < 0.33 * desired_exec_length
   	  		     then do putStrLn$  "  (Fudging first guess a little bit extra)\n"
-				     loop args trial (round $ guess * initial_fudge_factor)
+				     loop False args trial (round $ guess * initial_fudge_factor) log
 			     else do putStrLn$ ""
-				     loop args trial (round$ guess * fudge_factor)
+				     loop False args trial (round$ guess * fudge_factor) log
 				  
 timeit io = 
     do strt <- getCurrentTime

@@ -21,6 +21,6 @@
 
 binsearch=`dirname $0`/binsearch_throughput
 
-lines=`$binsearch $* | tee /dev/stderr | grep TRIAL | awk '{ print $4 }'`
+lines=`$binsearch --RTS $* | tee /dev/stderr | grep TRIAL | awk '{ print $4 }'`
 
 echo $lines

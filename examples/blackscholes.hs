@@ -54,10 +54,9 @@
 
 -- The command line is:
 
--- blackscholes n b t
---     n  : positive integer for the number of options
+-- blackscholes b n
 --     b  : positive integer for the size of blocks
---     t  : positive integer for the number of threads
+--     n  : positive integer for the number of options
     
 -- e.g.
 -- blackscholes 100000 100 4
@@ -168,27 +167,14 @@ blkSchlsEqEuroNoDiv sptprice strike rate volatility time otype timet =
    nofXd2 = cndf xD1    
    futureValueX = strike *  exp ( -(rate) * (time) )
 
-
--- executeStep :: (Ord tag, Show tag) => 
---                ItemCol tag ParameterSet -> 
--- 	       ItemCol tag [UArray Int FpType] ->
--- 	       tag -> StepCode () 
-
--- executeStep :: ItemCol Int ParameterSet -> 
--- 	       ItemCol Int [UArray Int FpType] ->
--- 	       Int -> StepCode () 
---executeStep params prices (t,granularity) = 
 executeStep prices (t,granularity) = 
--- int compute::execute(const int & t, blackscholes_context& c ) const
-    do --ParameterSet { .. } <- get params t  
---    do --let OptionData { .. } = data_init ! (t `mod` size_init)
-       --stepPutStr$ "YAY got options, strike: " ++ show strike ++ "\n"
-       stepPutStr$ "  Executing "++ show granularity ++ " iterations starting at "++ show t ++ "\n"
+    do 
+--       stepPutStr$ "  Executing "++ show granularity ++ " iterations starting at "++ show t ++ "\n"
 --       let ls = map (\ j ->        
        let arr =  listArray (0, granularity-1) $
 		        map (\i -> 
 --                              let OptionData { .. } = data_init ! (t+i `mod` size_init)
-                              let ParameterSet { .. } = data_init ! (t+i `mod` size_init)
+                              let ParameterSet { .. } = data_init ! ((t+i) `mod` size_init)
 			      in blkSchlsEqEuroNoDiv sptprice strike rate volatility otime otype 0)
 		            [0 .. granularity-1]
 --                     )
@@ -231,6 +217,7 @@ makegraph numOptions granularity =
 --          do put params i $ data_init ! (i `mod` size_init)
 
         do let (quot,rem) = numOptions `quotRem` granularity
+	   cncPutStr$ " Remainder "++ show rem ++ "\n"
            forM_ [0, granularity .. numOptions-1] $ \loopnum ->
              putt tags (loopnum, granularity)                
 	   -- Finally, the leftovers:
@@ -240,16 +227,22 @@ makegraph numOptions granularity =
 
       finalize$ 
        do x <- get prices 0
-	  y <- get prices 5
+	  --y <- get prices 5
 	  return x
 
 main = do args <- getArgs 
           let (numOptions, granularity) =
                case args of 
-  	         []      -> (10, 5)
-	         [n,b] -> (read n, read b)
+--  	         []      -> (10, 5)
+  	         []      -> (10000, 1000)
+  	         [b]     -> (10, read b)
+	         [b,n] -> (read n, read b)
 
-	  putStrLn$ "Running blackscholes..."	  
+          if granularity > numOptions
+	   then error "Granularity must be bigger than numOptions!!"
+	   else return ()
+
+	  putStrLn$ "Running blackscholes, numOptions "++ show numOptions ++ " and block size " ++ show granularity
           let result = runGraph $ makegraph numOptions granularity
 --          putStrLn$ "Final result, here's one price: "++ show ((result !! 0) ! 0)
           putStrLn$ "Final result, here's one price: "++ show (result ! 0)
