@@ -43,31 +43,28 @@ mandelProg optlvl max_row max_col max_depth =
     do 
        pixel    :: ItemCol Int Int              <- newItemCol
        
-       let mandelStep (tag,cplx) = 
-             put pixel tag (mandel max_depth cplx)
+       let mandelStep tag = 
+            let (i,j) = unpack tag
+       	        z = (r_scale * (fromIntegral j) + r_origin) :+
+       	   	    (c_scale * (fromIntegral i) + c_origin)
+            in put pixel tag (mandel max_depth z)
 
        position <- prescribeNT [mandelStep]
 
-       let packit i j = (pack (_i,_j), z)
-             where (_i,_j) = (fromIntegral i, fromIntegral j)
-       	           z = (r_scale * (fromIntegral j) + r_origin) :+
-       		       (c_scale * (fromIntegral i) + c_origin)
-
        let init1 = forM_ [0..max_row] $ \i -> 
                      forM_ [0..max_col] $ \j ->
-  	               putt position $ packit i j 
+  	               putt position $ pack (fromIntegral i, fromIntegral j)
 
        -- This version uses cncFor to structure the work spawning.
        let init2 = 
                  do stepPutStr "mandel_opt: Using cncFor implementation...\n"
                     cncFor2D (0,0) (max_row, max_col)  $ \ i j ->
-		       putt position $ packit i j 
+		       putt position $ pack (fromIntegral i, fromIntegral j)
 
        -- This version uses cncFor to do the actual work.
        let init3 = do stepPutStr "mandel_opt: Using even better cncFor method...\n"
        		      cncFor2D (0,0) (max_row, max_col)  $ \ i j ->
-			 do let (packed,z) = packit i j
-       	                    put pixel packed (mandel max_depth z)
+			 mandelStep $ pack (fromIntegral i, fromIntegral j)
 
        initialize $ 
         case optlvl of 
