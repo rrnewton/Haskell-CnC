@@ -40,16 +40,14 @@ type Pair = (Int16, Int16)
 
 mandelProg :: Int -> Int -> Int -> GraphCode Int
 mandelProg max_row max_col max_depth = 
-    do position :: TagCol  Pair                  <- newTagCol
-       dat      :: ItemCol Pair (Complex Double) <- newItemCol
+    do dat      :: ItemCol Pair (Complex Double) <- newItemCol
        pixel    :: ItemCol Pair Int              <- newItemCol
        
        let mandelStep tag = 
 	    do cplx <- get dat tag
 	       put pixel tag (mandel max_depth cplx)
 
-       prescribe position mandelStep 
-
+       position :: TagCol  Pair <- prescribeNT [mandelStep] 
 
        initialize $ 
         forM_ [0..max_row] $ \i -> 

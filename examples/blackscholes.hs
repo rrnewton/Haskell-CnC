@@ -61,14 +61,20 @@
 -- e.g.
 -- blackscholes 100000 100 4
 
-import Intel.Cnc
+--import Intel.Cnc
 --import Intel.CncUtil
 import Control.Monad
 --import Data.Array
-import Data.Array.Unboxed
+import Data.Array.Unboxed hiding ((!))
 --import Data.Array.IArray
 
+import qualified Data.Array.Unboxed as UB
+
 import System.Environment
+
+--import Prelude hiding ((!))
+
+#include <haskell_cnc.h> 
 
 -- #define fptype float
 -- #define ERR_CHK
@@ -172,9 +178,9 @@ executeStep prices (t,granularity) =
 --       stepPutStr$ "  Executing "++ show granularity ++ " iterations starting at "++ show t ++ "\n"
 --       let ls = map (\ j ->        
        let arr =  listArray (0, granularity-1) $
-		        map (\i -> 
+		        Prelude.map (\i -> 
 --                              let OptionData { .. } = data_init ! (t+i `mod` size_init)
-                              let ParameterSet { .. } = data_init ! ((t+i) `mod` size_init)
+                              let ParameterSet { .. } = data_init UB.! ((t+i) `mod` size_init)
 			      in blkSchlsEqEuroNoDiv sptprice strike rate volatility otime otype 0)
 		            [0 .. granularity-1]
 --                     )
@@ -217,7 +223,7 @@ makegraph numOptions granularity =
 --          do put params i $ data_init ! (i `mod` size_init)
 
         do let (quot,rem) = numOptions `quotRem` granularity
-	   cncPutStr$ " Remainder "++ show rem ++ "\n"
+	   stepPutStr$ " Remainder "++ show rem ++ "\n"
            forM_ [0, granularity .. numOptions-1] $ \loopnum ->
              putt tags (loopnum, granularity)                
 	   -- Finally, the leftovers:
@@ -245,7 +251,7 @@ main = do args <- getArgs
 	  putStrLn$ "Running blackscholes, numOptions "++ show numOptions ++ " and block size " ++ show granularity
           let result = runGraph $ makegraph numOptions granularity
 --          putStrLn$ "Final result, here's one price: "++ show ((result !! 0) ! 0)
-          putStrLn$ "Final result, here's one price: "++ show (result ! 0)
+          putStrLn$ "Final result, here's one price: "++ show (result UB.! 0)
 	  return result
 
 

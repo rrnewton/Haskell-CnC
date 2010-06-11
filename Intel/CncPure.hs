@@ -40,7 +40,7 @@ module Intel.CncPure(
     where
 #endif
 
-import Data.Array as Array
+import qualified Data.Array as Array
 
 import Data.List as List
 import Data.Set as Set
@@ -537,7 +537,7 @@ parSched2 graph inittags world =
        work_queues <- mapM (\_ -> newChan) [1..10]
 
        -- For fast indexing:
-       let queue_arr = listArray (0,length work_queues-1) work_queues
+       let queue_arr = Array.listArray (0,length work_queues-1) work_queues
 
        ------------------------------------------------------------
        let --perms = let p = permutations work_queues in listArray (0,length p - 1) p

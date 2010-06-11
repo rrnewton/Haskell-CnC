@@ -55,6 +55,10 @@ showTime t = show ((fromRational $ toRational t) :: Double)
 loop _ args 0 n log = do putStrLn$ " ALLTRIALS: "++ (concat $ intersperse " " (map showTime $ sort log))
                          return ()
 loop _ args trial n _ | n > 2 ^ 100 = error "This executable doesn't seem to scale in proportion to its last argument."
+
+-- Not allowed to have "0" elements:
+loop b args trial 0 l  = loop b args trial 1 l
+
 loop startupmode args@(file:extra) trial n log = do 
 		 putStr$ show n ++ " "
 		 hFlush stdout

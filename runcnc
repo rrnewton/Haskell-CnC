@@ -58,7 +58,7 @@ fi
 #EXTENSIONS="-fglasgow-exts"
 # -feager-blackholing
 TEMPEXT="-XFlexibleContexts -XTypeSynonymInstances"
-EXTENSIONS=" -XExistentialQuantification -XScopedTypeVariables -XBangPatterns -XNamedFieldPuns -XRecordWildCards -XFlexibleInstances -XDeriveDataTypeable -XTypeFamilies -XUndecidableInstances -XOverlappingInstances -XMultiParamTypeClasses $TEMPEXT"
+EXTENSIONS=" -XExistentialQuantification -XScopedTypeVariables -XBangPatterns -XNamedFieldPuns -XRecordWildCards -XFlexibleInstances -XDeriveDataTypeable -XTypeFamilies -XUndecidableInstances -XOverlappingInstances -XMultiParamTypeClasses -XFunctionalDependencies $TEMPEXT"
 # MagicHash 
 
 # If the user has not set $HASKELLCNC we try the current directory.

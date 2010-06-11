@@ -65,7 +65,7 @@ module MODNAME (
 		  -- |The @StepCode@ monad represents computations 
                   -- running inside individual nodes of CnC graphs (in parallel).		      
 		  StepCode(..), 
-		  newItemCol, newTagCol, prescribe, 
+		  newItemCol, newTagCol, prescribe, prescribeNT,
 		  putt, put, get, 
 		  initialize, finalize,
                   runGraph, 
@@ -189,6 +189,10 @@ memoize = False
 
 -- |Attach a computation step to a supply of control tags.  This adds a new node in the computation graph.
 prescribe   :: TagCol tag -> Step tag -> GraphCode ()
+
+-- |Convenience: Generate a new tag collection and prescribe several steps in one call.
+prescribeNT :: [Step tag] -> GraphCode (TagCol tag)
+prescribeNT ls = do nt <- newTagCol; forM_ ls (prescribe nt); return nt
 
 -- |Put-Tag.  Push a control tag out into the computation graph.
 #ifdef MEMOIZE

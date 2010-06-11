@@ -6,6 +6,7 @@
   , UndecidableInstances
   , OverlappingInstances
   , MultiParamTypeClasses
+  , FunctionalDependencies
   #-}
 {-# OPTIONS_HADDOCK hide #-}
 {-
@@ -40,6 +41,8 @@ module Intel.CncUtil (
 
                       MutableMap, newMutableMap, assureMvar, mmToList,
 		      HotVar, newHotVar, readHotVar, writeHotVar, modifyHotVar, modifyHotVar_, 
+
+                      ChoosePairRepr, 
 
 		      )
 where
@@ -369,29 +372,79 @@ instance FitInWord Word64 where
 -- Pairs can fit in words too!
 -- FIXME TODO: Use some code generation method to generate instances for all
 -- combinations of small words/ints that fit in a machine word (a lot).
--- instance FitInWord (Word16,Word16) where
---   toWord (a,b) = shiftL (fromIntegral a) 16 + (fromIntegral b)
---   fromWord n = (fromIntegral$ shiftR n 16, 
--- 		fromIntegral$ n .&. 0xFFFF)
+instance FitInWord (Word16,Word16) where
+  toWord (a,b) = shiftL (fromIntegral a) 16 + (fromIntegral b)
+  fromWord n = (fromIntegral$ shiftR n 16, 
+		fromIntegral$ n .&. 0xFFFF)
 
--- instance FitInWord (Int16,Int16) where
---   toWord (a,b) = shiftL (fromIntegral a) 16 + (fromIntegral b)
---   fromWord n = (fromIntegral$ shiftR n 16, 
--- 		fromIntegral$ n .&. 0xFFFF)
+instance FitInWord (Int16,Int16) where
+  toWord (a,b) = shiftL (fromIntegral a) 16 + (fromIntegral b)
+  fromWord n = (fromIntegral$ shiftR n 16, 
+		fromIntegral$ n .&. 0xFFFF)
 
 
--- Let's add a custom pair type to avoid conflicts:
-data PairTag a b = PairTag a b
+--------------------------------------------------------------------------------
+-- A better representation for pair keys
+--------------------------------------------------------------------------------
 
-instance FitInWord (PairTag Word16 Word16) where
-  toWord (PairTag a b) = shiftL (fromIntegral a) 16 + (fromIntegral b)
-  fromWord n = PairTag (fromIntegral$ shiftR n 16)
-		       (fromIntegral$ n .&. 0xFFFF)
+-- Now we wish to define optimized instances of GMapKey for
+-- pairs of items that fit within a word.
+-- The following answers Ryan Newton's question
 
-instance FitInWord (PairTag Int16 Int16) where
-  toWord (PairTag a b) = shiftL (fromIntegral a) 16 + (fromIntegral b)
-  fromWord n = PairTag (fromIntegral$ shiftR n 16)
-		       (fromIntegral$ n .&. 0xFFFF)
+-- Define our own product type, to avoid overlapping instances with the
+-- general GMapKey for pairs
+-- It's a newtype: it has no run-time overhead
+newtype OptimalPair a b = OptimalPair (a,b)
+            deriving (Eq,Ord,Show)
+--  deriving instance MonadState Int Foo
+
+--instance (Ord (a,b)) => Ord (OptimalPair a b) where 
+--  compare (OptimalPair t) = compare t
+
+-- Auxiliary class to choose the appropriate pair
+class ChoosePairRepr a b pr | a b -> pr where
+   choose_pair  :: (a,b) -> pr
+   choosen_pair :: pr -> (a,b)
+
+
+instance ChoosePairRepr Int16 Int16 (OptimalPair Int16 Int16) where
+   choose_pair = OptimalPair
+   choosen_pair (OptimalPair p) = p
+
+-- instance FitInWord (OptimalPair Word16 Word16) where
+--   toWord (OptimalPair (a,b)) = shiftL (fromIntegral a) 16 + (fromIntegral b)
+--   fromWord n = OptimalPair (fromIntegral$ shiftR n 16,
+-- 		            fromIntegral$ n .&. 0xFFFF)
+
+-- instance FitInWord (OptimalPair Int16 Int16) where
+--   toWord (OptimalPair (a,b)) = shiftL (fromIntegral a) 16 + (fromIntegral b)
+--   fromWord n = OptimalPair (fromIntegral$ shiftR n 16,
+-- 		            fromIntegral$ n .&. 0xFFFF)
+
+
+------------------------------------------------------------
+-- TODO: Repeat the above for all other optimal pairs:
+-- (Int8, Int16), (Int16, Int8), etc.
+-- Template Haskell is very good to generate all such boiler-plate instances
+------------------------------------------------------------
+
+-- Choose a generic pair for all other pairs of values
+instance pr ~ (a,b) => ChoosePairRepr a b pr where
+   choose_pair   = id
+   choosen_pair  = id
+
+--prlookup = GM.lookup . choosen_pair -- monomorphism
+prlookup x = lookup (choosen_pair x)
+
+-- A specific instance is chosen
+test1_choosepair = 
+       let m = empty in
+       (m, lookup (choose_pair (1::Int16,2::Int16)) m)
+-- Nothing
+
+test2_choosepair = 
+       let m = empty in
+       (m, lookup (choose_pair (1::Int64,2::Int64)) m)
 
 
 --------------------------------------------------------------------------------
@@ -420,6 +473,7 @@ instance (Simplifyable a b, GMapKey a) => GMapKey b where
   
 --------------------------------------------------------------------------------
 -- ADT definition for generic Maps:
+-- TODO: Factor into a separate module:
 --------------------------------------------------------------------------------
 
 -- |Class for generic map key types.  By using indexed type families,
@@ -434,6 +488,13 @@ class (Ord k, Eq k, Show k) => GMapKey k where
   toList      :: GMap k a -> [(k,a)]
 
 --------------------------------------------------------------------------------
+
+instance (Show a, Show b, Ord a, Ord b, FitInWord (a,b)) 
+         => GMapKey (OptimalPair a b) where
+ data GMap (OptimalPair a b) v = GMapOP (DI.IntMap v) deriving Show
+ empty = GMapOP DI.empty
+ lookup (OptimalPair k) (GMapOP m)  = DI.lookup (fromIntegral$ toWord k) m
+
 
 -- What problems was I running into here:
 -- It's hard to avoid conflicting instances, for example with the tuple instance.
@@ -475,6 +536,11 @@ instance GMapKey Bool where
   toList (GMapBool (Just a) Nothing)  = [(True,a)]
   toList (GMapBool Nothing (Just b))  = [(False,b)]
   toList (GMapBool (Just a) (Just b)) = [(True,a),(False,b)]
+------------------------------------------------------------
+
+
+------------------------------------------------------------
+-- All keys that can be represented by INTS:
 ------------------------------------------------------------
 
 -- GMaps on Int keys become Data.IntMaps:
@@ -601,6 +667,29 @@ instance (GMapKey a) => GMapKey [a] where
   toList      (GMapList m) = DM.toList m
  
 
+--------------------------------------------------------------------------------
+
+-- We would love to just do this -- fall through for any old Ord representation:
+-- instance Ord a => GMapKey a where
+--   data GMap a v         = GMapOrd (DM.Map a v) deriving Show
+--   empty                   = GMapOrd DM.empty
+--   lookup k    (GMapOrd m) = DM.lookup k m
+--   insert k v  (GMapOrd m) = GMapOrd (DM.insert k v m)
+--   alter  fn k (GMapOrd m) = GMapOrd (DM.alter fn k m)
+--   toList      (GMapOrd m) = DM.toList m
+
+
+instance GMapKey Int64 where
+  data GMap Int64 v           = GMapInt64 (DM.Map Int64 v) deriving Show
+  empty                   = GMapInt64 DM.empty
+  lookup k    (GMapInt64 m) = DM.lookup k m
+  insert k v  (GMapInt64 m) = GMapInt64 (DM.insert k v m)
+  alter  fn k (GMapInt64 m) = GMapInt64 (DM.alter fn k m)
+  toList      (GMapInt64 m) = DM.toList m
+
+
+
+--------------------------------------------------------------------------------
 
 (!) :: (GMapKey k) => GMap k v -> k -> v
 (!) m k  = 

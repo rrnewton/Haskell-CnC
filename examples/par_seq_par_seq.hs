@@ -102,4 +102,8 @@ main = do args <- getArgs
     loop args = 
        case args of 
 	   []  -> runit $ 20*1000*1000
-	   [n] -> runit $ round (10 ** read n)
+	   [n] -> runit $ let num = read n in 
+		          -- Here's a bit of a hack, if the input is inexact treat it as an exponent.  Otherwise as a plain scalar.
+			  if num == fromIntegral (round num)
+                          then round num
+		          else round (10 ** read n)

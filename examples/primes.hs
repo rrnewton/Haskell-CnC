@@ -42,10 +42,9 @@ isPrime n = (prmlp 3 == n)
 
 primes n = 
    do primes :: ItemCol Int Int <- newItemCol
-      tags <- newTagCol
-      prescribe tags (\t -> if isPrime (t) 
-		            then put primes t t
-		            else return ())
+      tags <- prescribeNT [\t -> if isPrime (t) 
+		                  then put primes t t
+		                  else return ()]
 
       let loop i | i >= n = return ()
   	  loop i = do putt tags i 
