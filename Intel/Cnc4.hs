@@ -55,6 +55,7 @@ finalize userFinalAction =
 		  case x of 
 		    Nothing -> do n <- STEPLIFT readHotVar numworkers
 				  --STEPLIFT putStrLn$ "NUM WORKERS IS " ++ show n++"\n"
+				  -- numWorkers == 0 implies a message to shutdown.
 				  if n == 0 
 				   then do --STEPLIFT putStrLn$ "================ SHUTTING DOWN "++ show id ++"=============="
 					   return ()					

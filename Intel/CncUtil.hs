@@ -43,6 +43,7 @@ module Intel.CncUtil (
 		      HotVar, newHotVar, readHotVar, writeHotVar, modifyHotVar, modifyHotVar_, 
 
                       ChoosePairRepr, 
+                      ChooseRepr, 
 
 		      )
 where
@@ -160,6 +161,8 @@ doTrials trials mnd =
 -- for item collections (in the IO-based Cnc.hs)
 
 #ifdef HASHTABLE_TEST
+
+-- TODO -- try it with a global lock to make it safe.
 type MutableMap a b = HashTable a (MVar b)
 newMutableMap :: (Eq tag, Hashable tag) => IO (MutableMap tag b)
 newMutableMap = HT.new (==) hash
@@ -411,31 +414,17 @@ instance ChoosePairRepr Int16 Int16 (OptimalPair Int16 Int16) where
    choose_pair = OptimalPair
    choosen_pair (OptimalPair p) = p
 
--- instance FitInWord (OptimalPair Word16 Word16) where
---   toWord (OptimalPair (a,b)) = shiftL (fromIntegral a) 16 + (fromIntegral b)
---   fromWord n = OptimalPair (fromIntegral$ shiftR n 16,
--- 		            fromIntegral$ n .&. 0xFFFF)
-
--- instance FitInWord (OptimalPair Int16 Int16) where
---   toWord (OptimalPair (a,b)) = shiftL (fromIntegral a) 16 + (fromIntegral b)
---   fromWord n = OptimalPair (fromIntegral$ shiftR n 16,
--- 		            fromIntegral$ n .&. 0xFFFF)
-
-
-------------------------------------------------------------
--- TODO: Repeat the above for all other optimal pairs:
--- (Int8, Int16), (Int16, Int8), etc.
--- Template Haskell is very good to generate all such boiler-plate instances
-------------------------------------------------------------
-
 -- Choose a generic pair for all other pairs of values
 instance pr ~ (a,b) => ChoosePairRepr a b pr where
    choose_pair   = id
    choosen_pair  = id
 
+
 --prlookup = GM.lookup . choosen_pair -- monomorphism
 prlookup x = lookup (choosen_pair x)
 
+
+#if 0
 -- A specific instance is chosen
 test1_choosepair = 
        let m = empty in
@@ -445,6 +434,53 @@ test1_choosepair =
 test2_choosepair = 
        let m = empty in
        (m, lookup (choose_pair (1::Int64,2::Int64)) m)
+
+#else 
+test1_choosepair = 
+       let m = empty in
+       (m, lookup (pack_repr (1::Int16,2::Int16)) m)
+
+test2_choosepair = 
+       let m = empty in
+       (m, lookup (pack_repr (1::Int64,2::Int64)) m)
+
+#endif
+
+--------------------------------------------------------------------------------
+-- Testing a more ambitious option:
+--------------------------------------------------------------------------------
+
+--newtype OptimalRepr t = OptimalRepr t deriving (Eq,Ord,Show)
+
+-- It could dispatch to one of these:
+-- Only packed would FitInWord
+--newtype NormalRepr t = NormalRepr t deriving (Eq,Ord,Show)
+newtype OrdOnlyRepr t = OrdOnlyRepr t deriving (Eq,Ord,Show)
+
+newtype PackedRepr t = PackedRepr t deriving (Eq,Ord,Show)
+
+-- Auxiliary class to choose the appropriate pair
+class ChooseRepr a b | a -> b where
+   pack_repr  :: a -> b
+   unpack_repr :: b -> a
+
+instance ChooseRepr (Int16,Int16) (PackedRepr (Int16,Int16)) where
+   pack_repr = PackedRepr
+   unpack_repr (PackedRepr p) = p
+
+--instance (Ord a, b ~ a) => ChooseRepr a (b) where
+instance (b ~ a) => ChooseRepr a (b) where
+   pack_repr   = id
+   unpack_repr  = id
+
+
+-- CONFLICT IN FUNCTIONAL DEPS HERE:
+-- Otherwise fall through to a normal representation:
+-- --instance ChooseRepr a (NormalRepr b) where
+-- instance (Ord b, Ord a, b ~ a) => ChooseRepr a (OrdOnlyRepr b) where
+--    pack_repr = OrdOnlyRepr
+--    unpack_repr (OrdOnlyRepr p) = p
+
 
 
 --------------------------------------------------------------------------------
@@ -489,11 +525,19 @@ class (Ord k, Eq k, Show k) => GMapKey k where
 
 --------------------------------------------------------------------------------
 
+#if 0
 instance (Show a, Show b, Ord a, Ord b, FitInWord (a,b)) 
          => GMapKey (OptimalPair a b) where
  data GMap (OptimalPair a b) v = GMapOP (DI.IntMap v) deriving Show
  empty = GMapOP DI.empty
  lookup (OptimalPair k) (GMapOP m)  = DI.lookup (fromIntegral$ toWord k) m
+#else
+instance (Show a, Show b, Ord a, Ord b, FitInWord (a,b)) 
+         => GMapKey (PackedRepr (a,b)) where
+ data GMap (PackedRepr (a,b)) v = GMapPR (DI.IntMap v) deriving Show
+ empty = GMapPR DI.empty
+ lookup (PackedRepr k) (GMapPR m) = DI.lookup (fromIntegral$ toWord k) m
+#endif
 
 
 -- What problems was I running into here:
