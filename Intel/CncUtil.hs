@@ -531,12 +531,20 @@ instance (Show a, Show b, Ord a, Ord b, FitInWord (a,b))
  data GMap (OptimalPair a b) v = GMapOP (DI.IntMap v) deriving Show
  empty = GMapOP DI.empty
  lookup (OptimalPair k) (GMapOP m)  = DI.lookup (fromIntegral$ toWord k) m
+ insert (OptimalPair k) v  (GMapOP m) = GMapOP (DI.insert (wordToInt$ toWord k) v m)
+ alter  fn (OptimalPair k) (GMapOP m) = GMapOP (DI.alter fn (wordToInt$ toWord k) m)
+ toList      (GMapOP m) = map (\ (i,v) -> (OptimalPair$ fromWord$ intToWord i, v)) $ 
+			   DI.toList m
 #else
 instance (Show a, Show b, Ord a, Ord b, FitInWord (a,b)) 
          => GMapKey (PackedRepr (a,b)) where
  data GMap (PackedRepr (a,b)) v = GMapPR (DI.IntMap v) deriving Show
  empty = GMapPR DI.empty
  lookup (PackedRepr k) (GMapPR m) = DI.lookup (fromIntegral$ toWord k) m
+ insert (PackedRepr k) v  (GMapPR m) = GMapPR (DI.insert (wordToInt$ toWord k) v m)
+ alter  fn (PackedRepr k) (GMapPR m) = GMapPR (DI.alter fn (wordToInt$ toWord k) m)
+ toList      (GMapPR m) = map (\ (i,v) -> (PackedRepr$ fromWord$ intToWord i, v)) $ 
+			   DI.toList m
 #endif
 
 
