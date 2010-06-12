@@ -86,7 +86,6 @@
 -- The input SPD matrix is read from the file specified. The output will be a
 -- lower triangular matrix written to a text file cholesky_out if -v is specified. 
 
-
   
 import System.Environment
 import Data.Int
@@ -102,14 +101,15 @@ import Debug.Trace
 type MutableArray = IOUArray  (Int, Int) Float
 type StaticArray = Array.Array (Int, Int) Float
 
-kCompute :: ItemCol Int Int -> TagCol Int -> Int -> StepCode ()
-kCompute pItem controlS1 tag =
-    do p <- get pItem 0
-       for_ 0 p (putt controlS1) 
+--kCompute :: ItemCol Int Int -> TagCol Int -> Int -> StepCode ()
+kCompute :: Int -> TagCol Int -> Int -> StepCode ()
+kCompute p controlS1 tag =
+    for_ 0 p (putt controlS1) 
 
-s1Compute :: ItemCol (Int, Int, Int) MutableArray -> ItemCol Int Int -> Int -> StepCode ()
-s1Compute lkji bItem k = 
-    do b <- get bItem 0
+--s1Compute :: ItemCol (Int, Int, Int) MutableArray -> ItemCol Int Int -> Int -> StepCode ()
+s1Compute :: ItemCol (Int, Int, Int) MutableArray -> Int -> Int -> StepCode ()
+s1Compute lkji b k = 
+    do 
        aBlock <- get lkji (k, k, k)
        put lkji (k, k, k+1) (s1Core aBlock b)
     where s1Core aBlock b = unsafePerformIO $ 
@@ -129,14 +129,14 @@ s1Compute lkji bItem k =
                                               base3 <- readArray lBlock (jbb, kb)
                                               writeArray aBlock (ib,jbb) (base1 - base2 * base3)
        
-kjCompute :: ItemCol Int Int -> TagCol (Int, Int) -> Int -> StepCode ()    
-kjCompute pItem controlS2 k =
-    do p <- get pItem 0
+--kjCompute :: ItemCol Int Int -> TagCol (Int, Int) -> Int -> StepCode ()    
+kjCompute :: Int -> TagCol (Int, Int) -> Int -> StepCode ()    
+kjCompute p controlS2 k =
        for_ (k + 1) p (\j -> putt controlS2 (k, j))
     
-s2Compute :: ItemCol (Int, Int, Int) MutableArray -> ItemCol Int Int -> (Int, Int) -> StepCode ()    
-s2Compute lkji bItem (k, j) =
-    do b <- get bItem 0
+s2Compute :: ItemCol (Int, Int, Int) MutableArray -> Int -> (Int, Int) -> StepCode ()    
+s2Compute lkji b (k, j) =
+    do 
        aBlock <- get lkji (j,k,k)
        liBlock <- get lkji (k,k,k+1)
        put lkji (j,k,k+1) (s2Core aBlock liBlock b)
@@ -156,13 +156,14 @@ s2Compute lkji bItem (k, j) =
                                                       writeArray aBlock (ib,jb) (base1 - (base2 * base3))
                                                       
        
-kjiCompute :: ItemCol Int Int -> TagCol (Int, Int, Int) -> (Int, Int) -> StepCode ()
-kjiCompute pItem controlS3 (k, j) =
+--kjiCompute :: ItemCol Int Int -> TagCol (Int, Int, Int) -> (Int, Int) -> StepCode ()
+kjiCompute :: TagCol (Int, Int, Int) -> (Int, Int) -> StepCode ()
+kjiCompute  controlS3 (k, j) =
     do for_ (k + 1) (j + 1) (\i -> putt controlS3 (k, j, i))
     
-s3Compute :: ItemCol (Int, Int, Int) MutableArray -> ItemCol Int Int -> (Int, Int, Int) -> StepCode ()    
-s3Compute lkji bItem (k,j,i) | i == j =
-    do b <- get bItem 0
+s3Compute :: ItemCol (Int, Int, Int) MutableArray -> Int -> (Int, Int, Int) -> StepCode ()    
+s3Compute lkji b (k,j,i) | i == j =
+    do 
        aBlock <- get lkji (j,i,k)
        l2Block <- get lkji (j,k,k+1)
        put lkji (j,i,k+1) (s3Core aBlock l2Block b)
@@ -176,8 +177,8 @@ s3Compute lkji bItem (k,j,i) | i == j =
                                                    base2 <- readArray l2Block (ib,kb)
                                                    writeArray aBlock (ib,jb) (base1 + temp * base2)
        
-s3Compute lkji bItem (k,j,i) | otherwise =
-    do b <- get bItem 0
+s3Compute lkji b (k,j,i) | otherwise =
+    do 
        aBlock <- get lkji (j,i,k)
        l1Block <- get lkji (i,k,k+1)
        l2Block <- get lkji (j,k,k+1)
@@ -221,25 +222,22 @@ run n b arrA =
         let p = n `div` b
         in
            runGraph $  
-           do pItem    <- newItemCol
-              bItem    <- newItemCol
+           do 
               lkji     <- newItemCol
               singleton <- newTagCol
               controlS1 <- newTagCol
               controlS2 <- newTagCol
               controlS3 <- newTagCol
 
-              prescribe singleton (kCompute pItem controlS1)
-              prescribe controlS1 (s1Compute lkji bItem)
-              prescribe controlS1 (kjCompute pItem controlS2)
-              prescribe controlS2 (s2Compute lkji bItem)
-              prescribe controlS2 (kjiCompute pItem controlS3)
-              prescribe controlS3 (s3Compute lkji bItem)
+              prescribe singleton (kCompute p controlS1)
+              prescribe controlS1 (s1Compute lkji b)
+              prescribe controlS1 (kjCompute p controlS2)
+              prescribe controlS2 (s2Compute lkji b)
+              prescribe controlS2 (kjiCompute controlS3)
+              prescribe controlS3 (s3Compute lkji b)
 
               initialize $
                  do putt singleton 1
-                    put pItem 0 p
-                    put bItem 0 b
                     initLkji arrA lkji n p b
 
               finalize $ 
