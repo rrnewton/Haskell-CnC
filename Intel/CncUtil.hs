@@ -708,6 +708,21 @@ instance (GMapKey a, GMapKey b) => GMapKey (Either a b) where
       map (\ (a,v) -> (Left  a, v)) (toList gm1) ++ 
       map (\ (b,v) -> (Right b, v)) (toList gm2)
 
+
+-- TODO: Use template haskell to generalize this strategy to other tuples:
+-- For now here's a hack:
+-- Could simplify to nested binary tuples....
+instance (GMapKey a, GMapKey b, GMapKey c) => GMapKey (a,b,c) where
+  data GMap (a,b,c) v     = GMapTriple (DM.Map (a,b,c) v) deriving Show
+  empty                   = GMapTriple DM.empty
+  lookup k    (GMapTriple m) = DM.lookup k m
+  insert k v  (GMapTriple m) = GMapTriple (DM.insert k v m)
+  alter  fn k (GMapTriple m) = GMapTriple (DM.alter fn k m)
+  toList      (GMapTriple m) = DM.toList m
+
+
+
+
 -- |GMaps with list indices could be treated like tuples (nested
 -- maps).  Instead, we put them in a regular Data.Map.
 instance (GMapKey a) => GMapKey [a] where

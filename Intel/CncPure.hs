@@ -28,7 +28,7 @@
 module Intel.CncPure(
 		  Step, TagCol, ItemCol,
 		  StepCode(..), GraphCode,
-		  newItemCol, newTagCol, prescribe, 
+		  newItemCol, newTagCol, prescribe, prescribeNT,
 		  putt, put, get,
 		  initialize, finalize,
 
@@ -998,7 +998,9 @@ cncFor2D (s1,s2) (e1,e2) body =
   cncFor s1 e1 $ \ i ->  
    cncFor s2 e2 (body i)
 
-
+-- prescribe :: Ord a => TagCol a -> (a -> StepCode ()) -> GraphCode ()
+prescribeNT :: Ord tag => [tag -> StepCode ()] -> GraphCode (TagCol tag)
+prescribeNT ls = do nt <- newTagCol; forM_ ls (prescribe nt); return nt
 
 --------------------------------------------------------------------------------
 -- Testing:

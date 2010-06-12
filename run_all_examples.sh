@@ -138,9 +138,9 @@ function runit()
   CODE=$?
   check_error $CODE "ERROR: compilation failed."
 
-  echo "Executing ./ntimes_minmedmax "$TRIALS" ./examples/$test.exe $ARGS +RTS $RTS -RTS "
+  echo "Executing $NTIMES $TRIALS ./examples/$test.exe $ARGS +RTS $RTS -RTS "
   if [ "$LONGRUN" == "" ]; then export HIDEOUTPUT=1; fi
-  times=`./ntimes_minmedmax "$TRIALS" ./examples/$test.exe $ARGS +RTS $RTS -RTS`
+  times=`$NTIMES "$TRIALS" ./examples/$test.exe $ARGS +RTS $RTS -RTS`
   CODE=$?
 
   echo " >>> MIN/MEDIAN/MAX TIMES $times"
@@ -170,16 +170,9 @@ fi
 # Hygiene:
 rm -f examples/*.exe
 
-# This specifies the list of tests and their arguments for a "long" run:
+#====================================================================================================
 
-#for line in "mandel_opt 1 300 300 4000" "mandel_opt 2 300 300 4000" "mandel_opt 3 300 300 4000" "mandel 300 300 4000"; do
-
-#  
-#for line in  "par_seq_par_seq 8.5" "embarrassingly_par 9.2" "primes2 200000" "mandel 300 300 4000" "mandel_opt 1 300 300 4000" "sched_tree 18" "fib 20000" "threadring 50000000 503" "nbody 1200" "primes 200000"; do
-
-# Parallel benchmarks only:
-for line in  "par_seq_par_seq 8.5" "embarrassingly_par 9.2" "primes2 200000" "mandel 300 300 4000" "mandel_opt 1 300 300 4000" "sched_tree 18" "nbody 1200" "primes 200000"; do
-
+function run_benchmark() {
   set -- $line
   test=$1; shift
 
@@ -196,19 +189,11 @@ for line in  "par_seq_par_seq 8.5" "embarrassingly_par 9.2" "primes2 200000" "ma
 
   echo "# *** Config [$cnt ..], testing with command/args: $test.exe $ARGS " >> $RESULTS
 
- export CNC_VARIANT=pure
- # Currently running the pure scheduler only in single threaded mode:
- export NUMTHREADS=0
- for sched in $PURESCHEDS; do
-   unset hashtab
-   export CNC_SCHEDULER=$sched
-   runit
- done
-
  export CNC_VARIANT=io
  for sched in $IOSCHEDS; do
    export CNC_SCHEDULER=$sched
    #for NUMTHREADS in 4; do
+
    for NUMTHREADS in $THREADSETTINGS; do
      # Running with the hashtable hack off:
      export hashtab=""
@@ -220,6 +205,15 @@ for line in  "par_seq_par_seq 8.5" "embarrassingly_par 9.2" "primes2 200000" "ma
    echo >> $RESULTS;
  done # schedulers
 
+ export CNC_VARIANT=pure
+ # Currently running the pure scheduler only in single threaded mode:
+ export NUMTHREADS=0
+ for sched in $PURESCHEDS; do
+   unset hashtab
+   export CNC_SCHEDULER=$sched
+   runit
+ done
+
  # Finally, run once through separately compiled modules to compare performance (and make sure they build).
  # This will basically use the IO based implementation with the default scheduler.
  export CNC_VARIANT=separatemodule_io
@@ -229,6 +223,40 @@ for line in  "par_seq_par_seq 8.5" "embarrassingly_par 9.2" "primes2 200000" "ma
 
  echo >> $RESULTS;
  echo >> $RESULTS;
+
+}
+
+# Read $line and do the benchmark with ntimes_binsearch.sh
+function run_binsearch_benchmark() {
+   NTIMES=./ntimes_binsearch.sh
+   run_benchmark
+   NTIMES=UNSET
+}
+
+# Read $line and do the benchmark with ntimes_minmedmax
+function run_normal_benchmark() {
+   NTIMES=./ntimes_minmedmax
+   run_benchmark
+   NTIMES=UNSET
+}
+
+
+#====================================================================================================
+
+
+
+# This specifies the list of tests and their arguments for a "long" run:
+
+#for line in "mandel_opt 1 300 300 4000" "mandel_opt 2 300 300 4000" "mandel_opt 3 300 300 4000" "mandel 300 300 4000"; do
+
+#  
+#for line in  "par_seq_par_seq 8.5" "embarrassingly_par 9.2" "primes2 200000" "mandel 300 300 4000" "mandel_opt 1 300 300 4000" "sched_tree 18" "fib 20000" "threadring 50000000 503" "nbody 1200" "primes 200000"; do
+
+# Parallel benchmarks only:
+for line in  "par_seq_par_seq 8.5" "embarrassingly_par 9.2" "primes2 200000" "mandel 300 300 4000" "mandel_opt 1 300 300 4000" "sched_tree 18" "nbody 1200" "primes 200000"; do
+
+  run_normal_benchmark
+
 done
 
 echo "Finished with all test configurations."

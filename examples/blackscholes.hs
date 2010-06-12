@@ -64,6 +64,8 @@
 --import Intel.Cnc
 --import Intel.CncUtil
 import Control.Monad
+--import Control.Parallel.Strategies
+--import Control.DeepSeq
 --import Data.Array
 import Data.Array.Unboxed hiding ((!))
 --import Data.Array.IArray
@@ -183,6 +185,9 @@ executeStep prices (t,granularity) =
 --                     )
 --	         [0 .. num_runs-1]
 --       put prices t ls;
+      --put prices t (deepseq arr arr);
+
+       -- With unboxed arrays they are already strict:
        put prices t arr;
 
 -- #ifdef ERR_CHK   
@@ -193,32 +198,53 @@ executeStep prices (t,granularity) =
 --             }
 -- #endif 
 
-makegraph :: Int -> Int -> GraphCode (UArray Int FpType)
+--makegraph :: Int -> Int -> GraphCode (UArray Int FpType)
 makegraph numOptions granularity = 
    do tags  <- newTagCol
 --      params <- newItemCol
-      prices <- newItemCol
+      prices :: ItemCol Int (UArray Int FpType) <- newItemCol
 
       prescribe tags (executeStep prices)
+
+      -- The options are zero-indexed, 0 through numOptions-1
+
+      -- A list representation of all the chunks we care about:
+#if 0
+      let numsegments = numOptions `quot` granularity
+	  segs = splitInclusiveRange numsegments (0, numOptions-1)
+	  tagspace = map (\ (s,e) -> (s, e-s+1)) segs
+#else
+      -- Let's make deforestation easy and ASSUME that granularity divides numOptions
+      let tagspace = zip [0, granularity .. numOptions-1] (repeat granularity)
+#endif
+
+         -- let (quot,rem) = numOptions `quotRem` granularity
+	 --     base = [0, granularity .. numOptions-1]
+         -- in if rem > 0 
+         --    then (numOptions - rem - 1, rem) : base
+	 --    else base 
 
       initialize$ 
 --        cncFor 1 numOptions (putt tags)
 --        cncFor 1 numOptions $ \i -> 
 --          do put params i $ data_init ! (i `mod` size_init)
+        do forM_ tagspace (putt tags)
+	   --stepPutStr$ "TAGSPACE: " ++ show tagspace
 
-        do let (quot,rem) = numOptions `quotRem` granularity
-	   stepPutStr$ " Remainder "++ show rem ++ "\n"
-           forM_ [0, granularity .. numOptions-1] $ \loopnum ->
-             putt tags (loopnum, granularity)                
-	   -- Finally, the leftovers:
-	   if rem > 0 
-            then putt tags (numOptions - rem - 1, rem)
-	    else return ()
+        -- do let (quot,rem) = numOptions `quotRem` granularity
+	--    stepPutStr$ " Remainder "++ show rem ++ "\n"
+        --    forM_ [0, granularity .. numOptions-1] $ \loopnum ->
+        --      putt tags (loopnum, granularity)                
+	--    -- Finally, the leftovers:
+	--    if rem > 0 
+        --     then putt tags (numOptions - rem - 1, rem)
+	--     else return ()
 
       finalize$ 
-       do x <- get prices 0
-	  --y <- get prices 5
-	  return x
+       do foldM (\ acc (t,_) -> 
+		 do x <- get prices t
+		    return (acc + (x UB.! 0))) 
+	        0 tagspace
 
 main = do args <- getArgs 
           let (numOptions, granularity) =
@@ -235,7 +261,8 @@ main = do args <- getArgs
 	  putStrLn$ "Running blackscholes, numOptions "++ show numOptions ++ " and block size " ++ show granularity
           let result = runGraph $ makegraph numOptions granularity
 --          putStrLn$ "Final result, here's one price: "++ show ((result !! 0) ! 0)
-          putStrLn$ "Final result, here's one price: "++ show (result UB.! 0)
+          --putStrLn$ "Final result, here's one price: "++ show (result UB.! 0)
+	  putStrLn$ "Final result: "++ show result
 	  return result
 
 
