@@ -69,10 +69,7 @@ import Data.Array.Unboxed hiding ((!))
 --import Data.Array.IArray
 
 import qualified Data.Array.Unboxed as UB
-
 import System.Environment
-
---import Prelude hiding ((!))
 
 #include <haskell_cnc.h> 
 
@@ -196,19 +193,6 @@ executeStep prices (t,granularity) =
 --             }
 -- #endif 
 
-
--- deprecated:
-init numOptions granularity tags items = 
-  do let (quot,rem) = numOptions `quotRem` granularity
-	 len = quot + (if rem > 0 then 1 else 0)
-     --forM_ [0 .. len-1] $ \i ->
-     forM_ [0, granularity .. numOptions] $ \loopnum ->
-        do put items loopnum undefined
-           putt tags loopnum 
-
---graph :: Int -> Int -> GraphCode FpType
---makegraph :: Int -> Int -> GraphCode [UArray Int FpType]
---makegraph :: Int -> Int -> GraphCode (UArray Int FpType)
 makegraph :: Int -> Int -> GraphCode (UArray Int FpType)
 makegraph numOptions granularity = 
    do tags  <- newTagCol
