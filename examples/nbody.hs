@@ -41,6 +41,9 @@ import qualified Data.Array as Array
 
 type Float3D = (Float, Float, Float)
 
+type UFloat3D = (# Float#, Float#, Float# #)
+
+
 -- This step generates the bodies in the system.
 genVector tag = (tag' * 1.0, tag' * 0.2, tag' * 30.0)
    where tag' = fromIntegral tag
@@ -56,16 +59,20 @@ compute vecList accels tag =
        where --vecList = elems vecArr
              g = 9.8
 
-             multTriple :: Float -> Float3D -> Float3D
-	     pairWiseAccel :: Float3D -> Float3D -> Float3D
+--             multTriple :: Float# -> UFloat3D -> UFloat3D
+--             multTriple c (# x,y,z #) = (# c*x,c*y,c*z #)
 
+             multTriple :: Float -> Float3D -> Float3D
              multTriple c ( x,y,z ) = ( c*x,c*y,c*z )
+
+	     pairWiseAccel :: Float3D -> Float3D -> Float3D
              pairWiseAccel (x,y,z) (x',y',z') = let dx = x'-x
                                                     dy = y'-y
                                                     dz = z'-z
                                                     eps = 0.005
                                                     distanceSq = dx^2 + dy^2 + dz^2 + eps
                                                     factor = 1/sqrt(distanceSq ^ 3)
+--                                                in multTriple factor (dx,dy,dz)
                                                 in multTriple factor (dx,dy,dz)
 
 #if 0
@@ -74,16 +81,34 @@ compute vecList accels tag =
 #else
 -- Making this much leCss haskell like to avoid allocation:
              (strt,end) = Array.bounds vecList
+             addTriples :: Float3D -> Float3D -> Float3D
              addTriples (x,y,z) (x',y',z') = (x+x',y+y',z+z')
 
-             addTriples :: Float3D -> Float3D -> Float3D
-
 	     accel vector vecList = 
-		multTriple g $ 
 
-	        foldRange strt (end+1) (0,0,0) $ \ acc i ->                           
-		   addTriples acc (pairWiseAccel vector (vecList Array.! i))
-	       
+             -- Manually inlining to see if the tuples unbox:
+	        let (sx,sy,sz) =
+                     foldRange strt (end+1) (0,0,0) $ \ (ax,ay,az) i -> 
+--		       let (px,py,pz) = pairWiseAccel vector (vecList Array.! i)
+
+                       let (x,y,z)    = vector
+			   (x',y',z') = (vecList Array.! i)
+			   (px,py,pz) = let dx = x'-x
+                                            dy = y'-y
+                                            dz = z'-z
+                                            eps = 0.005
+                                            distanceSq = dx^2 + dy^2 + dz^2 + eps
+					    factor = 1/sqrt(distanceSq ^ 3)
+					in (factor * dx, factor * dy, factor *dz)
+
+		       in (ax+px, ay+py, az+pz)
+		in (g*sx, g*sy, g*sz)
+
+
+
+
+                --------------------------------------------------------------------------------
+		-- multTriple g $ 			   
 	        -- List.foldl' (\ acc i ->                           
 		-- 	      addTriples acc (pairWiseAccel vector (vecList Array.! i))
 		-- 	     )
