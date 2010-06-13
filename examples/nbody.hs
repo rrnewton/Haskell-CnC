@@ -91,15 +91,15 @@ compute vecList accels tag =
                      foldRange strt (end+1) (0,0,0) $ \ (ax,ay,az) i -> 
 --		       let (px,py,pz) = pairWiseAccel vector (vecList Array.! i)
 
-                       let (x,y,z)    = vector
-			   (x',y',z') = (vecList Array.! i)
-			   (px,py,pz) = let dx = x'-x
-                                            dy = y'-y
-                                            dz = z'-z
-                                            eps = 0.005
-                                            distanceSq = dx^2 + dy^2 + dz^2 + eps
-					    factor = 1/sqrt(distanceSq ^ 3)
-					in (factor * dx, factor * dy, factor *dz)
+                       let ( x,y,z )    = vector
+			   ( x',y',z' ) = (vecList Array.! i)
+			   (# px,py,pz #) = let dx = x'-x
+						dy = y'-y
+						dz = z'-z
+						eps = 0.005
+						distanceSq = dx^2 + dy^2 + dz^2 + eps
+						factor = 1/sqrt(distanceSq ^ 3)
+					    in (# factor * dx, factor * dy, factor *dz #)
 
 		       in (ax+px, ay+py, az+pz)
 		in (g*sx, g*sy, g*sz)
