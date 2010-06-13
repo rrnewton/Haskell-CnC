@@ -8,6 +8,7 @@
   , DeriveDataTypeable
   , MultiParamTypeClasses
   , NamedFieldPuns
+  , RankNTypes
   #-}
 {-# OPTIONS_HADDOCK prune #-}
 {-
@@ -52,6 +53,12 @@
 #include "Cnc8.hs"
 #elif CNC_SCHEDULER == 9
 #include "Cnc9.hs"
+#elif CNC_SCHEDULER == 10
+#include "Cnc10.hs"
+
+#elif CNC_SCHEDULER == 100
+#include "CncSM.hs"
+
 #else
 #error "Cnc.hs -- CNC_SCHEDULER is not set to a support scheduler: {3,4,5,6,7,8,9}"
 #endif

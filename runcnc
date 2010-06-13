@@ -57,7 +57,7 @@ fi
 # [2010.02.16] Strangely enabling -fglasgow-exts causes CncPure.hs to NOT compile correctly.  Parse error.
 #EXTENSIONS="-fglasgow-exts"
 # -feager-blackholing
-TEMPEXT="-XFlexibleContexts -XTypeSynonymInstances"
+TEMPEXT="-XFlexibleContexts -XTypeSynonymInstances -XRankNTypes "
 EXTENSIONS=" -XExistentialQuantification -XScopedTypeVariables -XBangPatterns -XNamedFieldPuns -XRecordWildCards -XFlexibleInstances -XDeriveDataTypeable -XTypeFamilies -XUndecidableInstances -XOverlappingInstances -XMultiParamTypeClasses -XFunctionalDependencies $TEMPEXT"
 # MagicHash 
 

@@ -116,6 +116,7 @@ defaultState =
 
 --------------------------------------------------------------------------------
 
+#warning " LOADING  SCHEDULER 10... "
 
 newItemCol = do ref <- GRAPHLIFT newHotVar Map.empty
  		return (ItemCol ref)
@@ -186,13 +187,24 @@ runStep m = do runContT m (\() -> return ContResult); return ()
 
 --executeStep :: StepCode a -> StepCode a
 
-itemsToList = undefined
-initialize = undefined
-graphInStep = undefined
-putt = undefined
-runGraph = undefined
+putt = proto_putt
+	(\ steps tag -> 
+	   do (HiddenState5 { stack }) <- C.lift S.get
+              foldM (\ () step -> 
+		     STEPLIFT push stack (runStep $ step tag))
+                       () steps)
 
 
+itemsToList = error "itemsolist unimplemented"
+graphInStep = C.lift
+
+initialize = runStep
+
+runGraph x = unsafePerformIO (runState x)
+runState x =
+    do state <- defaultState 
+       (a,_) <- S.runStateT x state
+       return a
 
 finalize finalAction = 
     do joiner <- GRAPHLIFT newChan 

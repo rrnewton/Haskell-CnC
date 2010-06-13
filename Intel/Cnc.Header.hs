@@ -7,6 +7,7 @@
   , OverlappingInstances
   , DeriveDataTypeable
   , MultiParamTypeClasses
+  , RankNTypes
   #-}
 --  Note: PatternSignatures was deprecated after 6.8.
 {-# OPTIONS_HADDOCK prune #-}
@@ -139,8 +140,11 @@ import Data.Word
 import Data.Typeable
 import Control.Monad
 import Control.Monad.Trans
-import Control.Monad.Cont
+import Control.Monad.Cont as C
 import qualified  Control.Monad.State.Strict as S 
+
+import qualified Control.Monad.Reader as R
+
 --import qualified  Control.Monad.State.Lazy as S 
 import Control.Concurrent.MVar
 import Control.Concurrent.Chan
@@ -208,7 +212,7 @@ get  :: ITEMPREREQS     => ItemCol tag val -> tag         -> StepCode val
 
 -- |Run an initial step which populates the CnC graph with input tags and items.
 --  Presently only a single initialize is allowed within a graph execution.
-initialize :: StepCode a -> GraphCode a
+initialize :: StepCode () -> GraphCode ()
 -- |Run a final step which collects outputs of the graph that are of interest to the larger application.
 --  Presently only a single finalize is allowed within a graph execution.
 finalize   :: StepCode a -> GraphCode a
