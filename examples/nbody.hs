@@ -54,8 +54,6 @@ compute vecList accels tag =
     do --let myvector = vecList !! (tag-1)
        let myvector = vecList Array.! (tag-1)
        put accels tag (accel myvector vecList)
-       --put accels tag myvector
-       return ()
        where --vecList = elems vecArr
              g = 9.8
 
@@ -74,8 +72,8 @@ compute vecList accels tag =
                                                     factor = 1/sqrt(distanceSq ^ 3)
 --                                                in multTriple factor (dx,dy,dz)
                                                 in multTriple factor (dx,dy,dz)
-
-#if 0
+-- #define OLD_VER
+#ifdef OLD_VER
              sumTriples = foldr (\(x,y,z) (x',y',z') -> (x+x',y+y',z+z')) (0,0,0)
 	     accel vector vecList = multTriple g $ sumTriples $ List.map (pairWiseAccel vector) vecList
 #else
@@ -84,26 +82,38 @@ compute vecList accels tag =
              addTriples :: Float3D -> Float3D -> Float3D
              addTriples (x,y,z) (x',y',z') = (x+x',y+y',z+z')
 
+
+             accel :: Float3D -> (Array.Array Int Float3D) -> Float3D
 	     accel vector vecList = 
 
+--                     foldRange strt (end+1) (0,0,0) $ \ (ax,ay,az) i -> 
+--		       let (px,py,pz) = pairWiseAccel vector (vecList Array.! i)		    
+
              -- Manually inlining to see if the tuples unbox:
-	        let (sx,sy,sz) =
-                     foldRange strt (end+1) (0,0,0) $ \ (ax,ay,az) i -> 
---		       let (px,py,pz) = pairWiseAccel vector (vecList Array.! i)
-
+	        let (# sx,sy,sz #) = loop strt 0 0 0
+		    loop !i !ax !ay !az
+                      | i == end = (# ax,ay,az #)
+		      | otherwise = 
                        let ( x,y,z )    = vector
-			   ( x',y',z' ) = (vecList Array.! i)
-			   (# px,py,pz #) = let dx = x'-x
-						dy = y'-y
-						dz = z'-z
-						eps = 0.005
-						distanceSq = dx^2 + dy^2 + dz^2 + eps
-						factor = 1/sqrt(distanceSq ^ 3)
-					    in (# factor * dx, factor * dy, factor *dz #)
+			   ( x',y',z' ) = vecList Array.! i
 
-		       in (ax+px, ay+py, az+pz)
-		in (g*sx, g*sy, g*sz)
+                           (# dx,dy,dz #) = (# x'-x, y'-y, z'-z #)
+			   eps = 0.005
+			   distanceSq = dx^2 + dy^2 + dz^2 + eps
+			   factor = 1/sqrt(distanceSq ^ 3)
 
+			   (# px,py,pz #) = (# factor * dx, factor * dy, factor *dz #)
+
+		       in loop (i+1) (ax+px) (ay+py) (az+pz)
+		in ( g*sx, g*sy, g*sz )
+
+
+
+-- foldRange start end acc fn = loop start acc
+--  where
+--   loop !i !acc
+--     | i == end = acc
+--     | otherwise = loop (i+1) (fn acc i)
 
 
 
@@ -128,8 +138,11 @@ run n = runGraph $
         do tags    <- newTagCol
            accels  <- newItemCol
 
+#ifdef OLD_VER
+           let initVecs = List.map genVector [1..n]
+#else
            let initVecs = Array.array (0,n-1) [ (i, genVector i) | i <- [0..n-1] ]
-           --let initVecs = List.map genVector [1..n]
+#endif
 
            prescribe tags (compute initVecs accels)
 
