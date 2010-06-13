@@ -95,18 +95,18 @@ import qualified Data.Array as Array
 import Data.Array.IO
 import Data.Array.MArray
 import Debug.Trace
+import System.Posix.Files
+import Control.DeepSeq
 
 #include "haskell_cnc.h"
 
 type MutableArray = IOUArray  (Int, Int) Float
 type StaticArray = Array.Array (Int, Int) Float
 
---kCompute :: ItemCol Int Int -> TagCol Int -> Int -> StepCode ()
 kCompute :: Int -> TagCol Int -> Int -> StepCode ()
 kCompute p controlS1 tag =
     for_ 0 p (putt controlS1) 
 
---s1Compute :: ItemCol (Int, Int, Int) MutableArray -> ItemCol Int Int -> Int -> StepCode ()
 s1Compute :: ItemCol (Int, Int, Int) MutableArray -> Int -> Int -> StepCode ()
 s1Compute lkji b k = 
     do 
@@ -253,9 +253,17 @@ main =
 -- cholesky -v 6 2 m6.in
               []      -> ["6", "2", "cholesky_m6.in"]
               []      -> ["1000", "50", "m1000.in"]
+              []      -> ["500", "50", "m500.in"]
 	      [_,_,_] -> ls
-       arrA <- initMatrix (read n) fname
-       putStrLn $ show $ arrA
+       bool <- fileExist fname
+       let fname' = if bool then fname else "examples/"++fname
+
+       arrA <- initMatrix (read n) fname'
+
+       --putStrLn $ show $ arrA
+       putStrLn "Making sure evaluation of arrA is forced..."
+       case deepseq arrA arrA of _ -> putStrLn "Finished."
+
        arrB <- return $ run (read n) (read b) arrA
        putStrLn $ show $ [((i,j),arrB Array.! (i,j)) | i <-[0..(read n)-1], j<-[0..i]]
 

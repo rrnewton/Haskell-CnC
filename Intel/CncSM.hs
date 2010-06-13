@@ -12,14 +12,15 @@
 #define MODNAME Intel.CncSM
 #endif
 #define CNC_SCHEDULER 100
-#define STEPLIFT  C.liftIO$
-#define GRAPHLIFT C.liftIO$
+#define STEPLIFT  C.liftIO$ R.liftIO$
+#define GRAPHLIFT C.liftIO$ R.liftIO$
 
 #define SUPPRESS_put
 #define SUPPRESS_newItemCol
 #define SUPPRESS_newTagCol
 #define SUPPRESS_itemsToList
 #define SUPPRESS_runGraph
+#define SUPPRESS_initialize
 
 #include "Cnc.Header.hs"
 
@@ -38,7 +39,9 @@ newTagCol  = C.liftIO $ do
 data Sched = Sched (Var [StepCode ()]) (Var (Set.Set ThreadId))
 --  deriving Show
 
-type StepCode  a = C.ContT () (R.ReaderT Sched IO) a
+type ReaderOnly = R.ReaderT Sched IO
+
+type StepCode  a = C.ContT () ReaderOnly a
 type GraphCode a = StepCode a
 
 runGraph x = unsafePerformIO $ do
@@ -93,54 +96,78 @@ get col tag =
     r
 
 -- finalize :: StepCode a -> GraphCode a
+#if 0
 finalize x = x -- XXX
-
-{-
+#else
 finalize finalAction = 
     do joiner <- GRAPHLIFT newChan 
-       (state1 @ HiddenState5 { stack, numworkers, myid }) <- S.get
+       --(state1 @ HiddenState5 { stack, numworkers, myid }) <- S.get							      
+       Sched stack threads <- R.ask
 
-       -- At this level we don't need the ContT transformer, hence "StateOnly":
-       let worker :: Int -> StateOnly () = \id ->
-	       do x <- GRAPHLIFT tryPop stack
-		  case x of 
-		    Nothing -> GRAPHLIFT  writeChan joiner id
-		    Just action -> 
-			do action 
-			   myId <- GRAPHLIFT myThreadId
-			   worker id -- keep going
-			   
-       -- Here we install the makeworker funciton in the monad state:
-       let mkwrkr id = do S.runStateT (worker id) (state2 id); return ()
-           state2 id = state1 { makeworker = mkwrkr, myid = id }
-       -- Write it back for the "finalAction" below:
-       S.put (state2 myid)
-       GRAPHLIFT modifyHotVar_ numworkers (+ numCapabilities)
+       -- This is a little redundant... the reschedule loop will keep track of terminating when the queue goes empty.
+       let worker :: Int -> GraphCode () = \id ->
+       	       do x <- GRAPHLIFT pop stack
+		  tid <- GRAPHLIFT myThreadId
+		  ls <- GRAPHLIFT atomically$ readTVar stack
+		  --cncPutStr$ "\n *** WORKER LOOP stack len "++ show (length ls) ++ " threadid " ++ show tid ++"\n"
+       		  case x of 
+		    -- Termination on first empty queue observation:
+       		    Nothing -> do --cncPutStr$ "\n *** WORKER " ++ show tid ++" terminating...\n"
+			          GRAPHLIFT writeChan joiner id
+       		    Just stepcode -> 
+       			do stepcode 
+       	                   worker id -- keep going
+
+       let worker_io n = R.runReaderT (C.runContT (worker n) (return)) (Sched stack threads)
+
+       -- Having a problem with the below version... Not gettign to the terminate continuation & blocking indefiinetyl.
+       {-
+       let worker_io n = R.runReaderT (C.runContT (worker n) 
+				       (\x -> do GRAPHLIFT putStrLn $ "\n *** WORKER " ++ show n ++" terminating..."
+					         GRAPHLIFT writeChan joiner n
+					         return x))
+			              (Sched stack threads)
+       -}
+
+       --cncPutStr$ " *** Forking workers.\n"
 
        -- Fork one worker per thread:
-       GRAPHLIFT forM_ [0..numCapabilities-1] (\n -> forkIO (mkwrkr n)) 
-       --GRAPHLIFT forM_ [0..numCapabilities-1] (\n -> forkOnIO n (mkwrkr n)) 
+       -- For this version there's no way PIN_THREADS could be bad:
+       -- #ifdef PIN_THREADS
+#if 1 
+       GRAPHLIFT forM_ [0..numCapabilities-1] (\n -> forkOnIO n (worker_io n)) 
+#else
+       GRAPHLIFT forM_ [0..numCapabilities-1] (\n -> forkIO (worker_io n)) 
+#endif
+
+       --cncPutStr$ " *** Forked, now block on workers.\n"
+
+       -- FIXME: NO WORKER RESTART ON PREMATURE TERMINATION RIGHT NOW!!
 
        -- This waits for quiescense BEFORE doing the final action
-       let waitloop = do num <- readHotVar numworkers
-	                 if num == 0
-			  then return () 
-			  else do readChan joiner -- A return message.
-				  atomicDecr numworkers
-				  waitloop
-       GRAPHLIFT waitloop
+       -- let waitloop = do num <- readHotVar numworkers
+       -- 	                 if num == 0
+       -- 			  then return () 
+       -- 			  else do readChan joiner -- A return message.
+       -- 				  atomicDecr numworkers
+       -- 				  waitloop
+       -- GRAPHLIFT waitloop
 
-       -- Here's a bit of a hack... we use IO to get the result out of
-       -- the continuation:
-       var <- GRAPHLIFT newEmptyMVar
-       let --k :: a -> StateOnly ContResult 
-	   k x = do GRAPHLIFT putMVar var x
-		    return ContResult
-       runContT finalAction k
-       result <- GRAPHLIFT readMVar var
-       return result
+       -- Wait till all workers complete.
+       GRAPHLIFT forM_ [1.. numCapabilities] $ \_ -> do readChan joiner
+							--putStrLn "    *** Got return token!"
 
--}
+       --cncPutStr$ " *** Workers returned, now finalize action:\n"
+       
+       finalAction			   
+#endif
+
+-- RRN: We need to suppress attempts the scheduling loop from starting
+-- right away inside the initialize action.  We don't want to start it
+-- till we've forker workers.  This *shouldnt* happen because gets are
+-- not supposed to be allowed in initialize... (need to enforce it
+-- though).
+initialize x = x
 
 
 reschedule :: StepCode a

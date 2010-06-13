@@ -71,7 +71,7 @@ issueReplacement =
 
      -- If this were CPS then we would just give our
      -- continuation to the forked thread.  Alas, no.
-#define PIN_THREADS
+-- #define PIN_THREADS
 #ifdef PIN_THREADS
 #warning "Experimenting with forkonIO rather than forkIO for spawning."
      STEPLIFT forkOnIO myid (makeworker myid)
