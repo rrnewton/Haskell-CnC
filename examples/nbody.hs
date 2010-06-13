@@ -31,6 +31,9 @@
   
 import System.Environment
 import Data.Int
+
+import GHC.Exts
+
 import qualified Data.List as List
 import qualified Data.Array as Array
 
@@ -43,10 +46,16 @@ genVector tag = (tag' * 1.0, tag' * 0.2, tag' * 30.0)
 -- Only doing the O(N^2) part in parallel:
 -- This step computes the accelerations of the bodies.       
 compute vecList accels tag =
-    do let myvector = vecList !! (tag-1)
+    do --let myvector = vecList !! (tag-1)
+       let myvector = vecList Array.! (tag-1)
        put accels tag (accel myvector vecList)
+       --put accels tag myvector
+       return ()
        where --vecList = elems vecArr
-	     accel vector vecList = multTriple g $ sumTriples $ List.map (pairWiseAccel vector) vecList
+             g = 9.8
+             multTriple c (x,y,z) = (c*x,c*y,c*z)
+             sumTriples = foldr (\(x,y,z) (x',y',z') -> (x+x',y+y',z+z')) (0,0,0)
+
              pairWiseAccel (x,y,z) (x',y',z') = let dx = x'-x
                                                     dy = y'-y
                                                     dz = z'-z
@@ -54,9 +63,28 @@ compute vecList accels tag =
                                                     distanceSq = dx^2 + dy^2 + dz^2 + eps
                                                     factor = 1/sqrt(distanceSq ^ 3)
                                                 in multTriple factor (dx,dy,dz)
-             sumTriples = foldr (\(x,y,z) (x',y',z') -> (x+x',y+y',z+z')) (0,0,0)
-             multTriple c (x,y,z) = (c*x,c*y,c*z)
-             g = 9.8
+
+#if 0
+	     accel vector vecList = multTriple g $ sumTriples $ List.map (pairWiseAccel vector) vecList
+#else
+-- Making this much leCss haskell like to avoid allocation:
+             (strt,end) = Array.bounds vecList
+             addTriples (x,y,z) (x',y',z') = (x+x',y+y',z+z')
+
+	     accel vector vecList = 
+		multTriple g $ 
+
+	        foldRange strt (end+1) (0,0,0) $ \ acc i ->                           
+		   addTriples acc (pairWiseAccel vector (vecList Array.! i))
+	       
+	        -- List.foldl' (\ acc i ->                           
+		-- 	      addTriples acc (pairWiseAccel vector (vecList Array.! i))
+		-- 	     )
+	  	--         (0,0,0) [strt .. end]
+
+-- multTriple g $ sumTriples $ List.map (pairWiseAccel vector) vecList
+
+#endif
 
 
 type Float3D = (Float, Float, Float)
@@ -70,8 +98,8 @@ run n = runGraph $
         do tags    <- newTagCol
            accels  <- newItemCol
 
-           --let initArr = array (0,n-1) [ (i, genVector i) | i <- [0..n-1] ]
-           let initVecs = List.map genVector [1..n]
+           let initVecs = Array.array (0,n-1) [ (i, genVector i) | i <- [0..n-1] ]
+           --let initVecs = List.map genVector [1..n]
 
            prescribe tags (compute initVecs accels)
 

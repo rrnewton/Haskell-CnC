@@ -9,10 +9,14 @@
 
 # For 6.13:
 
+# TOGGLE
+#GMAP=
+GMAP="-DUSE_GMAP"
+
 if [ "`ghc -V`" == "The Glorious Glasgow Haskell Compilation System, version 6.12.1" ];
-then GHC_DEFAULT_FLAGS=" -O2 -DUSE_GMAP "
+then GHC_DEFAULT_FLAGS=" -O2 $GMAP "
 #then GHC_DEFAULT_FLAGS=" "
-else GHC_DEFAULT_FLAGS=" -rtsopts -O2 -DUSE_GMAP "
+else GHC_DEFAULT_FLAGS=" -rtsopts -O2 $GMAP "
 fi
 
  # Affinity is pretty much always good.

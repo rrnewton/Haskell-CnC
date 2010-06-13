@@ -45,9 +45,13 @@ unset HASKELLCNC
 
 
   # Which subset of schedures should we test:
-PURESCHEDS="2"
-#IOSCHEDS="3"
-IOSCHEDS="3 4 5 6 7 8"
+PURESCHEDS="2 3"
+IOSCHEDS=""
+#IOSCHEDS="3 4 5 6 7 8"
+#IOSCHEDS="4 7 8 3"
+
+#SEPARATESCHEDS="6"
+SEPARATESCHEDS=""
 
 if [ "$THREADSETTINGS" == "" ] 
 then THREADSETTINGS="4"
@@ -201,6 +205,7 @@ function run_benchmark() {
 
      # This one is incorrect and nondeterministic:
      # export hashtab="-DHASHTABLE_TEST";  runit
+
    done # threads
    echo >> $RESULTS;
  done # schedulers
@@ -217,9 +222,11 @@ function run_benchmark() {
  # Finally, run once through separately compiled modules to compare performance (and make sure they build).
  # This will basically use the IO based implementation with the default scheduler.
  export CNC_VARIANT=separatemodule_io
- export CNC_SCHEDULER=6
- export NUMTHREADS=4
- runit
+ for sched in $SEPARATESCHEDS; do
+   export CNC_SCHEDULER=$sched
+   export NUMTHREADS=4
+   runit
+ done
 
  echo >> $RESULTS;
  echo >> $RESULTS;
@@ -253,7 +260,7 @@ function run_normal_benchmark() {
 #for line in  "par_seq_par_seq 8.5" "embarrassingly_par 9.2" "primes2 200000" "mandel 300 300 4000" "mandel_opt 1 300 300 4000" "sched_tree 18" "fib 20000" "threadring 50000000 503" "nbody 1200" "primes 200000"; do
 
 # Parallel benchmarks only:
-for line in  "par_seq_par_seq 8.5" "embarrassingly_par 9.2" "primes2 200000" "mandel 300 300 4000" "mandel_opt 1 300 300 4000" "sched_tree 18" "nbody 1200" "primes 200000"; do
+for line in  "par_seq_par_seq 8.5" "embarrassingly_par 9.2" "primes2 200000" "mandel 300 300 4000" "mandel_opt2 1 300 300 4000" "sched_tree 18" "nbody 1200" "primes 200000"; do
 
   run_normal_benchmark
 
