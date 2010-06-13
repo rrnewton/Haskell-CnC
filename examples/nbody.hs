@@ -39,6 +39,8 @@ import qualified Data.Array as Array
 
 #include "haskell_cnc.h"
 
+type Float3D = (Float, Float, Float)
+
 -- This step generates the bodies in the system.
 genVector tag = (tag' * 1.0, tag' * 0.2, tag' * 30.0)
    where tag' = fromIntegral tag
@@ -53,9 +55,11 @@ compute vecList accels tag =
        return ()
        where --vecList = elems vecArr
              g = 9.8
-             multTriple c (x,y,z) = (c*x,c*y,c*z)
-             sumTriples = foldr (\(x,y,z) (x',y',z') -> (x+x',y+y',z+z')) (0,0,0)
 
+             multTriple :: Float -> Float3D -> Float3D
+	     pairWiseAccel :: Float3D -> Float3D -> Float3D
+
+             multTriple c ( x,y,z ) = ( c*x,c*y,c*z )
              pairWiseAccel (x,y,z) (x',y',z') = let dx = x'-x
                                                     dy = y'-y
                                                     dz = z'-z
@@ -65,11 +69,14 @@ compute vecList accels tag =
                                                 in multTriple factor (dx,dy,dz)
 
 #if 0
+             sumTriples = foldr (\(x,y,z) (x',y',z') -> (x+x',y+y',z+z')) (0,0,0)
 	     accel vector vecList = multTriple g $ sumTriples $ List.map (pairWiseAccel vector) vecList
 #else
 -- Making this much leCss haskell like to avoid allocation:
              (strt,end) = Array.bounds vecList
              addTriples (x,y,z) (x',y',z') = (x+x',y+y',z+z')
+
+             addTriples :: Float3D -> Float3D -> Float3D
 
 	     accel vector vecList = 
 		multTriple g $ 
@@ -86,8 +93,6 @@ compute vecList accels tag =
 
 #endif
 
-
-type Float3D = (Float, Float, Float)
 
 -- This describes the graph-- The same tag collection prescribes the two step collections.             
 --run :: Int -> (b, c)
