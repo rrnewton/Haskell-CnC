@@ -43,12 +43,13 @@
 #export GHC=~/bin/Linux-i686/bin/ghc-6.13.20100511
 unset HASKELLCNC
 
-
   # Which subset of schedures should we test:
+#PURESCHEDS=""
 PURESCHEDS="2 3"
-IOSCHEDS=""
+#IOSCHEDS=""
 #IOSCHEDS="3 4 5 6 7 8"
-#IOSCHEDS="4 7 8 3"
+IOSCHEDS="4 7 8 3 10 100"
+#IOSCHEDS="10 100"
 
 #SEPARATESCHEDS="6"
 SEPARATESCHEDS=""
@@ -128,6 +129,7 @@ function runit()
   echo "  Running Config $cnt: $test variant $CNC_VARIANT sched $CNC_SCHEDULER threads $NUMTHREADS $hashtab"
   echo "--------------------------------------------------------------------------------"
   echo 
+  echo "(In directory `pwd`)"
   if [ "$NUMTHREADS" != "0" ] && [ "$NUMTHREADS" != "" ]
   then export RTS=" $GHC_DEFAULT_RTS -s -N$NUMTHREADS "
   else export RTS=""
@@ -198,7 +200,13 @@ function run_benchmark() {
    export CNC_SCHEDULER=$sched
    #for NUMTHREADS in 4; do
 
-   for NUMTHREADS in $THREADSETTINGS; do
+   # This one is serial right now:
+   if [ "$sched" == "100" ];  then 
+     NUMTHREADS=1
+     export hashtab=""
+     runit
+   else
+    for NUMTHREADS in $THREADSETTINGS; do
      # Running with the hashtable hack off:
      export hashtab=""
      runit
@@ -206,7 +214,8 @@ function run_benchmark() {
      # This one is incorrect and nondeterministic:
      # export hashtab="-DHASHTABLE_TEST";  runit
 
-   done # threads
+    done # threads
+   fi 
    echo >> $RESULTS;
  done # schedulers
 
@@ -260,7 +269,7 @@ function run_normal_benchmark() {
 #for line in  "par_seq_par_seq 8.5" "embarrassingly_par 9.2" "primes2 200000" "mandel 300 300 4000" "mandel_opt 1 300 300 4000" "sched_tree 18" "fib 20000" "threadring 50000000 503" "nbody 1200" "primes 200000"; do
 
 # Parallel benchmarks only:
-for line in  "par_seq_par_seq 8.5" "embarrassingly_par 9.2" "primes2 200000" "mandel 300 300 4000" "mandel_opt2 1 300 300 4000" "sched_tree 18" "nbody 1200" "primes 200000"; do
+for line in  "blackscholes 10000 15000000" "nbody 5000" "par_seq_par_seq 8.5" "embarrassingly_par 9.2" "primes2 200000" "mandel 300 300 4000" "mandel_opt2 1 300 300 4000" "sched_tree 18" "primes 200000"; do
 
   run_normal_benchmark
 

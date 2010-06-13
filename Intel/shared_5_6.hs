@@ -71,7 +71,13 @@ issueReplacement =
 
      -- If this were CPS then we would just give our
      -- continuation to the forked thread.  Alas, no.
+#define PIN_THREADS
+#ifdef PIN_THREADS
+#warning "Experimenting with forkonIO rather than forkIO for spawning."
+     STEPLIFT forkOnIO myid (makeworker myid)
+#else
      STEPLIFT forkIO (makeworker myid)
+#endif
 
 -- FIXME: [2010.05.05] I believe this has a problem.
 -- tryTakeMVar can fail spuriously if there's a collision with another
@@ -126,8 +132,12 @@ ver5_6_core_finalize joiner finalAction worker shouldWait numDesired joinerHook 
 #ifdef DEBUG_HASKELL_CNC
        GRAPHLIFT putStrLn$ "Forking "++ show numDesired ++" threads"
 #endif 
+#ifdef PIN_THREADS
+       GRAPHLIFT forM_ [0..numDesired-1] (\n -> forkOnIO n (mkwrkr n)) 
+#else
        GRAPHLIFT forM_ [0..numDesired-1] (\n -> forkIO (mkwrkr n)) 
-       --GRAPHLIFT forM_ [0..numDesired-1] (\n -> forkOnIO n (mkwrkr n)) 
+#endif
+
 
        -- This waits for quiescense BEFORE doing the final action
        let waitloop = do num <- readHotVar numworkers

@@ -53,6 +53,13 @@
 
 --------------------------------------------------------------------------------
 
+-- SCRATCH / Notes
+
+-- [2010.06.13] Getting thread-blocked-indefinitely on par_seq_par_seq
+
+
+--------------------------------------------------------------------------------
+
 type StateOnly a = (S.StateT (HiddenState5) IO a)
 
 type GraphCode a = StateOnly a
@@ -172,20 +179,18 @@ put (ItemCol icol) tag (!item) =
 #endif
 
 
-
+{-
 executeStep :: StepCode () -> StepCode ()
 executeStep step = 
   callCC $ \ escape -> 
     do S.lift$ S.modify (\r -> r { escapeCont = EC escape })
 --    do S.lift$ S.put (HiddenState5 undefined)
        step
-
+-}
 
 -- Remove the continuation monad
 runStep :: StepCode () -> StateOnly ()
 runStep m = do runContT m (\() -> return ContResult); return ()
-
---executeStep :: StepCode a -> StepCode a
 
 putt = proto_putt
 	(\ steps tag -> 
@@ -193,7 +198,6 @@ putt = proto_putt
               foldM (\ () step -> 
 		     STEPLIFT push stack (runStep $ step tag))
                        () steps)
-
 
 itemsToList = error "itemsolist unimplemented"
 graphInStep = C.lift

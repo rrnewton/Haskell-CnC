@@ -16,6 +16,7 @@
  - 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
  -
  -}
+{-# OPTIONS -fglasgow-exts #-}
 {-# LANGUAGE ExistentialQuantification
    , ScopedTypeVariables
    , BangPatterns
@@ -26,7 +27,6 @@
    , MagicHash 
   #-}
 -- This is INCOMPATIBLE with CncPure..
-{-#    OPTIONS -fglasgow-exts #-}
 
 -- Author: Chih-Ping Chen
 
