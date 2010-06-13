@@ -604,9 +604,9 @@ parSched2 graph inittags world =
        readIORef worldref
  
 
-
 runSomeSteps2 :: Graph -> Collections -> Int -> Chan NewTag -> Bundle () -> [PrimedStep] -> IO (Bundle ())
 runSomeSteps2 g w n c (rec @ B{..}) primed = 
+--runSomeSteps2 g w n c rec primed = let ( @ B{..}) = rec in
  case primed of 
   [] ->
     -- If we're over our limit, we stop even if there's work left.

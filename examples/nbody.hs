@@ -23,7 +23,10 @@
    , RecordWildCards
    , FlexibleInstances
    , DeriveDataTypeable
+   , MagicHash 
   #-}
+-- This is INCOMPATIBLE with CncPure..
+{-#    OPTIONS -fglasgow-exts #-}
 
 -- Author: Chih-Ping Chen
 
@@ -79,15 +82,9 @@ compute vecList accels tag =
 #else
 -- Making this much leCss haskell like to avoid allocation:
              (strt,end) = Array.bounds vecList
-             addTriples :: Float3D -> Float3D -> Float3D
-             addTriples (x,y,z) (x',y',z') = (x+x',y+y',z+z')
-
 
              accel :: Float3D -> (Array.Array Int Float3D) -> Float3D
 	     accel vector vecList = 
-
---                     foldRange strt (end+1) (0,0,0) $ \ (ax,ay,az) i -> 
---		       let (px,py,pz) = pairWiseAccel vector (vecList Array.! i)		    
 
              -- Manually inlining to see if the tuples unbox:
 	        let (# sx,sy,sz #) = loop strt 0 0 0
@@ -106,26 +103,6 @@ compute vecList accels tag =
 
 		       in loop (i+1) (ax+px) (ay+py) (az+pz)
 		in ( g*sx, g*sy, g*sz )
-
-
-
--- foldRange start end acc fn = loop start acc
---  where
---   loop !i !acc
---     | i == end = acc
---     | otherwise = loop (i+1) (fn acc i)
-
-
-
-                --------------------------------------------------------------------------------
-		-- multTriple g $ 			   
-	        -- List.foldl' (\ acc i ->                           
-		-- 	      addTriples acc (pairWiseAccel vector (vecList Array.! i))
-		-- 	     )
-	  	--         (0,0,0) [strt .. end]
-
--- multTriple g $ sumTriples $ List.map (pairWiseAccel vector) vecList
-
 #endif
 
 
