@@ -75,7 +75,7 @@ CAT=/bin/cat
 EXITCODE=0
 
  for ((i=1; i <= $N; i++)); do
-    # Stores the executable output:
+    # Stores just this one executable's output:
     TMP2=`mytempfile 2`
 
 # [2009.12.17] I need to get a good cross-platform process time-out system:
@@ -110,7 +110,20 @@ EXITCODE=0
     # If there was an error, we don't commit the output to $TMP1:
     if [ "$CODE" == "0" ];
     then echo "   Run $i of command succeeded" >> /dev/stderr
-         cat $TMP2 >> $TMP1
+
+	# SUPERHACK terrain... Here's a special symbol that the script can
+	# use to override the external timing and use internal timing
+	# mechinasms.
+	selftime=`grep SELFTIME $TMP2`
+	if [ "$selftime" != "" ]; then 
+	  echo "  +++ Executable appears self-timed!!:"  >> $MYOUT
+	  echo "$selftime"                               >> $MYOUT
+	  cat $TMP2 | grep -v "real" | sed 's/SELFTIMED/real/' >> $TMP1
+	else
+          cat $TMP2 >> $TMP1
+	fi
+
+
     # [2010.05.11] I used to just give warnings when not ALL of the trials failed:
     # This was for timing the nondeterministic hashtable hack:
     #else echo "Warning: run $i of command failed with code $CODE: $CMD" >> /dev/stderr
@@ -125,7 +138,7 @@ done;
   # Stores the times:
   TMP3=`mytempfile 3`
 
-  # Hack: this assumes the string "real" doesn't occur in the test output.
+  # HACK HACK: this assumes the string "real" doesn't occur in the test output.
   grep real $TMP1 | awk '{ print $1" "$2 }' | sort -n > $TMP3
 
   # Echo the final output to stdout:

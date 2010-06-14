@@ -87,7 +87,7 @@
 -- lower triangular matrix written to a text file cholesky_out if -v is specified. 
 
   
-import System.Environment
+
 import Data.Int
 import qualified Data.List as List
 import qualified Data.Array as Array
@@ -96,9 +96,20 @@ import Data.Array.IO
 import Data.Array.MArray
 import Debug.Trace
 import System.Posix.Files
+import System.Environment
+import System.IO
+
 import Control.DeepSeq
+import Data.Time.Clock -- Not in 6.10
 
 #include "haskell_cnc.h"
+
+timeit io = 
+    do strt <- getCurrentTime
+       io       
+       end  <- getCurrentTime
+       return (diffUTCTime end strt)
+
 
 type MutableArray = IOUArray  (Int, Int) Float
 type StaticArray = Array.Array (Int, Int) Float
@@ -110,7 +121,9 @@ kCompute p controlS1 tag =
 s1Compute :: ItemCol (Int, Int, Int) MutableArray -> Int -> Int -> StepCode ()
 s1Compute lkji b k = 
     do 
+       -- Read the tile:
        aBlock <- get lkji (k, k, k)
+       -- Write an output tile:
        put lkji (k, k, k+1) (s1Core aBlock b)
     where s1Core aBlock b = unsafePerformIO $ 
                             do lBlock <- newArray ((0,0), (b-1,b-1)) 0.0
@@ -193,10 +206,12 @@ s3Compute lkji b (k,j,i) | otherwise =
                                                    base2 <- readArray l1Block (ib,kb)
                                                    writeArray aBlock (ib,jb) (base1 + temp * base2)
 
+-- This populates the input-array item collection with tiles.
 initLkji :: StaticArray -> ItemCol (Int, Int, Int) MutableArray -> Int -> Int -> Int -> StepCode ()    
 initLkji arrA lkji n p b = 
     let buildTiles = [ put lkji (i, j, 0) (tile i j) | i <- [0..p-1], j <- [0..p-1] ]
-        tile i j = unsafePerformIO $ newListArray ((0,0),(b-1,b-1)) (tileList i j)
+	-- Create a mutable tile at the correct position:
+        tile i j = unsafePerformIO $ newListArray ((0,0),(b-1,b-1)) (tileList i j)       
         tileList i j = [ arrA Array.! (i * b + ii, j * b + jj) | ii <- [0..b-1], jj <-[0..b-1]]
     in sequence_ buildTiles   
     
@@ -223,7 +238,7 @@ run n b arrA =
         in
            runGraph $  
            do 
-              lkji     <- newItemCol
+              lkji     <- newItemCol -- Stores the array tiles.
               singleton <- newTagCol
               controlS1 <- newTagCol
               controlS2 <- newTagCol
@@ -252,20 +267,49 @@ main =
 -- cholesky 1000 50 m1000.in 4
 -- cholesky -v 6 2 m6.in
               []      -> ["6", "2", "cholesky_m6.in"]
-              []      -> ["1000", "50", "m1000.in"]
-              []      -> ["500", "50", "m500.in"]
+              ["medium"]   -> ["500", "50", "m500.in"]
+              ["big"]      -> ["1000", "50", "m1000.in"]
 	      [_,_,_] -> ls
        bool <- fileExist fname
        let fname' = if bool then fname else "examples/"++fname
 
-       arrA <- initMatrix (read n) fname'
+       ref <- newIORef undefined
+       let meaningless_write !val = writeIORef ref val
+
+       t1 <- getCurrentTime
+       putStrLn "Begin reading from disk..."
+       arrA <- initMatrix (read n) fname'             
+       let ((sx,sy),(ex,ey)) = Array.bounds arrA
+       for_ sx (ex+1) $ \i ->
+         for_ sy (ey+1) $ \j ->
+	     meaningless_write$ arrA Array.! (i,j)
+       t2 <- getCurrentTime
+       --deepseq arrA $ 
+       putStrLn $" ... ArrA read from disk: time " ++ show (diffUTCTime t2 t1)
+       hFlush stdout
 
        --putStrLn $ show $ arrA
-       putStrLn "Making sure evaluation of arrA is forced..."
-       case deepseq arrA arrA of _ -> putStrLn "Finished."
+       --putStrLn "Making sure evaluation of arrA is forced..."
+       --case deepseq arrA arrA of _ -> putStrLn "Finished."
 
        arrB <- return $ run (read n) (read b) arrA
-       putStrLn $ show $ [((i,j),arrB Array.! (i,j)) | i <-[0..(read n)-1], j<-[0..i]]
+       --putStrLn $ show $ [((i,j),arrB Array.! (i,j)) | i <-[0..(read n)-1], j<-[0..i]]
+
+       putStrLn "Making sure evaluation of arrB is forced..."
+       --putStrLn $ show $ [((i,j),arrB Array.! (i,j)) | i <-[0..(read n)-1], j<-[0..i]]
+       for_ 0 (read n) $ \i ->
+         for_ 0 i $ \j ->
+	    -- This first approach didn't work:
+	    --case arrB Array.! (i,j) of _ -> return ()
+	     meaningless_write$ arrB Array.! (i,j)
+       t3 <- case deepseq arrB arrB of _ -> getCurrentTime
+       putStrLn$ "Finished: eval time "++ show (diffUTCTime t3 t2)
+
+       putStrLn$ "SELFTIMED " ++ show ((fromRational $ toRational $ diffUTCTime t3 t2) :: Double)
+
+       val <- readIORef ref
+       putStrLn$ "Last value: " ++ show val
+
 
 initMatrix :: Int -> [Char] -> IO StaticArray
 initMatrix n fname = 

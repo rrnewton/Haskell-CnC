@@ -36,6 +36,8 @@
 -- probability of duplicating stolen work.
 -- #define REPEAT_PUT_ALLOWED
 
+-- [2010.06.13] If NOT memoizing... need to turn on REPEAT_PUT_ALLOWED for replay implementations.
+
 {-|
   This module implements the Intel Concurrent Collections (CnC) programming model.
   The variations of this module ("Intel.Cnc3", "Intel.Cnc5", "Intel.Cnc6", and "Intel.Cnc8")
