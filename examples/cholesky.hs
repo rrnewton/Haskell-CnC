@@ -314,5 +314,6 @@ main =
 initMatrix :: Int -> [Char] -> IO StaticArray
 initMatrix n fname = 
     do fs <- readFile fname
-       return $ Array.listArray ((0,0), (n-1, n-1)) (List.map read (words fs))
+       return $ Array.listArray ((0,0), (n-1, n-1)) 
+		                (List.cycle $ List.map read (words fs))
 	   

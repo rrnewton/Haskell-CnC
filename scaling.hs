@@ -8,6 +8,7 @@ import Data.List
 import Data.Function
 import Control.Monad
 import System
+import System.Environment
 
 import HSH
 
@@ -238,9 +239,20 @@ plot_benchmark2 root [io, pure] = action (io ++ pure)
  where 
   benchname = name $ head $ head io 
   -- What was the best single-threaded execution time across variants/schedulers:
-  basetime = foldl1 min $ map (\x -> tmed x / normfactor x) $
-	     filter ((== 0) . threads) $
-	     (concat io ++ concat pure)
+  times0 = map (\x -> tmed x / normfactor x) $
+	   filter ((== 0) . threads) $
+	   (concat io ++ concat pure)
+
+  times1 = map (\x -> tmed x / normfactor x) $
+	   filter ((== 0) . threads) $
+	   (concat io ++ concat pure)
+
+  basetime = if not$ null times0 
+	     then foldl1 min times0
+	     else if not$ null times1 
+		  then foldl1 min times1
+		  else error$ "For benchmark "++ show benchname ++ " could not find either 1-thread or 0-thread run." 
+
   (filebase,_) = break (== '.') $ basename benchname 
 
   -- If all normfactors are the default 1.0 we print a different message:
@@ -314,7 +326,11 @@ plot_benchmark2 root [io] = plot_benchmark2 root [io,[]]
 isMatch rg str = case matchRegex rg str of { Nothing -> False; _ -> True }
 
 main = do 
- dat <- run$ catFrom ["results.dat"] -|- remComments "#" 
+ args <- getArgs 
+ let file = case args of 
+	      [f] -> f 
+	      []     -> "results.dat"
+ dat <- run$ catFrom [file] -|- remComments "#" 
 
 -- let parsed = map (parse . filter (not (== "")) . splitRegex (mkRegex "[ \t]+")) 
  let parsed = map (parse . filter (not . (== "")) . splitRegex (mkRegex "[ \t]+")) 
@@ -332,7 +348,9 @@ main = do
  -- putStrLn$ show (pPrint (map length chopped))
  -- putStrLn$ show (pPrint (map parse chopped))
 
+{- 
  putStrLn$ renderStyle (style { lineLength=150 }) (pPrint organized)
+ -}
 
  --Plot.plot X11.cons myoverlay
  --Simple.plotList [Simple.LineStyle 0 [Simple.LineTitle "foobar"]] [0,5..100]
