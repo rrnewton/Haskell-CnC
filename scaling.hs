@@ -44,6 +44,11 @@ import Data.Monoid (mappend, )
 
 import Debug.Trace
 
+
+-- linewidth = "4.0"
+linewidth = "5.0"
+
+
 {-
 --import qualified Graphics.Gnuplot.LineSpecification as LineSpec
 
@@ -239,19 +244,23 @@ plot_benchmark2 root [io, pure] = action (io ++ pure)
  where 
   benchname = name $ head $ head io 
   -- What was the best single-threaded execution time across variants/schedulers:
-  times0 = map (\x -> tmed x / normfactor x) $
-	   filter ((== 0) . threads) $
-	   (concat io ++ concat pure)
 
-  times1 = map (\x -> tmed x / normfactor x) $
-	   filter ((== 0) . threads) $
-	   (concat io ++ concat pure)
+  cat = concat io ++ concat pure
+  threads0 = filter ((== 0) . threads) cat
+  threads1 = filter ((== 1) . threads) cat
 
-  basetime = if not$ null times0 
+  map_normalized_time = map (\x -> tmed x / normfactor x)
+
+  times0 = map_normalized_time threads0
+  times1 = map_normalized_time threads1
+
+  basetime = if    not$ null times0 
 	     then foldl1 min times0
-	     else if not$ null times1 
+	     else if    not$ null times1 
 		  then foldl1 min times1
-		  else error$ "For benchmark "++ show benchname ++ " could not find either 1-thread or 0-thread run." 
+		  else error$ "\nFor benchmark "++ show benchname ++ " could not find either 1-thread or 0-thread run.\n" ++
+		              --"ALL entries: "++ show (pPrint cat) ++"\n"
+		              "\nALL entries threads: "++ show (map threads cat)
 
   (filebase,_) = break (== '.') $ basename benchname 
 
@@ -310,7 +319,7 @@ plot_benchmark2 root [io, pure] = action (io ++ pure)
 
 	  let comma = if i == length lines then "" else ",\\"
 	  runIO$ echo ("   \""++ basename datfile ++
-		       "\" using 1:2 with lines linewidth 4.0 lt "++ show i ++" title \""++nickname++"\" "++comma++"\n")
+		       "\" using 1:2 with lines linewidth "linewidth" lt "++ show i ++" title \""++nickname++"\" "++comma++"\n")
 		   -|- appendTo scriptfile
 
       --putStrLn$ "Finally, running gnuplot..."
