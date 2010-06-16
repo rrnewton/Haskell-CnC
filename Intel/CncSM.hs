@@ -19,7 +19,12 @@ newTagCol  = C.liftIO $ do
 
 data Sched = Sched 
     { workpool :: HotVar [StepCode ()],
-      threads :: HotVar (Set.Set ThreadId)
+      myid :: Int,
+
+      -- Only used in Sched 11:
+      deques :: Array.Array Int (HotVar (Seq.Seq (StepCode ())))
+
+      --threads :: HotVar (Set.Set ThreadId)
      }
   deriving Show
 
@@ -30,10 +35,18 @@ type GraphCode a = StepCode a
 
 runGraph x = unsafePerformIO $ do
   pool <- newHotVar []
-  threads <- newHotVar Set.empty
+  -- threads <- newHotVar Set.empty
+  dvars <- forM [1..numCapabilities] $ \_ -> newHotVar Seq.empty
+--  let deques = Array.listArray (0,numCapabilities-1) (repeat Seq.empty)
+  let deques = Array.listArray (0,numCapabilities-1) dvars
+
   r <- newIORef (error "Uninitialized graph result read prematurely")
   R.runReaderT (C.runContT x (C.liftIO . writeIORef r)) 
-               (Sched { workpool=pool, threads=threads })
+               (Sched { workpool=pool, 
+			--threads=threads,
+			deques=deques,
+			myid = -1
+		      })
   readIORef r
 
 type M r a = C.ContT r (R.ReaderT Sched IO) a
@@ -72,7 +85,7 @@ get col tag =
 finalize finalAction = 
     do joiner <- GRAPHLIFT newChan 
        --(state1 @ HiddenState5 { stack, numworkers, myid }) <- S.get						      
-       (state @ Sched { workpool, threads }) <- R.ask
+       (state @ Sched { workpool }) <- R.ask
 
        -- This is a little redundant... the reschedule loop will keep track of terminating when the queue goes empty.
        let worker :: Int -> GraphCode () = \id ->
@@ -104,8 +117,9 @@ finalize finalAction =
 
        -- Fork one worker per thread:
        -- For this version there's no way PIN_THREADS could be bad:
+       -- FIXING it for now:
+#if 1
        -- #ifdef PIN_THREADS
-#if PIN
        GRAPHLIFT forM_ [0..numCapabilities-1] (\n -> forkOnIO n (worker_io n)) 
 #else
        GRAPHLIFT forM_ [0..numCapabilities-1] (\n -> forkIO (worker_io n)) 

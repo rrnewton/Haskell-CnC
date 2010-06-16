@@ -135,6 +135,8 @@ import qualified Data.Set as Set
 import qualified Data.HashTable as HT
 import qualified Data.Map as Map
 import qualified System.Posix
+import qualified Data.Sequence as Seq
+import qualified Data.Array as Array
 
 import Data.Int
 import Data.IORef
