@@ -63,8 +63,9 @@ initialize initAction =
      -- Just for hygiene clear it:
      C.liftIO$ writeHotVar (workpool Array.! 0) Seq.empty
 
+     -- We take one of the pieces of work ourselves (worker 0)
      let segs = splitSeq numCapabilities initdeque
-     C.liftIO$ forM_ (zip [1..] $ segs) $ \ (id,seq) -> 
+     C.liftIO$ forM_ (zip [0..] $ segs) $ \ (id,seq) -> 
        modifyHotVar_ (workpool Array.! id) $ \ olddeq -> 
          if not$ Seq.null olddeq
 	 then error$ "Worker's deque ("++ show id ++") was not empty at initialization, size: "++ show (Seq.length olddeq)
@@ -89,8 +90,9 @@ splitSeq pieces seq = all
 
 finalize finalAction = 
   proto_finalize $ \ joiner -> do
-       result <- finalAction			   
        Sched { killflag } <- R.ask
+       result <- finalAction			   
+       stepPutStr$ "Finished final action, now killing...\n"
        C.liftIO$ writeIORef killflag True
        -- Optional, wait till all workers complete also:
        --GRAPHLIFT forM_ [1.. numCapabilities] $ \_ -> readChan joiner
