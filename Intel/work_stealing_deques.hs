@@ -1,62 +1,12 @@
 -----------------------------------------------------------------------------
 -- Work stealing DEQUES 
 -----------------------
+
 -- To be included in other files:
 -----------------------------------------------------------------------------
 
-data Sched = Sched 
-    { workpool :: Array.Array Int (HotVar (Seq.Seq (StepCode ()))),
-      randoms :: Array.Array Int (IORef Random.StdGen),
-      myid :: Int
-     }
---  deriving Show
-
-defaultState = do
-  dvars <- forM [0..numCapabilities] $ \_ -> newHotVar Seq.empty
-  let randoms = Array.listArray (0,numCapabilities) [ Random.mkStdGen id | id <- [0..numCapabilities ]]
-  rands <- sequence [ newIORef (Random.mkStdGen id) | id <- [0..numCapabilities ]]
-  let randoms = Array.listArray (0,numCapabilities) rands
-  let deques  = Array.listArray (0,numCapabilities) dvars
-  return$ Sched { workpool= deques, 
-		  randoms = randoms,
-		  myid = 0 -- The scheduler thread.
-		}
-
 pushWork :: StepCode () -> StepCode ()
 popWork  :: R.ReaderT Sched IO (Maybe (StepCode ()))
-
--- One option here is that at the end of the initialize action, stripe
--- the work across dequeus.  Another option to accomplish the same
--- work-sharing effect is to round-robin distribute the work when a
--- push is done from the scheduler thread running "initialize".
-initialize initAction = 
-  do initAction
-     Sched { workpool }  <- R.ask
-     -- Read the deque of the scheduler thread.  No parallelism yet so don't worry about atomicity:
-     initdeque <- C.liftIO$ readHotVar (workpool Array.! 0) 
-     let segs = splitSeq numCapabilities initdeque
-     C.liftIO$ forM_ (zip [1..] $ segs) $ \ (id,seq) -> 
-       modifyHotVar_ (workpool Array.! id) $ \ olddeq -> 
-         if not$ Seq.null olddeq
-	 then error$ "Worker's deque ("++ show id ++") was not empty at initialization, size: "++ show (Seq.length olddeq)
-	 else seq
-     stepPutStr$ " +++ FINISHED DISSEMINATING " ++ show (Seq.length initdeque) ++ " initial units of work!: "
-		 ++ show (map Seq.length segs) ++ "\n"
-
-
-splitSeq :: Int -> Seq.Seq a -> [Seq.Seq a]
-splitSeq pieces seq = all
-  where 
-   (all, _)     = loop portion (pieces-remain) seq' bigs
-   (bigs, seq') = loop (portion+1) remain seq []
-
-   len = Seq.length seq
-   (portion, remain) = len `quotRem` pieces
-   loop block 0 seq acc = ( acc, seq )
-   loop block n seq acc = 
-      let (hd,tl) = Seq.splitAt block seq 
-      in loop block (n-1) tl (hd:acc)
-
 	 
 -- Or... we could just make stealing do everything.  But work-sharing
 -- is probably worthwhile here, because so many of our benchmarks dump a load of tags at the beginning.
@@ -74,7 +24,7 @@ pushWork something =
 
 popWork = do 
   -- First get the state, including array of deques
-  Sched { workpool, randoms, myid }  <- R.ask
+  Sched { workpool, randoms, killflag, myid }  <- R.ask
 
   let mydeque = workpool Array.! myid  
       myrandom = randoms Array.! myid  
@@ -108,12 +58,15 @@ popWork = do
 	case stolen of 
 	  Seq.EmptyL -> 
 	     -- After every failed steal, check to see if we should terminate.
-	     do if False 
-		 then undefined 
-		 else do putStrLn$ " +++    -> Steal failed."
-		         return Nothing
---		 else stealLoop
-	  (x  Seq.:<  _) -> return (Just x)
+	     do killed <- readIORef killflag
+		if killed
+		 then return Nothing
+		 else do putStrLn$ " +++    -> Steal failed, thief = " ++ show myid
+                         stealLoop
+	  (x  Seq.:<  rest) -> 
+	      do putStrLn$ " +++    STOLEN successfully, victim "++ show victim'++ " thief " 
+			   ++ show myid ++ " victim had left: "++ show (Seq.length rest)
+		 return (Just x)
 
   -- Try to get work from our local dequeue, read from the right:
   mine <- C.liftIO$ hotVarTransaction $ do 
@@ -128,16 +81,6 @@ popWork = do
   case mine of 
     Seq.EmptyR -> C.liftIO$ stealLoop
     (_  Seq.:> x) -> return (Just x)
-
-  -- -- If not, then pick a victim and steal.
-  --  hotVarTransaction $ do 
-  -- xs <- readHotVarRaw v
-  -- case xs of
-  --   [] -> return Nothing
-  --   x:xs' -> do
-  --     writeHotVarRaw v xs'
-  --     return (Just x)
-
 
 
 -----------------------------------------------------------------------------

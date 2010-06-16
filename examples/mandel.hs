@@ -44,14 +44,16 @@ mandelProg max_row max_col max_depth =
        pixel    :: ItemCol Pair Int              <- newItemCol
        
        let mandelStep tag = 
-	    do cplx <- get dat tag
+	    do tid <- stepUnsafeIO myThreadId
+	       stepPutStr$ "["++ show tid ++"] Mandel Step executing: "++ show tag ++ "\n"
+	       cplx <- get dat tag
 	       put pixel tag (mandel max_depth cplx)
 
        position :: TagCol  Pair <- prescribeNT [mandelStep] 
 
        initialize $ 
-        forM_ [0..max_row] $ \i -> 
-         forM_ [0..max_col] $ \j ->
+        forM_ [0..max_row-1] $ \i -> 
+         forM_ [0..max_col-1] $ \j ->
           let (_i,_j) = (fromIntegral i, fromIntegral j)
 	      z = (r_scale * (fromIntegral j) + r_origin) :+ 
   		  (c_scale * (fromIntegral i) + c_origin) in
@@ -82,5 +84,7 @@ runMandel a b c =
 
 main = do args <- getArgs  
 	  case args of
-	   []      -> runMandel 3 3 3   -- Should output 24.
+	   []      -> runMandel 2 2 100 
+--	   []      -> runMandel 4 4 3   -- Should output 24.
+--	   []      -> runMandel 3 3 3
 	   [a,b,c] -> runMandel (read a) (read b) (read c)

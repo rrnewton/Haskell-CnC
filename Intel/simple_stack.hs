@@ -3,21 +3,6 @@
 -- To be included in other files:
 -----------------------------------------------------------------------------
 
-data Sched = Sched 
-    { workpool :: HotVar [StepCode ()],
-      myid :: Int
-    }
-  deriving Show
-
-defaultState = do
-  pool <- newHotVar []
-  return$ Sched { workpool=pool, myid = -999 }
-
------------------------------------------------------------------------------
-
---pushWork :: HotVar [a] -> a -> StepCode ()
---popWork  :: HotVar [a] -> R.ReaderT Sched IO (Maybe a)
-
 pushWork :: StepCode () -> StepCode ()
 popWork  :: R.ReaderT Sched IO (Maybe (StepCode ()))
 

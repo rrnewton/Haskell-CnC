@@ -47,8 +47,6 @@ pushSteps steps tag = do
 -- get :: ItemCol k v -> k -> StepCode v
 get col tag =
   mycallCC $ \cont -> do
-
--- Breaking the abstraction here so that we can take special advantage of TVars:
     r <- C.liftIO $ hotVarTransaction $ do 
       m <- readHotVarRaw col
       case Map.lookup tag m of
@@ -63,10 +61,10 @@ get col tag =
     r
 
 -- finalize :: StepCode a -> GraphCode a
-finalize finalAction = 
+proto_finalize finalAction = 
     do joiner <- GRAPHLIFT newChan 
        --(state1 @ HiddenState5 { stack, numworkers, myid }) <- S.get						      
-       (state @ Sched { workpool }) <- R.ask
+       (state) <- R.ask
 
        -- This is a little redundant... the reschedule loop will keep track of terminating when the queue goes empty.
        let worker :: Int -> GraphCode () = \id ->
@@ -90,7 +88,7 @@ finalize finalAction =
 					         GRAPHLIFT writeChan joiner n
 					         return x))
 			              (Sched stack threads)
-       -}
+				      -}
 
        --cncPutStr$ " *** Forking workers.\n"
 
@@ -119,12 +117,8 @@ finalize finalAction =
        -- 				  waitloop
        -- GRAPHLIFT waitloop
 
-       -- Wait till all workers complete.
-       GRAPHLIFT forM_ [1.. numCapabilities] $ \_ -> readChan joiner
 
-       --cncPutStr$ " *** Workers returned, now finalize action:\n"
-       
-       finalAction			   
+       finalAction joiner
 
 
 -- RRN: We need to suppress attempts the scheduling loop from starting
@@ -157,7 +151,5 @@ put col tag (!item) = do
       Just (Left v) -> error$ "multiple put at tag "++ show tag
       Just (Right steps) -> return steps
   pushSteps steps item
-
-quiescence_support=False
 
 itemsToList = error "itemstolist not implemented yet for this scheduler" -- XXX
