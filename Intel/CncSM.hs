@@ -9,7 +9,7 @@
 -- XXX: make TagCol/ItemCol proper data types
 type TagCol  a   = (IORef (Set.Set a), IORef [Step a])
 -- Taking specific advantage of TVars in this implementation:
-type ItemCol a b = TVar (Map.Map a (Either b [Step b]))
+type ItemCol a b = HotVar (Map.Map a (Either b [Step b]))
 
 newItemCol = C.liftIO $ newHotVar Map.empty
 newTagCol  = C.liftIO $ do
@@ -49,23 +49,27 @@ pushSteps steps tag = do
 get col tag =
   mycallCC $ \cont -> do
 
-    -- Leaving this FIXED as TVars so that we can do more within one "atomically"
+-- Breaking the abstraction here so that we can take special advantage of TVars:
+#if HOTVAR == 3
     r <- C.liftIO $ atomically $ do 
       m <- readTVar col
+#define TMPWRITEVAR writeTVar
+#else
+    r <- C.liftIO $ do 
+      m <- readHotVar col
+#define TMPWRITEVAR writeHotVar
+#endif
       case Map.lookup tag m of
         Nothing -> do
-           writeTVar col $! Map.insert tag (Right [cont]) m
+           TMPWRITEVAR col $! Map.insert tag (Right [cont]) m
            return reschedule
         Just (Left v) -> return (cont v)
         Just (Right steps) -> do
-           writeTVar col $! Map.insert tag (Right (cont:steps)) m
+           TMPWRITEVAR col $! Map.insert tag (Right (cont:steps)) m
            return reschedule
     r
 
 -- finalize :: StepCode a -> GraphCode a
-#if 0
-finalize x = x -- XXX
-#else
 finalize finalAction = 
     do joiner <- GRAPHLIFT newChan 
        --(state1 @ HiddenState5 { stack, numworkers, myid }) <- S.get							      
@@ -101,7 +105,7 @@ finalize finalAction =
        -- Fork one worker per thread:
        -- For this version there's no way PIN_THREADS could be bad:
        -- #ifdef PIN_THREADS
-#if 1 
+#if PIN
        GRAPHLIFT forM_ [0..numCapabilities-1] (\n -> forkOnIO n (worker_io n)) 
 #else
        GRAPHLIFT forM_ [0..numCapabilities-1] (\n -> forkIO (worker_io n)) 
@@ -129,7 +133,7 @@ finalize finalAction =
        --cncPutStr$ " *** Workers returned, now finalize action:\n"
        
        finalAction			   
-#endif
+
 
 -- RRN: We need to suppress attempts the scheduling loop from starting
 -- right away inside the initialize action.  We don't want to start it
@@ -152,11 +156,20 @@ rescheduleR _ = do
 
 -- put  :: ItemCol k v -> k -> v  -> StepCode ()
 put col tag (!item) = do
+#if HOTVAR == 3
   steps <- C.liftIO $ atomically $ do
     m <- readTVar col
+#else
+  steps <- C.liftIO $ do
+    m <- readHotVar col
+#endif
     let !(mb_old, new) = Map.insertLookupWithKey 
                             (\_ new _ -> new) tag (Left item) m
+#if HOTVAR == 3
     writeTVar col $! new
+#else
+    writeHotVar col $! new
+#endif
     case mb_old of
       Nothing -> return []
       Just (Left v) -> error "multiple put"

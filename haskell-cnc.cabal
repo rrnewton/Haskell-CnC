@@ -51,7 +51,9 @@ library
                     examples/embarrassingly_par.hs examples/fib.hs examples/nbody.hs
                     Intel/Cnc.Header.hs Intel/shared_5_6.hs 
                     Intel/CncUtil.hs
-                    Intel/Cnc.hs Intel/CncPure.hs Intel/Cnc3.hs Intel/Cnc5.hs Intel/Cnc6.hs Intel/Cnc8.hs
+                    Intel/Cnc.hs Intel/CncPure.hs Intel/Cnc3.hs Intel/Cnc4.hs Intel/Cnc5.hs Intel/Cnc6.hs Intel/Cnc7.hs
+                    Intel/Cnc8.hs Intel/Cnc10.hs
+		    
 
   -- This seems to be completly ignored by cabal currently:
   -- Test testit
