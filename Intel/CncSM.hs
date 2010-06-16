@@ -28,7 +28,7 @@ type GraphCode a = StepCode a
 runGraph x = unsafePerformIO $ do
   stack <- newHotVar []
   threads <- newHotVar Set.empty
-  r <- newIORef undefined
+  r <- newIORef (error "Uninitialized graph result read prematurely")
   R.runReaderT (C.runContT x (C.liftIO . writeIORef r)) (Sched stack threads)
   readIORef r
 
@@ -50,29 +50,22 @@ get col tag =
   mycallCC $ \cont -> do
 
 -- Breaking the abstraction here so that we can take special advantage of TVars:
-#if HOTVAR == 3
-    r <- C.liftIO $ atomically $ do 
-      m <- readTVar col
-#define TMPWRITEVAR writeTVar
-#else
-    r <- C.liftIO $ do 
-      m <- readHotVar col
-#define TMPWRITEVAR writeHotVar
-#endif
+    r <- C.liftIO $ hotVarTransaction $ do 
+      m <- readHotVarRaw col
       case Map.lookup tag m of
         Nothing -> do
-           TMPWRITEVAR col $! Map.insert tag (Right [cont]) m
+           writeHotVarRaw col $! Map.insert tag (Right [cont]) m
            return reschedule
         Just (Left v) -> return (cont v)
         Just (Right steps) -> do
-           TMPWRITEVAR col $! Map.insert tag (Right (cont:steps)) m
+           writeHotVarRaw col $! Map.insert tag (Right (cont:steps)) m
            return reschedule
     r
 
 -- finalize :: StepCode a -> GraphCode a
 finalize finalAction = 
     do joiner <- GRAPHLIFT newChan 
-       --(state1 @ HiddenState5 { stack, numworkers, myid }) <- S.get							      
+       --(state1 @ HiddenState5 { stack, numworkers, myid }) <- S.get						      
        Sched stack threads <- R.ask
 
        -- This is a little redundant... the reschedule loop will keep track of terminating when the queue goes empty.
@@ -156,26 +149,17 @@ rescheduleR _ = do
 
 -- put  :: ItemCol k v -> k -> v  -> StepCode ()
 put col tag (!item) = do
-#if HOTVAR == 3
-  steps <- C.liftIO $ atomically $ do
-    m <- readTVar col
-#else
-  steps <- C.liftIO $ do
-    m <- readHotVar col
-#endif
+  steps <- C.liftIO $ hotVarTransaction $ do
+    m <- readHotVarRaw col
     let !(mb_old, new) = Map.insertLookupWithKey 
                             (\_ new _ -> new) tag (Left item) m
-#if HOTVAR == 3
-    writeTVar col $! new
-#else
-    writeHotVar col $! new
-#endif
+    writeHotVarRaw col $! new
     case mb_old of
       Nothing -> return []
-      Just (Left v) -> error "multiple put"
+      Just (Left v) -> error$ "multiple put at tag "++ show tag
       Just (Right steps) -> return steps
   pushSteps steps item
 
 quiescence_support=False
 
-itemsToList = undefined -- XXX
+itemsToList = error "itemstolist not implemented yet for this scheduler" -- XXX

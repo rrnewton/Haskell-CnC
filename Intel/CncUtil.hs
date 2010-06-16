@@ -41,6 +41,7 @@ module Intel.CncUtil (
 
                       MutableMap, newMutableMap, assureMvar, mmToList,
 		      HotVar, newHotVar, readHotVar, writeHotVar, modifyHotVar, modifyHotVar_, 
+		      hotVarTransaction, readHotVarRaw, writeHotVarRaw,
 
                       ChoosePairRepr, 
                       ChooseRepr, 
@@ -255,6 +256,10 @@ writeHotVar   = writeIORef
 instance Show (IORef a) where 
   show ref = "<ioref>"
 
+hotVarTransaction = id
+readHotVarRaw  = readHotVar
+writeHotVarRaw = writeHotVar
+
 #elif HOTVAR == 2 
 #warning "Using MVars for hot atomic variables."
 -- This uses MVars that are always full with *something*
@@ -266,6 +271,12 @@ readHotVar    = readMVar
 writeHotVar v x = do swapMVar v x; return ()
 instance Show (MVar a) where 
   show ref = "<mvar>"
+
+hotVarTransaction = id
+readHotVarRaw  = readHotVar
+writeHotVarRaw = writeHotVar
+
+
 #elif HOTVAR == 3
 #warning "Using TVars for hot atomic variables."
 -- Simon Marlow said he saw better scaling with TVars (surprise to me):
@@ -280,6 +291,11 @@ readHotVar x = atomically $ readTVar x
 writeHotVar v x = atomically $ writeTVar v x
 instance Show (TVar a) where 
   show ref = "<tvar>"
+
+hotVarTransaction = atomically
+readHotVarRaw  = readTVar
+writeHotVarRaw = writeTVar
+
 #endif
 
 instance Show (IO a) where 
@@ -809,16 +825,16 @@ class GMapKeyVal k v where
 -- [2010.05.19] TEMPTOGGLE uncommenting to compile on laptop:
 {-
 instance FitInWord t => J.JE t where
-  toWord   = undefined
-  fromWord = undefined
+  toWord   = 
+  fromWord = 
 
 -- If we know a little more, use the Judy version:
 instance (FitInWord k, J.JE v) => GMapKeyVal k v where
   data GMap2 k v           = GMapInt2 (J.JudyL v) 
   empty2  = do x <- J.new 
 	       return $ GMapInt2 x
-  lookup2 = undefined
-  insert2 = undefined
+  lookup2 = 
+  insert2 = 
   -- empty2                   = do x <- J.new
   -- 				return $ GMapInt2 x
   -- lookup2 k   (GMapInt2 r) = do m <- readIORef r
