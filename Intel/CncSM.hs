@@ -1,30 +1,7 @@
-{-# LANGUAGE FlexibleInstances
-  , BangPatterns
-  , MagicHash 
-  , ScopedTypeVariables
-  , DeriveDataTypeable
-  , MultiParamTypeClasses
-  , RankNTypes
-  #-}
--- We don't need to lift through a monad transformer for the step or
--- graph monads in this implementation:
-#ifndef MODNAME
-#define MODNAME Intel.CncSM
-#endif
-#define CNC_SCHEDULER 100
-#define STEPLIFT  C.liftIO$ R.liftIO$
-#define GRAPHLIFT C.liftIO$ R.liftIO$
 
-#define SUPPRESS_put
-#define SUPPRESS_newItemCol
-#define SUPPRESS_newTagCol
-#define SUPPRESS_itemsToList
-#define SUPPRESS_runGraph
-#define SUPPRESS_initialize
-
-#include "Cnc.Header.hs"
-
-#warning "Loading Scheduler 100"
+--------------------------------------------------------------------------------------------
+-- Currently this file is #included to mix it with different data structure implementations:
+--------------------------------------------------------------------------------------------
 
 -- XXX: make TagCol/ItemCol proper data types
 type TagCol  a   = (IORef (Set.Set a), IORef [Step a])
@@ -55,22 +32,6 @@ type M r a = C.ContT r (R.ReaderT Sched IO) a
 
 mycallCC :: ((forall b . a -> M r b) -> M r a) -> M r a
 mycallCC f = C.ContT $ \c -> C.runContT (f (\a -> C.ContT $ \_ -> c a)) c
-
------------------------------------------------------------------------------
-type Var a = TVar a
-
-push :: Var [a] -> a -> IO ()
-push v a = atomically $ do xs <- readTVar v; writeTVar v (a:xs)
-
-pop :: Var [a] -> IO (Maybe a)
-pop v = atomically $ do 
-  xs <- readTVar v
-  case xs of
-    [] -> return Nothing
-    x:xs' -> do
-      writeTVar v xs'
-      return (Just x)
------------------------------------------------------------------------------
 
 -- putt :: TagCol  tag -> tag -> StepCode ()
 putt = proto_putt $ \ steps tag -> pushSteps steps tag
