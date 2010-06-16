@@ -3,6 +3,9 @@
 -- Currently this file is #included to mix it with different data structure implementations:
 --------------------------------------------------------------------------------------------
 
+-- Author: Simon Marlow
+-- Modified and extended by Ryan Newton
+
 -- XXX: make TagCol/ItemCol proper data types
 type TagCol  a   = (IORef (Set.Set a), IORef [Step a])
 type ItemCol a b = TVar (Map.Map a (Either b [Step b]))

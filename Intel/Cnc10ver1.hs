@@ -12,12 +12,13 @@
 -- , ImpredicativeTypes   
 --   , Rank2Types
 -- State monad transformer is needed for both step & graph:
+-- Continuations are only needed for StepCode:
 #ifndef MODNAME
 #define MODNAME Intel.Cnc10
 #endif
 #define CNC_SCHEDULER 10
 
-#define STEPLIFT  S.lift$ S.lift$
+#define STEPLIFT  C.lift$ S.lift$
 #define GRAPHLIFT S.lift$
 
 #define SUPPRESS_runGraph
