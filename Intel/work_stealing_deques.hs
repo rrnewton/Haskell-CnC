@@ -3,6 +3,22 @@
 -----------------------------------------------------------------------------
 
 
+data Sched = Sched 
+    { workpool :: Array.Array Int (HotVar (Seq.Seq (StepCode ()))),
+      myid :: Int
+     }
+  deriving Show
+
+
+defaultState = do
+  dvars <- forM [1..numCapabilities] $ \_ -> newHotVar Seq.empty
+  let deques = Array.listArray (0,numCapabilities-1) dvars
+  return$ Sched { workpool= deques, 
+		  myid = -999
+		}
+
+
+#if 0
 pushWork :: HotVar [a] -> a -> StepCode ()
 popWork  :: HotVar [a] -> R.ReaderT Sched IO (Maybe a)
 
@@ -21,19 +37,19 @@ popWork v =
          writeHotVarRaw v xs'
          return (Just x)
 
+#else
 
-
-
+-----------------------------------------------------------------------------
 -- To be included in other files:
 -----------------------------------------------------------------------------
 
-pushWork :: HotVar [a] -> a -> IO ()
-popWork :: HotVar [a] -> IO (Maybe a)
+pushWork :: HotVar [a] -> a -> StepCode ()
+popWork  :: HotVar [a] -> R.ReaderT Sched IO (Maybe a)
 
 pushWork v a =
   -- First get the state, including array of deques
-  do Sched _ _ _  <- R.ask
-     let mydeque = dequeues Array.! myid
+  do Sched { myid, deques }  <- R.ask
+     --let mydeque = dequeues Array.! myid
      -- Add to my dequeue
      hotVarTransaction $ 
       do xs <- readHotVarRaw v; 
@@ -55,5 +71,7 @@ popWork v = do
       return (Just x)
 
   -- After every failed steal, check to see if we should terminate.
+
+#endif
 
 -----------------------------------------------------------------------------

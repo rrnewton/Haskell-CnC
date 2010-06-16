@@ -17,16 +17,7 @@ newTagCol  = C.liftIO $ do
   steps <- newIORef []
   return (tags,steps)
 
-data Sched = Sched 
-    { workpool :: HotVar [StepCode ()],
-      myid :: Int,
 
-      -- Only used in Sched 11:
-      deques :: Array.Array Int (HotVar (Seq.Seq (StepCode ())))
-
-      --threads :: HotVar (Set.Set ThreadId)
-     }
-  deriving Show
 
 type ReaderOnly = R.ReaderT Sched IO
 
@@ -34,19 +25,9 @@ type StepCode  a = C.ContT () ReaderOnly a
 type GraphCode a = StepCode a
 
 runGraph x = unsafePerformIO $ do
-  pool <- newHotVar []
-  -- threads <- newHotVar Set.empty
-  dvars <- forM [1..numCapabilities] $ \_ -> newHotVar Seq.empty
---  let deques = Array.listArray (0,numCapabilities-1) (repeat Seq.empty)
-  let deques = Array.listArray (0,numCapabilities-1) dvars
-
+  state <- defaultState
   r <- newIORef (error "Uninitialized graph result read prematurely")
-  R.runReaderT (C.runContT x (C.liftIO . writeIORef r)) 
-               (Sched { workpool=pool, 
-			--threads=threads,
-			deques=deques,
-			myid = -1
-		      })
+  R.runReaderT (C.runContT x (C.liftIO . writeIORef r)) state
   readIORef r
 
 type M r a = C.ContT r (R.ReaderT Sched IO) a
@@ -59,10 +40,9 @@ putt = proto_putt $ \ steps tag -> pushSteps steps tag
 
 pushSteps :: [Step tag] -> tag -> StepCode ()
 pushSteps steps tag = do
-  Sched { workpool } <- R.ask
 --  C.liftIO $ sequence_ [ pushWork stack (step tag) | step <- steps ]
 -- Make sure THIS doesn't cause any performance loss:
-  sequence_ [ pushWork workpool (step tag) | step <- steps ]
+  sequence_ [ pushWork (step tag) | step <- steps ]
 
 -- get :: ItemCol k v -> k -> StepCode v
 get col tag =
@@ -89,8 +69,10 @@ finalize finalAction =
 
        -- This is a little redundant... the reschedule loop will keep track of terminating when the queue goes empty.
        let worker :: Int -> GraphCode () = \id ->
-       	       do x <- C.lift$ popWork workpool
+       	       do x <- C.lift$ popWork
 		  tid <- GRAPHLIFT myThreadId
+
+-------- FIXME 
 
 		  ls <- GRAPHLIFT readHotVar workpool
 		  --cncPutStr$ "\n *** WORKER LOOP stack len "++ show (length ls) ++ " threadid " ++ show tid ++"\n"
@@ -163,8 +145,7 @@ reschedule = C.ContT rescheduleR
 
 rescheduleR :: a -> R.ReaderT Sched IO ()
 rescheduleR _ = do
-  Sched { workpool } <- R.ask
-  m <- popWork workpool
+  m <- popWork 
   case m of
     Nothing -> return ()
     Just (C.ContT f)  -> f rescheduleR
