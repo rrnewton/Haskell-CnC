@@ -43,7 +43,7 @@ putt = proto_putt $ \ steps tag -> pushSteps steps tag
 pushSteps :: [Step tag] -> tag -> StepCode ()
 pushSteps steps tag = do
   Sched stack _ <- R.ask
-  C.liftIO $ sequence_ [ push stack (step tag) | step <- steps ]
+  C.liftIO $ sequence_ [ pushWork stack (step tag) | step <- steps ]
 
 -- get :: ItemCol k v -> k -> StepCode v
 get col tag =
@@ -70,7 +70,7 @@ finalize finalAction =
 
        -- This is a little redundant... the reschedule loop will keep track of terminating when the queue goes empty.
        let worker :: Int -> GraphCode () = \id ->
-       	       do x <- GRAPHLIFT pop stack
+       	       do x <- GRAPHLIFT popWork stack
 		  tid <- GRAPHLIFT myThreadId
 		  ls <- GRAPHLIFT readHotVar stack
 		  --cncPutStr$ "\n *** WORKER LOOP stack len "++ show (length ls) ++ " threadid " ++ show tid ++"\n"
@@ -142,7 +142,7 @@ reschedule = C.ContT rescheduleR
 rescheduleR :: a -> R.ReaderT Sched IO ()
 rescheduleR _ = do
   Sched stack _ <- R.ask
-  m <- C.liftIO $ pop stack
+  m <- C.liftIO $ popWork stack
   case m of
     Nothing -> return ()
     Just (C.ContT f)  -> f rescheduleR

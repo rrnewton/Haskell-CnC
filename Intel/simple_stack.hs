@@ -3,12 +3,12 @@
 -- To be included in other files:
 -----------------------------------------------------------------------------
 
-push :: HotVar [a] -> a -> IO ()
-pop :: HotVar [a] -> IO (Maybe a)
+pushWork :: HotVar [a] -> a -> IO ()
+popWork :: HotVar [a] -> IO (Maybe a)
 
-push v a = hotVarTransaction $ do xs <- readHotVarRaw v; writeHotVarRaw v (a:xs)
+pushWork v a = hotVarTransaction $ do xs <- readHotVarRaw v; writeHotVarRaw v (a:xs)
 
-pop v = hotVarTransaction $ do 
+popWork v = hotVarTransaction $ do 
   xs <- readHotVarRaw v
   case xs of
     [] -> return Nothing
