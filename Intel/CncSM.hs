@@ -8,15 +8,16 @@
 
 -- XXX: make TagCol/ItemCol proper data types
 type TagCol  a   = (IORef (Set.Set a), IORef [Step a])
+-- Taking specific advantage of TVars in this implementation:
 type ItemCol a b = TVar (Map.Map a (Either b [Step b]))
 
-newItemCol = C.liftIO $ newTVarIO Map.empty
+newItemCol = C.liftIO $ newHotVar Map.empty
 newTagCol  = C.liftIO $ do
   tags <- newIORef Set.empty
   steps <- newIORef []
   return (tags,steps)
 
-data Sched = Sched (Var [StepCode ()]) (Var (Set.Set ThreadId))
+data Sched = Sched (HotVar [StepCode ()]) (HotVar (Set.Set ThreadId))
 --  deriving Show
 
 type ReaderOnly = R.ReaderT Sched IO
@@ -25,8 +26,8 @@ type StepCode  a = C.ContT () ReaderOnly a
 type GraphCode a = StepCode a
 
 runGraph x = unsafePerformIO $ do
-  stack <- newTVarIO []
-  threads <- newTVarIO Set.empty
+  stack <- newHotVar []
+  threads <- newHotVar Set.empty
   r <- newIORef undefined
   R.runReaderT (C.runContT x (C.liftIO . writeIORef r)) (Sched stack threads)
   readIORef r
@@ -47,6 +48,8 @@ pushSteps steps tag = do
 -- get :: ItemCol k v -> k -> StepCode v
 get col tag =
   mycallCC $ \cont -> do
+
+    -- Leaving this FIXED as TVars so that we can do more within one "atomically"
     r <- C.liftIO $ atomically $ do 
       m <- readTVar col
       case Map.lookup tag m of
@@ -72,7 +75,7 @@ finalize finalAction =
        let worker :: Int -> GraphCode () = \id ->
        	       do x <- GRAPHLIFT pop stack
 		  tid <- GRAPHLIFT myThreadId
-		  ls <- GRAPHLIFT atomically$ readTVar stack
+		  ls <- GRAPHLIFT readHotVar stack
 		  --cncPutStr$ "\n *** WORKER LOOP stack len "++ show (length ls) ++ " threadid " ++ show tid ++"\n"
        		  case x of 
 		    -- Termination on first empty queue observation:
