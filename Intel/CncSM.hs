@@ -17,8 +17,11 @@ newTagCol  = C.liftIO $ do
   steps <- newIORef []
   return (tags,steps)
 
-data Sched = Sched (HotVar [StepCode ()]) (HotVar (Set.Set ThreadId))
---  deriving Show
+data Sched = Sched 
+    { workpool :: HotVar [StepCode ()],
+      threads :: HotVar (Set.Set ThreadId)
+     }
+  deriving Show
 
 type ReaderOnly = R.ReaderT Sched IO
 
@@ -26,10 +29,11 @@ type StepCode  a = C.ContT () ReaderOnly a
 type GraphCode a = StepCode a
 
 runGraph x = unsafePerformIO $ do
-  stack <- newHotVar []
+  pool <- newHotVar []
   threads <- newHotVar Set.empty
   r <- newIORef (error "Uninitialized graph result read prematurely")
-  R.runReaderT (C.runContT x (C.liftIO . writeIORef r)) (Sched stack threads)
+  R.runReaderT (C.runContT x (C.liftIO . writeIORef r)) 
+               (Sched { workpool=pool, threads=threads })
   readIORef r
 
 type M r a = C.ContT r (R.ReaderT Sched IO) a
@@ -42,10 +46,10 @@ putt = proto_putt $ \ steps tag -> pushSteps steps tag
 
 pushSteps :: [Step tag] -> tag -> StepCode ()
 pushSteps steps tag = do
-  Sched stack _ <- R.ask
+  Sched { workpool } <- R.ask
 --  C.liftIO $ sequence_ [ pushWork stack (step tag) | step <- steps ]
 -- Make sure THIS doesn't cause any performance loss:
-  sequence_ [ pushWork stack (step tag) | step <- steps ]
+  sequence_ [ pushWork workpool (step tag) | step <- steps ]
 
 -- get :: ItemCol k v -> k -> StepCode v
 get col tag =
@@ -68,13 +72,14 @@ get col tag =
 finalize finalAction = 
     do joiner <- GRAPHLIFT newChan 
        --(state1 @ HiddenState5 { stack, numworkers, myid }) <- S.get						      
-       Sched stack threads <- R.ask
+       (state @ Sched { workpool, threads }) <- R.ask
 
        -- This is a little redundant... the reschedule loop will keep track of terminating when the queue goes empty.
        let worker :: Int -> GraphCode () = \id ->
-       	       do x <- C.lift$ popWork stack
+       	       do x <- C.lift$ popWork workpool
 		  tid <- GRAPHLIFT myThreadId
-		  ls <- GRAPHLIFT readHotVar stack
+
+		  ls <- GRAPHLIFT readHotVar workpool
 		  --cncPutStr$ "\n *** WORKER LOOP stack len "++ show (length ls) ++ " threadid " ++ show tid ++"\n"
        		  case x of 
 		    -- Termination on first empty queue observation:
@@ -84,7 +89,7 @@ finalize finalAction =
        			do stepcode 
        	                   worker id -- keep going
 
-       let worker_io n = R.runReaderT (C.runContT (worker n) (return)) (Sched stack threads)
+       let worker_io n = R.runReaderT (C.runContT (worker n) (return)) state 
 
        -- Having a problem with the below version... Not gettign to the terminate continuation & blocking indefiinetyl.
        {-
@@ -143,8 +148,8 @@ reschedule = C.ContT rescheduleR
 
 rescheduleR :: a -> R.ReaderT Sched IO ()
 rescheduleR _ = do
-  Sched stack _ <- R.ask
-  m <- popWork stack
+  Sched { workpool } <- R.ask
+  m <- popWork workpool
   case m of
     Nothing -> return ()
     Just (C.ContT f)  -> f rescheduleR
