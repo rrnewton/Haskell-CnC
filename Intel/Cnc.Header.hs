@@ -138,6 +138,8 @@ import qualified System.Posix
 import qualified Data.Sequence as Seq
 import qualified Data.Array as Array
 
+import qualified System.Random as Random
+
 import Data.Int
 import Data.IORef
 import Data.Word
@@ -484,6 +486,9 @@ cncFor2D (s1,s2) (e1,e2) body =
 --    for_ s2 (e2+1) (body i)
 #endif
 
+
+-- instance Show (StepCode ()) where 
+--   show ref = "<StepCode () action>"
 
 --------------------------------------------------------------------------------
 

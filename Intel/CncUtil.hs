@@ -256,9 +256,11 @@ writeHotVar   = writeIORef
 instance Show (IORef a) where 
   show ref = "<ioref>"
 
-hotVarTransaction = id
+-- hotVarTransaction = id
+hotVarTransaction = error "Transactions not currently possible for IO refs"
 readHotVarRaw  = readHotVar
 writeHotVarRaw = writeHotVar
+
 
 #elif HOTVAR == 2 
 #warning "Using MVars for hot atomic variables."
@@ -272,7 +274,10 @@ writeHotVar v x = do swapMVar v x; return ()
 instance Show (MVar a) where 
   show ref = "<mvar>"
 
-hotVarTransaction = id
+-- hotVarTransaction = id
+-- We could in theory do this by taking the mvar to grab the lock.
+-- But we'd need some temporary storage....
+hotVarTransaction = error "Transactions not currently possible for MVars"
 readHotVarRaw  = readHotVar
 writeHotVarRaw = writeHotVar
 
@@ -874,3 +879,4 @@ test1 = testCase "Spot check list lengths"$ assertEqual "splitN" [[1,2], [3,4,5]
 -- tests = TestList [test1, test2]
 
 tests = TestList [test1]
+

@@ -59,6 +59,7 @@ get col tag =
         Just (Right steps) -> do
            writeHotVarRaw col $! Map.insert tag (Right (cont:steps)) m
            return reschedule
+    -- Out of the transaction, bounce on that trampoline:
     r
 
 -- finalize :: StepCode a -> GraphCode a
@@ -98,9 +99,9 @@ finalize finalAction =
        -- FIXING it for now:
 #if 1
        -- #ifdef PIN_THREADS
-       GRAPHLIFT forM_ [0..numCapabilities-1] (\n -> forkOnIO n (worker_io n)) 
+       GRAPHLIFT forM_ [1..numCapabilities] (\n -> forkOnIO n (worker_io n)) 
 #else
-       GRAPHLIFT forM_ [0..numCapabilities-1] (\n -> forkIO (worker_io n)) 
+       GRAPHLIFT forM_ [1..numCapabilities] (\n -> forkIO (worker_io n)) 
 #endif
 
        --cncPutStr$ " *** Forked, now block on workers.\n"
@@ -119,8 +120,7 @@ finalize finalAction =
        -- GRAPHLIFT waitloop
 
        -- Wait till all workers complete.
-       GRAPHLIFT forM_ [1.. numCapabilities] $ \_ -> do readChan joiner
-							--putStrLn "    *** Got return token!"
+       GRAPHLIFT forM_ [1.. numCapabilities] $ \_ -> readChan joiner
 
        --cncPutStr$ " *** Workers returned, now finalize action:\n"
        
@@ -132,7 +132,7 @@ finalize finalAction =
 -- till we've forker workers.  This *shouldnt* happen because gets are
 -- not supposed to be allowed in initialize... (need to enforce it
 -- though).
-initialize x = x
+-- initialize x = x
 
 
 reschedule :: StepCode a
