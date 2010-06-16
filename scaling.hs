@@ -48,6 +48,15 @@ import Debug.Trace
 -- linewidth = "4.0"
 linewidth = "5.0"
 
+-- Schedulers that we don't care to graph right now.
+-- This happens BEFORE rename
+--scheduler_MASK = [5,6,99,10]
+scheduler_MASK = []
+
+-- Rename for the paper:
+translate 10 = 99
+translate 100 = 10
+translate n = n
 
 {-
 --import qualified Graphics.Gnuplot.LineSpecification as LineSpec
@@ -240,10 +249,15 @@ plot_benchmark [io, pure] =
 -}
 
 -- Plot a single benchmark as a gnuplot script:
-plot_benchmark2 root [io, pure] = action (io ++ pure)
+plot_benchmark2 root [io, pure] = 
+    do action $ filter goodSched (io ++ pure)
+       return (benchname, best, basetime / best)
  where 
   benchname = name $ head $ head io 
   -- What was the best single-threaded execution time across variants/schedulers:
+
+  goodSched [] = error "Empty block of data entries..."
+  goodSched (h:t) = not $ (sched h) `elem` scheduler_MASK
 
   cat = concat io ++ concat pure
   threads0 = filter ((== 0) . threads) cat
@@ -261,6 +275,8 @@ plot_benchmark2 root [io, pure] = action (io ++ pure)
 		  else error$ "\nFor benchmark "++ show benchname ++ " could not find either 1-thread or 0-thread run.\n" ++
 		              --"ALL entries: "++ show (pPrint cat) ++"\n"
 		              "\nALL entries threads: "++ show (map threads cat)
+
+  best = foldl1 min $ map_normalized_time cat
 
   (filebase,_) = break (== '.') $ basename benchname 
 
@@ -295,6 +311,10 @@ plot_benchmark2 root [io, pure] = action (io ++ pure)
 		   ++"\"\n") -|- appendTo scriptfile
       runIO$ echo ("set xlabel \"Number of Threads\"\n")             -|- appendTo scriptfile
       runIO$ echo ("set ylabel \"Parallel Speedup\"\n")              -|- appendTo scriptfile
+
+
+      runIO$ echo ("set xrange [1:]\n")                             -|- appendTo scriptfile
+      runIO$ echo ("set key left top\n")                             -|- appendTo scriptfile
       runIO$ echo ("plot \\\n")                                      -|- appendTo scriptfile
 
       -- In this loop lets do the errorbars:
@@ -307,7 +327,7 @@ plot_benchmark2 root [io, pure] = action (io ++ pure)
           let datfile = root ++ filebase ++ show i ++".dat"          
 	  let schd = sched$   head points  -- should be the same across all point
 	  let var  = variant$ head points  -- should be the same across all point
-	  let nickname = var ++"/"++ show schd
+	  let nickname = var ++"/"++ show (translate schd)
 	  runIO$ echo ("# Data for variant "++ nickname ++"\n") -|- appendTo datfile
           forM_ points $ \x -> do 
 
@@ -319,7 +339,7 @@ plot_benchmark2 root [io, pure] = action (io ++ pure)
 
 	  let comma = if i == length lines then "" else ",\\"
 	  runIO$ echo ("   \""++ basename datfile ++
-		       "\" using 1:2 with lines linewidth "linewidth" lt "++ show i ++" title \""++nickname++"\" "++comma++"\n")
+		       "\" using 1:2 with lines linewidth "++linewidth++" lt "++ show i ++" title \""++nickname++"\" "++comma++"\n")
 		   -|- appendTo scriptfile
 
       --putStrLn$ "Finally, running gnuplot..."
@@ -347,7 +367,7 @@ main = do
 		   filter (not . null) dat)
  let organized = organize_data$ filter ((`elem` ["io","pure"]) . variant) parsed
 
-
+-- Notdoing this anymore.. treat it as one big bag
  -- let chunked = sepDoubleBlanks dat		 
  -- let chopped = map (parse . splitRegex (mkRegex "[ \t]+"))
  -- 	           (chunked !! 0)
@@ -368,18 +388,19 @@ main = do
  -- For hygiene, completely anhilate output directory:
  system$ "rm -rf "  ++root
  system$ "mkdir -p "++root
- forM_ organized    $ \ perbenchmark -> do 
-  plot_benchmark2 root perbenchmark
-  forM_ perbenchmark $ \ pervariant -> 
-   forM_ pervariant   $ \ persched -> 
-     do let mins = map tmin persched
-	let pairs = (zip (map (fromIntegral . threads) persched) mins)
-	putStrLn$ show pairs
-	--plot Graphics.Gnuplot.Terminal.X11.cons (path pairs)
-	--System.exitWith ExitSuccess
-	--plot x11 (path pairs)
-	
-        return ()
+ bests <- 
+  forM organized    $ \ perbenchmark -> do 
+   best <- plot_benchmark2 root perbenchmark
+   forM_ perbenchmark $ \ pervariant -> 
+    forM_ pervariant   $ \ persched -> 
+      do let mins = map tmin persched
+ 	 let pairs = (zip (map (fromIntegral . threads) persched) mins)
+	 putStrLn$ show pairs
+	 --plot Graphics.Gnuplot.Terminal.X11.cons (path pairs)
+	 --System.exitWith ExitSuccess
+	 --plot x11 (path pairs)
+         return ()
+   return best
 
  --forM_ organized    $ \ perbenchmark -> 
 
@@ -390,5 +411,10 @@ main = do
  --plotDots [x11, Size$ Scale 3.0] dat
  --plotDots [x11, LineStyle 0 [PointSize 5.0]] dat
  putStrLn$ "Plotted list"
-
-
+ --putStrLn$ "Max parallel speedups:\n" ++ show (pPrint bests)
+ putStrLn$ "\nBest time, max parallel speedup: "
+ forM_ bests $ \ (name, best, speed) ->
+   putStrLn$ "  "++name++ (take (30 - length name) $ repeat ' ')++ 
+	           show best ++ (take (15 - length (show best)) $ repeat ' ') ++
+		   show speed 
+ putStrLn$ "\n\n"

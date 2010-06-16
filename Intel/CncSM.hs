@@ -142,7 +142,9 @@ finalize finalAction =
 
        --cncPutStr$ " *** Forked, now block on workers.\n"
 
+       -- ================================================================================
        -- FIXME: NO WORKER RESTART ON PREMATURE TERMINATION RIGHT NOW!!
+       -- ================================================================================
 
        -- This waits for quiescense BEFORE doing the final action
        -- let waitloop = do num <- readHotVar numworkers
