@@ -102,7 +102,8 @@ finalize finalAction =
        			do stepcode 
        	                   worker id -- keep going
 
-       let worker_io n = R.runReaderT (C.runContT (worker n) (return)) state 
+	   mystate n = state { myid = n }
+           worker_io n = R.runReaderT (C.runContT (worker n) (return)) (mystate n)
 
        -- Having a problem with the below version... Not gettign to the terminate continuation & blocking indefiinetyl.
        {-
