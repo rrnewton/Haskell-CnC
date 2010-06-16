@@ -70,12 +70,7 @@ finalize finalAction =
        -- This is a little redundant... the reschedule loop will keep track of terminating when the queue goes empty.
        let worker :: Int -> GraphCode () = \id ->
        	       do x <- C.lift$ popWork
-		  tid <- GRAPHLIFT myThreadId
-
--------- FIXME 
-
-		  ls <- GRAPHLIFT readHotVar workpool
-		  --cncPutStr$ "\n *** WORKER LOOP stack len "++ show (length ls) ++ " threadid " ++ show tid ++"\n"
+		  -- tid <- GRAPHLIFT myThreadId
        		  case x of 
 		    -- Termination on first empty queue observation:
        		    Nothing -> do --cncPutStr$ "\n *** WORKER " ++ show tid ++" terminating...\n"
