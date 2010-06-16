@@ -15,11 +15,12 @@ pushWork something =
   -- First get the state, including array of deques
   do Sched { workpool, myid }  <- R.ask
      let mydeque = workpool Array.! myid
-     stepPutStr$ " +++ Putting into deque of id "++ show myid ++ "\n"
      -- Add to my dequeue, on the right:
-     C.liftIO$ hotVarTransaction $ 
+     old <- C.liftIO$ hotVarTransaction $ 
       do old <- readHotVarRaw mydeque; 
-     	 writeHotVarRaw mydeque (old Seq.|> something)
+     	 writeHotVarRaw mydeque (old Seq.|> something)      
+	 return old
+     stepPutStr$ " +++ Pushed into deque of id "++ show myid ++ " previous length: "++ show (Seq.length old) ++"\n"
      return ()
 
 popWork = do 
@@ -28,22 +29,17 @@ popWork = do
 
   let mydeque = workpool Array.! myid  
       myrandom = randoms Array.! myid  
-      -- takeleft deq = C.liftIO$ hotVarTransaction $ do 
-      -- 		       seq <- readHotVarRaw deq
-      -- 		       case Seq.viewl seq of
-      -- 		         Seq.EmptyL -> return Nothing
-      -- 		         (x  Seq.:<  xs') -> do
-      -- 		            writeHotVarRaw deq xs'
-      -- 			    return (Just x)
---  mine <- takeit mydeque
 
       stealLoop = do 
 	-- Our RNG state is private, this doesn't need to be atomic:
         rng <- readIORef myrandom
-        let (victim, rng') = Random.randomR (1,numCapabilities-1) rng 
+        let --(victim, rng') = Random.randomR (1,numCapabilities-1) rng 
 	    -- Bounce steals from ourself to the one omitted:
 	    -- (This simply won't happen if *we* are numCapabilities.)
-	    victim' = if victim == myid then numCapabilities else victim
+	    --victim' = if victim == myid then numCapabilities else victim
+
+	    (victim', rng') = Random.randomR (0,numCapabilities-1) rng 
+
         writeIORef myrandom rng'
 	putStrLn$ " +++  Worker "++ show myid ++" trying to steal from "++ show victim'	
 	-- Try to steal; steal from the left:
@@ -76,11 +72,13 @@ popWork = do
 	       (xs'  Seq.:> _) -> writeHotVarRaw mydeque xs'
 	       Seq.EmptyR -> return ()
 	     return view
+  -- Out of transaction:
+  x <- case mine of 
+        Seq.EmptyR -> C.liftIO$ stealLoop
+        (_  Seq.:> x) -> return (Just x)
 
-  -- Out of transaction, 
-  case mine of 
-    Seq.EmptyR -> C.liftIO$ stealLoop
-    (_  Seq.:> x) -> return (Just x)
+  C.liftIO$ putStrLn$ " ---> Popped off work for "++ show myid
+  return x
 
 
 -----------------------------------------------------------------------------

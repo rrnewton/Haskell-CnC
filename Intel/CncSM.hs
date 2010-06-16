@@ -95,11 +95,13 @@ proto_finalize finalAction =
        -- Fork one worker per thread:
        -- For this version there's no way PIN_THREADS could be bad:
        -- FIXING it for now:
+
+       cncPutStr$ " FORKING "++ show numWorkers ++ " workers\n"
 #if 1
        -- #ifdef PIN_THREADS
-       GRAPHLIFT forM_ [1..numCapabilities] (\n -> forkOnIO n (worker_io n)) 
+       GRAPHLIFT forM_ [1..numWorkers] (\n -> forkOnIO n (worker_io n)) 
 #else
-       GRAPHLIFT forM_ [1..numCapabilities] (\n -> forkIO (worker_io n)) 
+       GRAPHLIFT forM_ [1..numWorkers] (\n -> forkIO (worker_io n)) 
 #endif
 
        --cncPutStr$ " *** Forked, now block on workers.\n"
@@ -150,6 +152,11 @@ put col tag (!item) = do
       Nothing -> return []
       Just (Left v) -> error$ "multiple put at tag "++ show tag
       Just (Right steps) -> return steps
+
+  if null steps
+   then return()
+   else stepPutStr$ " +++ -==WAKING==- up "++ show (length steps) ++" steps blocked on tag "++ show tag++ "\n"
+
   pushSteps steps item
 
 itemsToList = error "itemstolist not implemented yet for this scheduler" -- XXX

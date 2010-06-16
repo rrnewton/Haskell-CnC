@@ -41,8 +41,8 @@ defaultState = do
   dvars <- forM [0..numCapabilities] $ \_ -> newHotVar Seq.empty
   let randoms = Array.listArray (0,numCapabilities) [ Random.mkStdGen id | id <- [0..numCapabilities ]]
   rands <- sequence [ newIORef (Random.mkStdGen id) | id <- [0..numCapabilities ]]
-  let randoms = Array.listArray (0,numCapabilities) rands
-  let deques  = Array.listArray (0,numCapabilities) dvars
+  let randoms = Array.listArray (0,numCapabilities-1) rands
+  let deques  = Array.listArray (0,numCapabilities-1) dvars
   kill <- newIORef False
   return$ Sched { workpool= deques, 
 		  randoms = randoms,
@@ -99,6 +99,10 @@ finalize finalAction =
        return result
 
 quiescence_support=False
+
+numWorkers = numCapabilities - 1
+
+--------------------------------------------------------------------------------
 
 -- Load the work sharing task-pool:
 #include "work_stealing_deques.hs"

@@ -61,15 +61,18 @@ mandelProg max_row max_col max_depth =
 	     putt position (_i,_j)
 
        -- Final result, count coordinates of the  pixels with a certain value:
-       finalize $ 
+       finalize $ do 
+        stepPutStr$ "Finalize action begun...\n"
 	foldM (\acc i -> 
           foldM (\acc j -> 
-	           do p <- get pixel (fromIntegral i, fromIntegral j)
+	           do stepPutStr$ " ... try get pixel "++ show (i,j) ++"\n "
+		      p <- get pixel (fromIntegral i, fromIntegral j)
+		      stepPutStr$ " GET PIXEL SUCCESSFUL "++ show (i,j) ++"\n "
 		      if p == max_depth
    		       then return (acc + (i*max_col + j))
    		       else return acc)
-	        acc [0..max_col]
-              ) 0 [0..max_row] 
+	        acc [0..max_col-1]
+              ) 0 [0..max_row-1] 
        
    where 
     r_origin = -2                            :: Double
@@ -84,7 +87,7 @@ runMandel a b c =
 
 main = do args <- getArgs  
 	  case args of
-	   []      -> runMandel 2 2 100 
---	   []      -> runMandel 4 4 3   -- Should output 24.
+--	   []      -> runMandel 2 2 100 
+	   []      -> runMandel 4 4 3   -- Should output 57.
 --	   []      -> runMandel 3 3 3
 	   [a,b,c] -> runMandel (read a) (read b) (read c)
