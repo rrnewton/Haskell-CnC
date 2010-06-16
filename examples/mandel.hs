@@ -45,7 +45,7 @@ mandelProg max_row max_col max_depth =
        
        let mandelStep tag = 
 	    do tid <- stepUnsafeIO myThreadId
-	       stepPutStr$ "["++ show tid ++"] Mandel Step executing: "++ show tag ++ "\n"
+	       --stepPutStr$ "["++ show tid ++"] Mandel Step executing: "++ show tag ++ "\n"
 	       cplx <- get dat tag
 	       put pixel tag (mandel max_depth cplx)
 
@@ -62,12 +62,12 @@ mandelProg max_row max_col max_depth =
 
        -- Final result, count coordinates of the  pixels with a certain value:
        finalize $ do 
-        stepPutStr$ "Finalize action begun...\n"
+        --stepPutStr$ "Finalize action begun...\n"
 	foldM (\acc i -> 
           foldM (\acc j -> 
-	           do stepPutStr$ " ... try get pixel "++ show (i,j) ++"\n "
+	           do --stepPutStr$ " ... try get pixel "++ show (i,j) ++"\n "
 		      p <- get pixel (fromIntegral i, fromIntegral j)
-		      stepPutStr$ " GET PIXEL SUCCESSFUL "++ show (i,j) ++"\n "
+		      --stepPutStr$ " GET PIXEL SUCCESSFUL "++ show (i,j) ++"\n "
 		      if p == max_depth
    		       then return (acc + (i*max_col + j))
    		       else return acc)
@@ -87,7 +87,6 @@ runMandel a b c =
 
 main = do args <- getArgs  
 	  case args of
---	   []      -> runMandel 2 2 100 
+	   []      -> runMandel 1 1 3   -- Should output 57.
 	   []      -> runMandel 4 4 3   -- Should output 57.
---	   []      -> runMandel 3 3 3
 	   [a,b,c] -> runMandel (read a) (read b) (read c)

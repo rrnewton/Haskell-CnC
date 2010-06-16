@@ -16,11 +16,17 @@ pushWork something =
   do Sched { workpool, myid }  <- R.ask
      let mydeque = workpool Array.! myid
      -- Add to my dequeue, on the right:
+
+#if 0
      old <- C.liftIO$ hotVarTransaction $ 
       do old <- readHotVarRaw mydeque; 
      	 writeHotVarRaw mydeque (old Seq.|> something)      
 	 return old
-     stepPutStr$ " +++ Pushed into deque of id "++ show myid ++ " previous length: "++ show (Seq.length old) ++"\n"
+#else
+     --old <- C.liftIO$ modifyHotVar mydeque $ \old -> (old Seq.|> something,  old)
+     C.liftIO$ modifyHotVar_ mydeque (Seq.|> something)
+#endif
+     --if debugme then stepPutStr$ " +++ Pushed into deque of id "++ show myid ++ " previous length: "++ show (Seq.length old) ++"\n" else return ()
      return ()
 
 popWork = do 
@@ -41,44 +47,70 @@ popWork = do
 	    (victim', rng') = Random.randomR (0,numCapabilities-1) rng 
 
         writeIORef myrandom rng'
-	putStrLn$ " +++  Worker "++ show myid ++" trying to steal from "++ show victim'	
+	if debugme then putStrLn$ " +++  Worker "++ show myid ++" trying to steal from "++ show victim'	else return()
 	-- Try to steal; steal from the left:
 	let theirs = workpool Array.! victim'
+
+#if 0
 	stolen <- C.liftIO$ hotVarTransaction $ do 
 	     seq <- readHotVarRaw theirs
 	     let view = Seq.viewl seq
 	     case view of
-	       (x  Seq.:<  xs') -> writeHotVarRaw mydeque xs'
+	       (_  Seq.:<  xs') -> writeHotVarRaw mydeque xs'
 	       Seq.EmptyL -> return ()
 	     return view
+#else
+	stolen <- C.liftIO$ modifyHotVar  theirs $ \ seq ->
+	     let view = Seq.viewl seq in
+	     (case view of
+	        (_  Seq.:<  rest) -> rest
+	        Seq.EmptyL        -> Seq.empty
+	      , view)
+#endif
+
 	case stolen of 
 	  Seq.EmptyL -> 
 	     -- After every failed steal, check to see if we should terminate.
 	     do killed <- readIORef killflag
 		if killed
 		 then return Nothing
-		 else do putStrLn$ " +++    -> Steal failed, thief = " ++ show myid
+		 else do if debugme then putStrLn$ " +++    -> Steal failed, thief = " ++ show myid else return()
                          stealLoop
 	  (x  Seq.:<  rest) -> 
-	      do putStrLn$ " +++    STOLEN successfully, victim "++ show victim'++ " thief " 
-			   ++ show myid ++ " victim had left: "++ show (Seq.length rest)
+	      do if debugme
+		   then putStrLn$ " +++    STOLEN successfully, thief <"++ show myid++ "> victim <" 
+		                  ++ show victim' ++ "> victim had left: "++ show (Seq.length rest) 
+		   else putStr "!"
 		 return (Just x)
 
   -- Try to get work from our local dequeue, read from the right:
+#if 0
   mine <- C.liftIO$ hotVarTransaction $ do 
 	     seq <- readHotVarRaw mydeque
 	     let view = Seq.viewr seq
 	     case view of
-	       (xs'  Seq.:> _) -> writeHotVarRaw mydeque xs'
+	       (xs' Seq.:> _) -> writeHotVarRaw mydeque xs'
 	       Seq.EmptyR -> return ()
 	     return view
+#else
+  mine <- C.liftIO$ modifyHotVar mydeque $ \seq ->
+	     let view = Seq.viewr seq in
+	     (case view of
+	        (rest Seq.:> _) -> rest
+	        Seq.EmptyR      -> Seq.empty
+	      , view)
+#endif
   -- Out of transaction:
-  x <- case mine of 
+  case mine of 
         Seq.EmptyR -> C.liftIO$ stealLoop
-        (_  Seq.:> x) -> return (Just x)
+        (xs  Seq.:> x) -> 
+	    do if debugme 
+	        then C.liftIO$ putStrLn$ " ===> Popped off work for <"++ 
+		                 show myid ++ "> remaining " ++ show (Seq.length xs)
+	        else return()
+	       return (Just x)
 
-  C.liftIO$ putStrLn$ " ---> Popped off work for "++ show myid
-  return x
+--  return x
 
 
 -----------------------------------------------------------------------------

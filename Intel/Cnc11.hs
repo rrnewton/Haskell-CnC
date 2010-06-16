@@ -92,7 +92,7 @@ finalize finalAction =
   proto_finalize $ \ joiner -> do
        Sched { killflag } <- R.ask
        result <- finalAction			   
-       stepPutStr$ "Finished final action, now killing...\n"
+       stepPutStr$ " +++ Finished final action, now killing...\n"
        C.liftIO$ writeIORef killflag True
        -- Optional, wait till all workers complete also:
        --GRAPHLIFT forM_ [1.. numCapabilities] $ \_ -> readChan joiner

@@ -6,6 +6,9 @@
 -- Author: Simon Marlow
 -- Modified and extended by Ryan Newton
 
+debugme = False
+--debugme = True
+
 -- XXX: make TagCol/ItemCol proper data types
 type TagCol  a   = (IORef (Set.Set a), IORef [Step a])
 -- Taking specific advantage of TVars in this implementation:
@@ -90,13 +93,9 @@ proto_finalize finalAction =
 			              (Sched stack threads)
 				      -}
 
-       --cncPutStr$ " *** Forking workers.\n"
-
        -- Fork one worker per thread:
        -- For this version there's no way PIN_THREADS could be bad:
        -- FIXING it for now:
-
-       cncPutStr$ " FORKING "++ show numWorkers ++ " workers\n"
 #if 1
        -- #ifdef PIN_THREADS
        GRAPHLIFT forM_ [1..numWorkers] (\n -> forkOnIO n (worker_io n)) 
@@ -153,10 +152,11 @@ put col tag (!item) = do
       Just (Left v) -> error$ "multiple put at tag "++ show tag
       Just (Right steps) -> return steps
 
-  if null steps
-   then return()
-   else stepPutStr$ " +++ -==WAKING==- up "++ show (length steps) ++" steps blocked on tag "++ show tag++ "\n"
+  if debugme && not (null steps)
+   then stepPutStr$ " +++ -==WAKING==- up "++ show (length steps) ++" steps blocked on tag "++ show tag++ "\n"
+   else return()
 
   pushSteps steps item
+
 
 itemsToList = error "itemstolist not implemented yet for this scheduler" -- XXX
