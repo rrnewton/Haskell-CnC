@@ -53,9 +53,12 @@ linewidth = "5.0"
 --scheduler_MASK = [5,6,99,10]
 scheduler_MASK = []
 
+-- Ok, gunplot line type 6 is YELLOW... that's not to smart:
+line_types = [0..5] ++ [7..]
+
 -- Rename for the paper:
-translate 10 = 99
-translate 100 = 10
+--translate 10 = 99
+--translate 100 = 10
 translate n = n
 
 {-
@@ -248,10 +251,13 @@ plot_benchmark [io, pure] =
       Plot2D.list quads
 -}
 
+-- Name, Scheduler, Threads, BestTime, Speedup
+data Best = Best (String, Int, Int, Double, Double)
+
 -- Plot a single benchmark as a gnuplot script:
 plot_benchmark2 root [io, pure] = 
     do action $ filter goodSched (io ++ pure)
-       return (benchname, best, basetime / best)
+       return$ Best (benchname, bestsched, bestthreads, best, basetime / best)
  where 
   benchname = name $ head $ head io 
   -- What was the best single-threaded execution time across variants/schedulers:
@@ -277,6 +283,9 @@ plot_benchmark2 root [io, pure] =
 		              "\nALL entries threads: "++ show (map threads cat)
 
   best = foldl1 min $ map_normalized_time cat
+  Just best_index = elemIndex best $ map_normalized_time cat
+  bestsched   = sched$ cat !! best_index
+  bestthreads = threads$ cat !! best_index
 
   (filebase,_) = break (== '.') $ basename benchname 
 
@@ -320,7 +329,9 @@ plot_benchmark2 root [io, pure] =
       -- In this loop lets do the errorbars:
       forM_ (zip [1..] lines) $ \(i,points) -> do 
           let datfile = root ++ filebase ++ show i ++".dat"
-	  runIO$ echo ("   \""++ basename datfile ++"\" using 1:2:3:4 with errorbars title \"\", \\\n") -|- appendTo scriptfile
+	  runIO$ echo ("   \""++ basename datfile ++"\" using 1:2:3:4 with errorbars lt "++
+	              show (line_types !! i)	              
+		      ++" title \"\", \\\n") -|- appendTo scriptfile
 
       -- Now a second loop for the lines themselves and to dump the actual data to the .dat file:
       forM_ (zip [1..] lines) $ \(i,points) -> do 
@@ -339,7 +350,8 @@ plot_benchmark2 root [io, pure] =
 
 	  let comma = if i == length lines then "" else ",\\"
 	  runIO$ echo ("   \""++ basename datfile ++
-		       "\" using 1:2 with lines linewidth "++linewidth++" lt "++ show i ++" title \""++nickname++"\" "++comma++"\n")
+		       "\" using 1:2 with lines linewidth "++linewidth++" lt "++ 
+		       show (line_types !! i) ++" title \""++nickname++"\" "++comma++"\n")
 		   -|- appendTo scriptfile
 
       --putStrLn$ "Finally, running gnuplot..."
@@ -386,7 +398,7 @@ main = do
 
  let root = "./graph_temp/"
  -- For hygiene, completely anhilate output directory:
- system$ "rm -rf "  ++root
+ system$ "rm -rf "  ++root ++"/"
  system$ "mkdir -p "++root
  bests <- 
   forM organized    $ \ perbenchmark -> do 
@@ -395,7 +407,7 @@ main = do
     forM_ pervariant   $ \ persched -> 
       do let mins = map tmin persched
  	 let pairs = (zip (map (fromIntegral . threads) persched) mins)
-	 putStrLn$ show pairs
+	 --putStrLn$ show pairs
 	 --plot Graphics.Gnuplot.Terminal.X11.cons (path pairs)
 	 --System.exitWith ExitSuccess
 	 --plot x11 (path pairs)
@@ -411,10 +423,16 @@ main = do
  --plotDots [x11, Size$ Scale 3.0] dat
  --plotDots [x11, LineStyle 0 [PointSize 5.0]] dat
  putStrLn$ "Plotted list"
- --putStrLn$ "Max parallel speedups:\n" ++ show (pPrint bests)
- putStrLn$ "\nBest time, max parallel speedup: "
- forM_ bests $ \ (name, best, speed) ->
-   putStrLn$ "  "++name++ (take (30 - length name) $ repeat ' ')++ 
-	           show best ++ (take (15 - length (show best)) $ repeat ' ') ++
-		   show speed 
+
+ putStrLn$ "\n\nBenchmark, scheduler, best #threads, best median time, max parallel speedup: "
+
+ let pads n s = take (n - length s) $ repeat ' '
+ let pad  n x = pads n (show x)
+
+ forM_ bests $ \ (Best(name, sched, threads, best, speed)) ->
+   putStrLn$ "  "++ name++ (pads 25 name) ++ 
+	            show sched++   (pad 5 sched) ++ 
+	            show threads++ (pad 5 threads)++ 
+	            show best ++   (pad 15 best) ++
+		    show speed 
  putStrLn$ "\n\n"

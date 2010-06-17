@@ -46,8 +46,8 @@ unset HASKELLCNC
   # Which subset of schedures should we test:
 #PURESCHEDS="2 3"
 
-#IOSCHEDS="4 7 8 3 10 100"
-IOSCHEDS="10 11"
+IOSCHEDS="4 7 8 3 10 11"
+# IOSCHEDS="11"
 
 #SEPARATESCHEDS="6"
 SEPARATESCHEDS=""
