@@ -35,8 +35,8 @@
 -- This file is simple here to dispatch to the appropriate scheduler implementation.
 
 #ifndef CNC_SCHEDULER
-#warning  "Cnc.hs -- CNC_SCHEDULER unset, defaulting to scheduler 6 "
-#define CNC_SCHEDULER 6
+#warning  "Cnc.hs -- CNC_SCHEDULER unset, defaulting to scheduler 7 "
+#define CNC_SCHEDULER 7
 #endif
 
 #if CNC_SCHEDULER == 3

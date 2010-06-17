@@ -39,12 +39,12 @@ popWork = do
       stealLoop = do 
 	-- Our RNG state is private, this doesn't need to be atomic:
         rng <- readIORef myrandom
-        let --(victim, rng') = Random.randomR (1,numCapabilities-1) rng 
+        let (victim, rng') = Random.randomR (0,numCapabilities-2) rng 
 	    -- Bounce steals from ourself to the one omitted:
 	    -- (This simply won't happen if *we* are numCapabilities.)
-	    --victim' = if victim == myid then numCapabilities else victim
+	    victim' = if victim == myid then numCapabilities-1 else victim
 
-	    (victim', rng') = Random.randomR (0,numCapabilities-1) rng 
+	    --(victim', rng') = Random.randomR (0,numCapabilities-1) rng 
 
         writeIORef myrandom rng'
 	if debugme then putStrLn$ " +++  Worker "++ show myid ++" trying to steal from "++ show victim'	else return()
@@ -80,7 +80,7 @@ popWork = do
 	      do if debugme
 		   then putStrLn$ " +++    STOLEN successfully, thief <"++ show myid++ "> victim <" 
 		                  ++ show victim' ++ "> victim had left: "++ show (Seq.length rest) 
-		   else putStr "!"
+		   else return () --putStr "!"
 		 return (Just x)
 
   -- Try to get work from our local dequeue, read from the right:
