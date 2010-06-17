@@ -376,6 +376,7 @@ main = do
 -- let parsed = map (parse . filter (not (== "")) . splitRegex (mkRegex "[ \t]+")) 
  let parsed = map (parse . filter (not . (== "")) . splitRegex (mkRegex "[ \t]+")) 
 	          (filter (not . isMatch (mkRegex "ERR")) $
+		   filter (not . isMatch (mkRegex "TIMEOUT")) $
 		   filter (not . null) dat)
  let organized = organize_data$ filter ((`elem` ["io","pure"]) . variant) parsed
 

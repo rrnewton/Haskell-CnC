@@ -44,7 +44,7 @@
 unset HASKELLCNC
 
   # Which subset of schedures should we test:
-#PURESCHEDS="2 3"
+PURESCHEDS="2 3"
 
 IOSCHEDS="4 7 8 3 10 11"
 # IOSCHEDS="11"
@@ -101,22 +101,7 @@ echo "#  ... with default runtime options: $GHC_DEFAULT_RTS" >> $RESULTS
 
 cnt=0
 
-function check_error() {
-  CODE=$1
-  MSG=$2
-  # Error code 143 was a timeout
-  if [ "$CODE" == "143" ]
-  then echo "       Return code $CODE Params: $CNC_VARIANT $CNC_SCHEDULER $FLAGS"
-       echo "       Process TIMED OUT!!"
-  elif [ "$CODE" != "0" ]
-  then echo $MSG
-       echo "       Error code $CODE Params: $CNC_VARIANT $CNC_SCHEDULER $FLAGS"
-       echo "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-       if [ "$NONSTRICT" == "" ];
-       then exit $CODE
-       fi
-  fi
-}
+source run_all_shared.sh
 
 # Dynamic scoping.  Lame.  This uses $test.
 function runit() 
@@ -151,7 +136,9 @@ function runit()
 
   check_error $CODE "ERROR: run_all_tests this test failed completely: $test.exe"
 
-  if [ "$CODE" != "0" ] && [ "$CODE" != "143" ];
+  if [ "$CODE" == "143" ];
+  then echo "$test.exe" "$CNC_VARIANT" "$CNC_SCHEDULER" "$NUMTHREADS" "$HASH" "TIMEOUT TIMEOUT TIMEOUT" >> $RESULTS
+  elif [ "$CODE" != "0" ] ;
   then echo "$test.exe" "$CNC_VARIANT" "$CNC_SCHEDULER" "$NUMTHREADS" "$HASH" "ERR ERR ERR" >> $RESULTS
   else 
        echo "$test.exe" "$CNC_VARIANT" "$CNC_SCHEDULER" "$NUMTHREADS" "$HASH" "$times" >> $RESULTS
@@ -220,10 +207,19 @@ function run_benchmark() {
  export CNC_VARIANT=pure
  # Currently running the pure scheduler only in single threaded mode:
  export NUMTHREADS=0
+
  for sched in $PURESCHEDS; do
-   unset hashtab
    export CNC_SCHEDULER=$sched
-   runit
+   unset hashtab
+   if [ "$sched" == "2" ]; then 
+      export NUMTHREADS=0
+      runit
+   else 
+     for NUMTHREADS in $THREADSETTINGS; do
+       runit
+     done # threads
+   fi
+   echo >> $RESULTS;
  done
 
  # Finally, run once through separately compiled modules to compare performance (and make sure they build).
