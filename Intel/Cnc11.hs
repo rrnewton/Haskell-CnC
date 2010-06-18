@@ -50,7 +50,9 @@ defaultState = do
 		  myid = 0 -- The scheduler thread.
 		}
 
-
+#if 1
+initialize x = x 
+#else
 -- One option here is that at the end of the initialize action, stripe
 -- the work across dequeus.  Another option to accomplish the same
 -- work-sharing effect is to round-robin distribute the work when a
@@ -68,10 +70,11 @@ initialize initAction =
      C.liftIO$ forM_ (zip [0..] $ segs) $ \ (id,seq) -> 
        modifyHotVar_ (workpool Array.! id) $ \ olddeq -> 
          if not$ Seq.null olddeq
-	 then error$ "Worker's deque ("++ show id ++") was not empty at initialization, size: "++ show (Seq.length olddeq)
+	 then error$ "Worker's deque ("++ show id ++") was not empty at initialization, size: "++ show (aSeq.length olddeq)
 	 else seq
      stepPutStr$ " +++ FINISHED DISSEMINATING " ++ show (Seq.length initdeque) ++ " initial units of work!: "
 		 ++ show (map Seq.length segs) ++ "\n"
+#endif
 
 splitSeq :: Int -> Seq.Seq a -> [Seq.Seq a]
 splitSeq pieces seq = all
