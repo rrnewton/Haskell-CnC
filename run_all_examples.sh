@@ -263,7 +263,7 @@ function run_normal_benchmark() {
 #for line in  "par_seq_par_seq 8.5" "embarrassingly_par 9.2" "primes2 200000" "mandel 300 300 4000" "mandel_opt 1 300 300 4000" "sched_tree 18" "fib 20000" "threadring 50000000 503" "nbody 1200" "primes 200000"; do
 
 # Parallel benchmarks only:
-for line in  "blackscholes 10000 15000000" "nbody 5000" "par_seq_par_seq 8.5" "embarrassingly_par 9.2" "primes2 200000" "mandel 300 300 4000" "mandel_opt2 1 300 300 4000" "sched_tree 18" "primes 200000"; do
+for line in  "blackscholes 10000 15000000" "nbody 5000" "cholesky 1000 50 m1000.in" "par_seq_par_seq 8.5" "embarrassingly_par 9.2"  "primes2 200000" "mandel 300 300 4000" "mandel_opt2 1 300 300 4000" "sched_tree 18" "primes 200000"; do
 
   run_normal_benchmark
 
