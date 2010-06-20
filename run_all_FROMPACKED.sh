@@ -126,7 +126,8 @@ function runit()
   
   if [ -e "$EXENAME" ]; then 
     times=`$NTIMES "$TRIALS" $EXENAME $ARGS +RTS $RTS -RTS`
-  else times ="ERR ERR ERR"
+  else 
+    times="ERR ERR ERR"
   fi
   CODE=$?
 
