@@ -30,7 +30,7 @@ $idchar    = [$alpha $digit \']
 $symchar   = [$symbol \:]
 
 @reservedid = 
-	module|step|fun
+	module|step|fun|tags|items|steps
 
 @reservedop =
         "::" | "|" | "<-" | "->" | "{" | "}" | "<" | ">" | "[" | "]"  

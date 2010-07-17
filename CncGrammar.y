@@ -1,4 +1,5 @@
 {
+{-# LANGUAGE DeriveDataTypeable #-}
 module Main where
 --module CncGrammar where
 import Char
@@ -35,15 +36,30 @@ import AST
 	qvar		{ L _ LQVarId _ }
 	int		{ L _ LInteger _ }
 
+	"->"		{ L _ LReservedOp "->" }
+	"<-"		{ L _ LReservedOp "<-" }
+	"::"		{ L _ LReservedOp "::" }
 
 	'('		{ L _ LSpecial "(" }
 	')'		{ L _ LSpecial ")" }
+	';'		{ L _ LSpecial ";" }
+
+	'['		{ L _ LSpecial "[" }
+	']'		{ L _ LSpecial "]" }
+	','		{ L _ LSpecial "," }
 
 	'+'		{ L _ LVarOp "+" }
 	'-'		{ L _ LVarOp "-" }
 	'*'		{ L _ LVarOp "*" }
 	'/'		{ L _ LVarOp "/" }
 	op		{ L _ LVarOp _ }
+
+	tags		{ L _ LReservedId "tags" }
+	items		{ L _ LReservedId "items" }
+	steps		{ L _ LReservedId "steps" }
+
+	comment		{ L _ LComment _ }
+
 
 -- The left hand side are the names of the terminals or tokens,
 -- and the right hand side is how to pattern match them.
@@ -59,12 +75,39 @@ import AST
 ----------------------------------------------------------------------------------------------------
 
 
+File :: { [Statement SrcLoc] } 
+File : Statements                          { $1 }
+
+Statements : Statement Statements          { $1 : $2 }
+           | Statement                     { [$1] }
+Statement  : Terminated_Relation           { $1 }
+           | Terminated_Decl               { $1 }
+
+Terminated_Relation : Relation ';'         { $1 }
+Terminated_Decl     : Decl     ';'         { $1 }
+
+Decl :: { Statement SrcLoc } 
+Decl     
+  : tags var                               { DeclareTags (lexLoc $1) (unLoc $2) Nothing }
+
+Relation :: { Statement SrcLoc }
+Relation 
+  :  Instances "->" Instances              { Produce (lexLoc $2) $1 $3 }
+
+Instances :: { [Instance] }
+Instances
+  : Instance                               { [$1] }
+  | Instance ',' Instances                 { $1 : $3 }
+
+Instance 
+  : var                                    { IName (unLoc $1) }
+--  | var '[' ']'                            { $1 }
+
 Exp :: { Exp SrcLoc } -- The haskell type of the result of parsing this syntax class.
 
 Exp : var	             	{ Var (lexLoc $1) (unLoc $1) }
     | qvar	             	{ Var (lexLoc $1) (unLoc $1) }
-     | int	             	{ Lit (lexLoc $1) (LitInt $ read (unLoc $1)) }
-
+    | int	             	{ Lit (lexLoc $1) (LitInt $ read (unLoc $1)) }
     | '(' Exp ')'               { $2 }
 
 -- Including explicit productions for arithmetic just to handle precedence/associativity:
@@ -89,7 +132,7 @@ happyError _ = error ("Parse error\n")
 
 -- Now we declare the datastructure that we are parsing.
 
-runCnc :: String -> Exp SrcLoc 
+runCnc :: String -> [Statement SrcLoc]
 runCnc = parse_cnc . scan_to_list
 
 

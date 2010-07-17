@@ -4,6 +4,7 @@ module AST where
 
 import StringTable.Atom
 import Data.Data
+import Data.List
 import Text.PrettyPrint.HughesPJClass
 import Data.Generics.Serialization.SExp
 import Data.Generics.Serialization.Streams
@@ -32,7 +33,6 @@ instance Pretty (Exp dec) where
      parens $  
         pPrint rator <+> sep (map pPrint rands)
 --      sep (pPrint rator : map pPrint rands)
-
 
 -- data SrcLoc = SrcLoc {
 -- 		srcFilename :: String,
@@ -65,4 +65,39 @@ getLoc e =
    Lit s _        -> s
    Var s _        -> s
    App s _ _      -> s
+
+
+data Type =
+   TInt
+ | TFloat
+ deriving (Eq,Ord,Show,Data,Typeable)
+
+----------------------------------------------------------------------------------------------------
+-- Top level Statements in a .cnc file:
+----------------------------------------------------------------------------------------------------
+
+data Statement dec = 
+   Produce dec [Instance] [Instance] 
+ | Prescribe
+ | Function
+ | DeclareTags  dec String (Maybe Type)
+ | DeclareItems dec String (Maybe (Type, Type))
+ | DeclareSteps
+ deriving (Eq,Ord,Show,Data,Typeable)
+
+instance Pretty (Statement dec) where 
+ pPrint (Produce _ inp out) = 
+     hcat (intersperse (text ", ") $ map pPrint inp) <+> 
+     text "->" <+> 
+     hcat (intersperse (text ", ") $ map pPrint out)
+
+--instance Pretty [Statement dec] where 
+-- pPrint ls = vcat (map pPrint ls)
+
+data Instance = 
+   IName String
+ deriving (Eq,Ord,Show,Data,Typeable)
+
+instance Pretty (Instance) where 
+ pPrint (IName s) = text s
 
