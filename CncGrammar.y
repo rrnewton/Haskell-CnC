@@ -58,7 +58,7 @@ import Data.Generics.Serialization.Streams
 ----------------------------------------------------------------------------------------------------
 
 
-Exp :: { Exp } -- The haskell type of the result of parsing this syntax class.
+Exp :: { Exp SrcLoc } -- The haskell type of the result of parsing this syntax class.
 
 Exp : var	             	{ Var (lexLoc $1) (unLoc $1) }
     | qvar	             	{ Var (lexLoc $1) (unLoc $1) }
@@ -92,10 +92,10 @@ data Lit = LitInt Int | LitFloat Float
  deriving (Eq, Ord, Show, Data, Typeable)
 
 -- Expressions are decorated with values of an arbitrary type:
-data Exp = 
-   Lit SrcLoc Lit
- | Var SrcLoc String
- | App SrcLoc Exp [Exp]
+data Exp dec = 
+   Lit dec Lit
+ | Var dec String
+ | App dec (Exp dec) [Exp dec]
  deriving (Eq, Ord, Show, Data, Typeable)
 
 
@@ -103,7 +103,7 @@ instance Pretty Lit where
  pPrint (LitInt i)   = pPrint i
  pPrint (LitFloat f) = pPrint f
 
-instance Pretty Exp where 
+instance Pretty (Exp dec) where 
  pPrint (Lit _ l) = pPrint l
  pPrint (Var _ s) = text s
  pPrint (App _ rator rands) = 
@@ -112,7 +112,7 @@ instance Pretty Exp where
 --      sep (pPrint rator : map pPrint rands)
 
 
-runCnc :: String -> Exp
+runCnc :: String -> Exp SrcLoc 
 runCnc = parse_cnc . scan_to_list
 
 -- data SrcLoc = SrcLoc {
