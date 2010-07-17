@@ -24,9 +24,9 @@ import Data.Generics.Serialization.Streams
 
 
 -- These are similar macros to those used by the GHC parser:
-#define L0   L noSrcSpan
-#define L1   sL (getLoc $1)
-#define LL   sL (comb2 $1 $>)
+-- define L0   L noSrcSpan
+-- define L1   sL (getLoc $1)
+-- define LL   sL (comb2 $1 $>)
 
 %token 
 
@@ -35,14 +35,14 @@ import Data.Generics.Serialization.Streams
 	int		{ L _ LInteger _ }
 
 
---	'('		{ L _ LSpecial "(" }
---	')'		{ L _ LSpecial ")" }
+	'('		{ L _ LSpecial "(" }
+	')'		{ L _ LSpecial ")" }
 
-	-- '+'		{ L _ LVarOp "+" }
-	-- '-'		{ L _ LVarOp "-" }
-	-- '*'		{ L _ LVarOp "*" }
-	-- '/'		{ L _ LVarOp "/" }
-	op		{ L _ LVarOp $$ }
+	'+'		{ L _ LVarOp "+" }
+	'-'		{ L _ LVarOp "-" }
+	'*'		{ L _ LVarOp "*" }
+	'/'		{ L _ LVarOp "/" }
+	op		{ L _ LVarOp _ }
 
 -- The left hand side are the names of the terminals or tokens,
 -- and the right hand side is how to pattern match them.
@@ -58,30 +58,21 @@ import Data.Generics.Serialization.Streams
 ----------------------------------------------------------------------------------------------------
 
 
+Exp :: { Exp } -- The haskell type of the result of parsing this syntax class.
 
--- > Exp :: { Exp }
---> Exp : let var '=' Exp in Exp	{ Let $2 $4 $6 }
--- >     | Exp1			{ Exp1 $1 }
--- > 
--- > Exp1 : Exp1 '+' Term		{ Plus $1 $3 }
--- >      | Exp1 '-' Term		{ Minus $1 $3 }
--- > 
---> Exp : Exp op Exp	        { App $2 [$1, $3] } 
+Exp : var	             	{ Var (lexLoc $1) (unLoc $1) }
+    | qvar	             	{ Var (lexLoc $1) (unLoc $1) }
+     | int	             	{ Lit (lexLoc $1) (LitInt $ read (unLoc $1)) }
 
-Exp : Exp op Exp	        { App (Var $2) [$1, $3] } 
---    | int			{ Lit (LitInt $ read $1) }
-
-Exp : var	             	{ Var $1 }
-Exp : qvar	             	{ Var $1 }
-Exp : int	             	{ Lit (LitInt $ read $1) }
+    | '(' Exp ')'               { $2 }
 
 -- Including explicit productions for arithmetic just to handle precedence/associativity:
+    | Exp '+' Exp	        { App (getLoc $1) (Var (lexLoc $2) "+") [$1, $3] }
+    | Exp '-' Exp	        { App (getLoc $1) (Var (lexLoc $2) "-") [$1, $3] }
+    | Exp '*' Exp	        { App (getLoc $1) (Var (lexLoc $2) "*") [$1, $3] }
+    | Exp '/' Exp	        { App (getLoc $1) (Var (lexLoc $2) "/") [$1, $3] }
+    | Exp op Exp	        { App (getLoc $1) (Var (lexLoc $2) (unLoc $2)) [$1, $3] } 
 
---Exp : '(' Exp ')'               { $2 }
--- Exp : Exp '+' Exp	        { App (Var "+") [$1, $3] }
--- Exp : Exp '-' Exp	        { App (Var "-") [$1, $3] }
--- Exp : Exp '*' Exp	        { App (Var "*") [$1, $3] }
--- Exp : Exp '/' Exp	        { App (Var "/") [$1, $3] }
 
 -- We are simply returning the parsed data structure!  Now we need
 -- some extra code, to support this parser, and make in complete:
@@ -100,11 +91,11 @@ happyError _ = error ("Parse error\n")
 data Lit = LitInt Int | LitFloat Float
  deriving (Eq, Ord, Show, Data, Typeable)
 
+-- Expressions are decorated with values of an arbitrary type:
 data Exp = 
-   Lit Lit
- | Var String
- | App Exp [Exp]
-
+   Lit SrcLoc Lit
+ | Var SrcLoc String
+ | App SrcLoc Exp [Exp]
  deriving (Eq, Ord, Show, Data, Typeable)
 
 
@@ -113,9 +104,9 @@ instance Pretty Lit where
  pPrint (LitFloat f) = pPrint f
 
 instance Pretty Exp where 
- pPrint (Lit l) = pPrint l
- pPrint (Var s) = text s
- pPrint (App rator rands) = 
+ pPrint (Lit _ l) = pPrint l
+ pPrint (Var _ s) = text s
+ pPrint (App _ rator rands) = 
      parens $  
         pPrint rator <+> sep (map pPrint rands)
 --      sep (pPrint rator : map pPrint rands)
@@ -141,10 +132,25 @@ data SrcLoc
   = SrcLoc	String	-- A precise location (file name)
 		{-# UNPACK #-} !Int		-- line number, begins at 1
 		{-# UNPACK #-} !Int		-- column number, begins at 1
- deriving (Eq,Ord,Show)
+ deriving (Eq,Ord,Show,Data,Typeable)
 
-data Loc a = Loc SrcLoc a  deriving (Eq,Ord,Show)
+--data Loc a = Loc SrcLoc a  deriving (Eq,Ord,Show)
 
+unknownLoc = SrcLoc "" 0 0 
+
+-- This is the price of tagging the locs right on the Exprs rather
+-- than the even/odd alternating location tags.
+getLoc e = 
+ case e of 
+   Lit s _        -> s
+   Var s _        -> s
+   App s _ _      -> s
+
+unLoc :: Lexeme -> String
+unLoc (L _ _ str) = str
+
+lexLoc :: Lexeme -> SrcLoc
+lexLoc (L (AlexPn n l c) _ _) = SrcLoc "unknownfile" l c
 
 quit = print "runCnc failed\n"
 
