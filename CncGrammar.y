@@ -22,26 +22,26 @@ import Data.Generics.Serialization.Streams
 -- The parser will be of type [Token] -> ?, where ? is determined by the
 -- production rules.  Now we declare all the possible tokens:
 
+
+-- These are similar macros to those used by the GHC parser:
+#define L0   L noSrcSpan
+#define L1   sL (getLoc $1)
+#define LL   sL (comb2 $1 $>)
+
 %token 
--->	let		{ TokenLet }
--- >	in		{ TokenIn }
--- >	int		{ TokenInt $$ }
--- >	'='		{ TokenEq }
--- >	'+'		{ TokenPlus }
--- >	'-'		{ TokenMinus }
--- >	'*'		{ TokenTimes }
--- >	'/'		{ TokenDiv }
--- >	'('		{ TokenOB }
--- >	')'		{ TokenCB }
 
-	var		{ L _ LVarId  $$ }
-	qvar		{ L _ LQVarId $$ }
-	int		{ L _ LInteger $$ }
+	var		{ L _ LVarId  _ }
+	qvar		{ L _ LQVarId _ }
+	int		{ L _ LInteger _ }
 
-	'+'		{ L _ LVarOp "+" }
-	'-'		{ L _ LVarOp "-" }
-	'*'		{ L _ LVarOp "*" }
-	'/'		{ L _ LVarOp "/" }
+
+--	'('		{ L _ LSpecial "(" }
+--	')'		{ L _ LSpecial ")" }
+
+	-- '+'		{ L _ LVarOp "+" }
+	-- '-'		{ L _ LVarOp "-" }
+	-- '*'		{ L _ LVarOp "*" }
+	-- '/'		{ L _ LVarOp "/" }
 	op		{ L _ LVarOp $$ }
 
 -- The left hand side are the names of the terminals or tokens,
@@ -77,10 +77,11 @@ Exp : int	             	{ Lit (LitInt $ read $1) }
 
 -- Including explicit productions for arithmetic just to handle precedence/associativity:
 
-Exp : Exp '+' Exp	        { App (Var "+") [$1, $3] }
-Exp : Exp '-' Exp	        { App (Var "-") [$1, $3] }
-Exp : Exp '*' Exp	        { App (Var "*") [$1, $3] }
-Exp : Exp '/' Exp	        { App (Var "/") [$1, $3] }
+--Exp : '(' Exp ')'               { $2 }
+-- Exp : Exp '+' Exp	        { App (Var "+") [$1, $3] }
+-- Exp : Exp '-' Exp	        { App (Var "-") [$1, $3] }
+-- Exp : Exp '*' Exp	        { App (Var "*") [$1, $3] }
+-- Exp : Exp '/' Exp	        { App (Var "/") [$1, $3] }
 
 -- We are simply returning the parsed data structure!  Now we need
 -- some extra code, to support this parser, and make in complete:
@@ -141,6 +142,8 @@ data SrcLoc
 		{-# UNPACK #-} !Int		-- line number, begins at 1
 		{-# UNPACK #-} !Int		-- column number, begins at 1
  deriving (Eq,Ord,Show)
+
+data Loc a = Loc SrcLoc a  deriving (Eq,Ord,Show)
 
 
 quit = print "runCnc failed\n"
