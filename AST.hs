@@ -76,7 +76,9 @@ data Type =
 -- Top level Statements in a .cnc file:
 ----------------------------------------------------------------------------------------------------
 
-data Statement dec = 
+-- These are the statements produced by parsing (hence 'P')
+-- They get converted to a different format post-parsing
+data PStatement dec = 
    Produce dec [Instance] [Instance] 
  | Prescribe
  | Function
@@ -85,13 +87,13 @@ data Statement dec =
  | DeclareSteps
  deriving (Eq,Ord,Show,Data,Typeable)
 
-instance Pretty (Statement dec) where 
+instance Pretty (PStatement dec) where 
  pPrint (Produce _ inp out) = 
      hcat (intersperse (text ", ") $ map pPrint inp) <+> 
      text "->" <+> 
      hcat (intersperse (text ", ") $ map pPrint out)
 
---instance Pretty [Statement dec] where 
+--instance Pretty [PStatement dec] where 
 -- pPrint ls = vcat (map pPrint ls)
 
 data Instance = 

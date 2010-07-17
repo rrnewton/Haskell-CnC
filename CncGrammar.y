@@ -75,7 +75,7 @@ import AST
 ----------------------------------------------------------------------------------------------------
 
 
-File :: { [Statement SrcLoc] } 
+File :: { [PStatement SrcLoc] } 
 File : Statements                          { $1 }
 
 Statements : Statement Statements          { $1 : $2 }
@@ -86,11 +86,11 @@ Statement  : Terminated_Relation           { $1 }
 Terminated_Relation : Relation ';'         { $1 }
 Terminated_Decl     : Decl     ';'         { $1 }
 
-Decl :: { Statement SrcLoc } 
+Decl :: { PStatement SrcLoc } 
 Decl     
   : tags var                               { DeclareTags (lexLoc $1) (unLoc $2) Nothing }
 
-Relation :: { Statement SrcLoc }
+Relation :: { PStatement SrcLoc }
 Relation 
   :  Instances "->" Instances              { Produce (lexLoc $2) $1 $3 }
 
@@ -132,7 +132,7 @@ happyError _ = error ("Parse error\n")
 
 -- Now we declare the datastructure that we are parsing.
 
-runCnc :: String -> [Statement SrcLoc]
+runCnc :: String -> [PStatement SrcLoc]
 runCnc = parse_cnc . scan_to_list
 
 
