@@ -11,6 +11,7 @@ import Data.Generics.Serialization.SExp
 import Data.Generics.Serialization.Streams
 --import Intel.Cnc.Translator.AST
 import AST
+import SrcLoc
 }
 
 -- (Based on example from Simon Marlow.)
@@ -92,7 +93,13 @@ Decl
 
 Relation :: { PStatement SrcLoc }
 Relation 
-  :  Instances "->" Instances              { Produce (lexLoc $2) $1 $3 }
+--  :  Instances "->" Instances              { Produce (lexLoc $2) $1 $3 }
+  :  Instances Chain                       { Chain $1 $2 }
+
+Chain : Link                               { [$1] }
+      | Link Chain                         { $1 : $2 }
+Link 
+  :  "->" Instances                        { ProduceLink (lexLoc $1) $2 }
 
 Instances :: { [Instance] }
 Instances

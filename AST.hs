@@ -8,10 +8,16 @@ import Data.List
 import Text.PrettyPrint.HughesPJClass
 import Data.Generics.Serialization.SExp
 import Data.Generics.Serialization.Streams
+import SrcLoc
 
 
+--------------------------------------------------------------------------------
+-- Expressions and Literals
+--------------------------------------------------------------------------------
 
-data Lit = LitInt Int | LitFloat Float
+data Lit = 
+   LitInt Int 
+ | LitFloat Float
  deriving (Eq, Ord, Show, Data, Typeable)
 
 -- Expressions are decorated with values of an arbitrary type:
@@ -34,30 +40,6 @@ instance Pretty (Exp dec) where
         pPrint rator <+> sep (map pPrint rands)
 --      sep (pPrint rator : map pPrint rands)
 
--- data SrcLoc = SrcLoc {
--- 		srcFilename :: String,
--- 		srcLine     :: Int,
--- 		srcColumn   :: Int
--- 		}
---  deriving (Eq,Ord,Show,Typeable,Data)
-
-
- -- I don't actually see why we would need interned strings for
- -- filenames.  How many unique files are they?  They should be shared
- -- properly even as normal strings.  And how often do they need to be
- -- compared?
-
-data SrcLoc
---  = SrcLoc	Atom	-- A precise location (file name)
-  = SrcLoc	String	-- A precise location (file name)
-		{-# UNPACK #-} !Int		-- line number, begins at 1
-		{-# UNPACK #-} !Int		-- column number, begins at 1
- deriving (Eq,Ord,Show,Data,Typeable)
-
---data Loc a = Loc SrcLoc a  deriving (Eq,Ord,Show)
-
-unknownLoc = SrcLoc "" 0 0 
-
 -- This is the price of tagging the locs right on the Exprs rather
 -- than the even/odd alternating location tags.
 getLoc e = 
@@ -67,10 +49,16 @@ getLoc e =
    App s _ _      -> s
 
 
+--------------------------------------------------------------------------------
+-- Types
+--------------------------------------------------------------------------------
+
+
 data Type =
    TInt
  | TFloat
  deriving (Eq,Ord,Show,Data,Typeable)
+
 
 ----------------------------------------------------------------------------------------------------
 -- Top level Statements in a .cnc file:
@@ -80,21 +68,39 @@ data Type =
 -- They get converted to a different format post-parsing
 data PStatement dec = 
    Produce dec [Instance] [Instance] 
+   -- When we parse a file we allow statements to be arbitrarily long chains of relations:
+   -- We represent this as a starting instance(s) followed by an arbitrary number of links.
+ | Chain [Instance] [RelLink dec]
  | Prescribe
  | Function
+ | DeclareExtern
  | DeclareTags  dec String (Maybe Type)
  | DeclareItems dec String (Maybe (Type, Type))
- | DeclareSteps
+ | DeclareSteps dec String 
  deriving (Eq,Ord,Show,Data,Typeable)
+
+commasep ls = hcat (intersperse (text ", ") $ map pPrint ls)
 
 instance Pretty (PStatement dec) where 
  pPrint (Produce _ inp out) = 
-     hcat (intersperse (text ", ") $ map pPrint inp) <+> 
+     commasep inp <+> 
      text "->" <+> 
-     hcat (intersperse (text ", ") $ map pPrint out)
+     commasep out
+ pPrint (Chain first rest) = 
+     commasep first <+>
+     hsep (map pPrint rest) <> text "\n"
+
+instance Pretty (RelLink dec) where
+ pPrint (ProduceLink _ ls) = text "->" <+> commasep ls
 
 --instance Pretty [PStatement dec] where 
 -- pPrint ls = vcat (map pPrint ls)
+
+data RelLink dec = 
+   ProduceLink      dec [Instance]
+ | PrescribeLink    dec [Instance]
+ | RevPrescribeLink dec [Instance]
+ deriving (Eq,Ord,Show,Data,Typeable)
 
 data Instance = 
    IName String
@@ -103,3 +109,9 @@ data Instance =
 instance Pretty (Instance) where 
  pPrint (IName s) = text s
 
+
+----------------------------------------------------------------------------------------------------
+-- CnC Graph Representation:
+----------------------------------------------------------------------------------------------------
+
+-- This is the final representation for a CnC Graph:
