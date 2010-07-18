@@ -15,6 +15,8 @@ import Data.Generics.Serialization.Streams
 -- Expressions and Literals
 --------------------------------------------------------------------------------
 
+-- Expressions are the code used inside step skeletons.
+
 data Lit = 
    LitInt Int 
  | LitFloat Float
@@ -25,6 +27,7 @@ data Exp dec =
    Lit dec Lit
  | Var dec String
  | App dec (Exp dec) [Exp dec]
+ | If  dec (Exp dec) (Exp dec) (Exp dec) 
  deriving (Eq, Ord, Show, Data, Typeable)
 
 
@@ -61,6 +64,9 @@ data Type =
  | TFloat
  deriving (Eq,Ord,Show,Data,Typeable)
 
+instance Pretty (Type) where
+ pPrint (TInt)   = text "int"
+ pPrint (TFloat) = text "float"
 
 ----------------------------------------------------------------------------------------------------
 -- Top level Statements in a .cnc file:
@@ -69,11 +75,10 @@ data Type =
 -- These are the statements produced by parsing (hence 'P')
 -- They get converted to a different format post-parsing
 data PStatement dec = 
-   Produce dec [Instance] [Instance] 
+--   Produce dec [Instance] [Instance] 
    -- When we parse a file we allow statements to be arbitrarily long chains of relations:
    -- We represent this as a starting instance(s) followed by an arbitrary number of links.
- | Chain [Instance] [RelLink dec]
- | Prescribe
+   Chain [Instance] [RelLink dec]
  | Function
  | DeclareExtern
  | DeclareTags  dec String (Maybe Type)
@@ -84,16 +89,12 @@ data PStatement dec =
 commasep ls = hcat (intersperse (text ", ") $ map pPrint ls)
 
 instance Pretty (PStatement dec) where 
- pPrint (Produce _ inp out) = 
-     commasep inp <+> 
-     text "->" <+> 
-     commasep out
  pPrint (Chain first rest) = 
      commasep first <+>
      hsep (map pPrint rest) <> text "\n"
+ pPrint (DeclareTags _ name Nothing)   = text "tags " <> text name <> text ";\n"
+ pPrint (DeclareTags _ name (Just ty)) = text "tags " <> text name <> pPrint ty <> text ";\n"
 
-instance Pretty (RelLink dec) where
- pPrint (ProduceLink _ ls) = text "->" <+> commasep ls
 
 --instance Pretty [PStatement dec] where 
 -- pPrint ls = vcat (map pPrint ls)
@@ -104,12 +105,38 @@ data RelLink dec =
  | RevPrescribeLink dec [Instance]
  deriving (Eq,Ord,Show,Data,Typeable)
 
+instance Pretty (RelLink dec) where
+ pPrint (ProduceLink _ ls) = text "->" <+> commasep ls <> text ";\n"
+
+
 data Instance = 
-   IName String
+   InstName String
+ | InstDataTags    String [TagExp]
+ | InstControlTags String [TagExp]
  deriving (Eq,Ord,Show,Data,Typeable)
 
 instance Pretty (Instance) where 
- pPrint (IName s) = text s
+  pPrint (InstName s) = text s
+  pPrint (InstDataTags    s exps) = text s <> pPrint exps
+  pPrint (InstControlTags s exps) = text s <> parens (commasep exps)
+
+
+----------------------------------------------------------------------------------------------------
+-- Math with Tags:
+----------------------------------------------------------------------------------------------------
+
+-- Tag expressions are distinct from Exp and much more restrictive.
+-- (For example, conditionals are not allowed.)
+
+data TagExp = 
+   TEVar String 
+ | TEApp String [TagExp]
+ deriving (Eq,Ord,Show,Data,Typeable)
+
+instance Pretty TagExp where 
+  pPrint te =  case te of
+    TEVar s       -> text s 
+    TEApp s rands -> text s <> parens (commasep rands)
 
 
 ----------------------------------------------------------------------------------------------------

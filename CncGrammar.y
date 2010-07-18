@@ -59,7 +59,7 @@ import SrcLoc
 	items		{ L _ LReservedId "items" }
 	steps		{ L _ LReservedId "steps" }
 
-	comment		{ L _ LComment _ }
+--	comment		{ L _ LComment _ }
 
 
 -- The left hand side are the names of the terminals or tokens,
@@ -92,14 +92,12 @@ Decl
   : tags var                               { DeclareTags (lexSpan $1) (lexStr $2) Nothing }
 
 Relation :: { PStatement SrcSpan }
-Relation 
---  :  Instances "->" Instances              { Produce (lexLoc $2) $1 $3 }
-  :  Instances Chain                       { Chain $1 $2 }
+Relation :  Instances Chain                { Chain $1 $2 }
 
+Chain :: { [RelLink SrcSpan] }
 Chain : Link                               { [$1] }
       | Link Chain                         { $1 : $2 }
-Link 
-  :  "->" Instances                        { ProduceLink (lexSpan $1) $2 }
+Link  :  "->" Instances                    { ProduceLink (lexSpan $1) $2 }
 
 Instances :: { [Instance] }
 Instances
@@ -107,8 +105,16 @@ Instances
   | Instance ',' Instances                 { $1 : $3 }
 
 Instance 
-  : var                                    { IName (lexStr $1) }
---  | var '[' ']'                            { $1 }
+  : var                                    { InstName        (lexStr $1) }
+  | var '[' TagExps ']'                    { InstDataTags    (lexStr $1) $3 }
+  | var '(' TagExps ')'                    { InstControlTags (lexStr $1) $3 }
+
+
+TagExps :: { [TagExp] }
+TagExps : Tag                              { [$1] }
+	| Tag ',' TagExps                  { $1 : $3 }
+
+Tag : var                                  { TEVar (lexStr $1) }
 
 Exp :: { Exp SrcSpan } -- The haskell type of the result of parsing this syntax class.
 
@@ -135,13 +141,18 @@ Exp : var	             	{ Var (lexSpan $1) (lexStr $1) }
 -- is detected.  Note that currently we do no error recovery.
 
 happyError :: [Lexeme] -> a
-happyError _ = error ("Parse error\n")
+happyError ls =
+ error ("Parse error before token at location : \n   " ++
+        show (pPrint (lexLoc $ head ls)))
 
 -- Now we declare the datastructure that we are parsing.
 
 runCnc :: String -> [PStatement SrcSpan]
-runCnc = parse_cnc . scan_to_list
+-- For now filter out comments before parsing:
+runCnc = parse_cnc . filter (not . is_comment) . scan_to_list
 
+is_comment ( L _ LComment _ ) = True 
+is_comment _ = False 
 
 lexStr :: Lexeme -> String
 lexStr (L _ _ str) = str
@@ -169,7 +180,7 @@ main = do
  putStrLn "\nParsed:"
  print parsed
  putStrLn "\nPretty:"
- putStrLn$ renderStyle style $ pPrint parsed
+ putStrLn$ renderStyle style $ hcat $ map pPrint parsed
 
  putStrLn "\n Ok how bout sexp:"
  let str = buildList $ sexpSerialize parsed
