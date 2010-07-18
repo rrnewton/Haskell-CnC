@@ -8,7 +8,7 @@ import Data.List
 import Text.PrettyPrint.HughesPJClass
 import Data.Generics.Serialization.SExp
 import Data.Generics.Serialization.Streams
-import SrcLoc
+--import SrcLoc
 
 
 --------------------------------------------------------------------------------
@@ -40,9 +40,11 @@ instance Pretty (Exp dec) where
         pPrint rator <+> sep (map pPrint rands)
 --      sep (pPrint rator : map pPrint rands)
 
--- This is the price of tagging the locs right on the Exprs rather
--- than the even/odd alternating location tags.
-getLoc e = 
+
+-- This is the price of tagging the source locations (and other
+-- decorations) right on the Exprs rather than the even/odd
+-- alternating expression/decoration types.
+getExpDecoration e = 
  case e of 
    Lit s _        -> s
    Var s _        -> s

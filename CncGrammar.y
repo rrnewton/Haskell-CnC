@@ -76,7 +76,7 @@ import SrcLoc
 ----------------------------------------------------------------------------------------------------
 
 
-File :: { [PStatement SrcLoc] } 
+File :: { [PStatement SrcSpan] } 
 File : Statements                          { $1 }
 
 Statements : Statement Statements          { $1 : $2 }
@@ -87,11 +87,11 @@ Statement  : Terminated_Relation           { $1 }
 Terminated_Relation : Relation ';'         { $1 }
 Terminated_Decl     : Decl     ';'         { $1 }
 
-Decl :: { PStatement SrcLoc } 
+Decl :: { PStatement SrcSpan } 
 Decl     
-  : tags var                               { DeclareTags (lexLoc $1) (unLoc $2) Nothing }
+  : tags var                               { DeclareTags (lexSpan $1) (lexStr $2) Nothing }
 
-Relation :: { PStatement SrcLoc }
+Relation :: { PStatement SrcSpan }
 Relation 
 --  :  Instances "->" Instances              { Produce (lexLoc $2) $1 $3 }
   :  Instances Chain                       { Chain $1 $2 }
@@ -99,7 +99,7 @@ Relation
 Chain : Link                               { [$1] }
       | Link Chain                         { $1 : $2 }
 Link 
-  :  "->" Instances                        { ProduceLink (lexLoc $1) $2 }
+  :  "->" Instances                        { ProduceLink (lexSpan $1) $2 }
 
 Instances :: { [Instance] }
 Instances
@@ -107,22 +107,22 @@ Instances
   | Instance ',' Instances                 { $1 : $3 }
 
 Instance 
-  : var                                    { IName (unLoc $1) }
+  : var                                    { IName (lexStr $1) }
 --  | var '[' ']'                            { $1 }
 
-Exp :: { Exp SrcLoc } -- The haskell type of the result of parsing this syntax class.
+Exp :: { Exp SrcSpan } -- The haskell type of the result of parsing this syntax class.
 
-Exp : var	             	{ Var (lexLoc $1) (unLoc $1) }
-    | qvar	             	{ Var (lexLoc $1) (unLoc $1) }
-    | int	             	{ Lit (lexLoc $1) (LitInt $ read (unLoc $1)) }
+Exp : var	             	{ Var (lexSpan $1) (lexStr $1) }
+    | qvar	             	{ Var (lexSpan $1) (lexStr $1) }
+    | int	             	{ Lit (lexSpan $1) (LitInt $ read (lexStr $1)) }
     | '(' Exp ')'               { $2 }
 
 -- Including explicit productions for arithmetic just to handle precedence/associativity:
-    | Exp '+' Exp	        { App (getLoc $1) (Var (lexLoc $2) "+") [$1, $3] }
-    | Exp '-' Exp	        { App (getLoc $1) (Var (lexLoc $2) "-") [$1, $3] }
-    | Exp '*' Exp	        { App (getLoc $1) (Var (lexLoc $2) "*") [$1, $3] }
-    | Exp '/' Exp	        { App (getLoc $1) (Var (lexLoc $2) "/") [$1, $3] }
-    | Exp op Exp	        { App (getLoc $1) (Var (lexLoc $2) (unLoc $2)) [$1, $3] } 
+    | Exp '+' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) "+") [$1, $3] }
+    | Exp '-' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) "-") [$1, $3] }
+    | Exp '*' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) "*") [$1, $3] }
+    | Exp '/' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) "/") [$1, $3] }
+    | Exp op Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) (lexStr $2)) [$1, $3] } 
 
 
 -- We are simply returning the parsed data structure!  Now we need
@@ -139,15 +139,21 @@ happyError _ = error ("Parse error\n")
 
 -- Now we declare the datastructure that we are parsing.
 
-runCnc :: String -> [PStatement SrcLoc]
+runCnc :: String -> [PStatement SrcSpan]
 runCnc = parse_cnc . scan_to_list
 
 
-unLoc :: Lexeme -> String
-unLoc (L _ _ str) = str
+lexStr :: Lexeme -> String
+lexStr (L _ _ str) = str
 
 lexLoc :: Lexeme -> SrcLoc
-lexLoc (L (AlexPn n l c) _ _) = SrcLoc "unknownfile" l c
+lexLoc (L (AlexPn n l c) _ _) = (SrcLoc "unknownfile" l c)
+
+lexSpan :: Lexeme -> SrcSpan
+lexSpan (L (AlexPn n l c) _ _) = srcLocSpan (SrcLoc "unknownfile" l c)
+
+-- Combine the spans in two expressions.
+combExpSpans e1 e2 = combineSrcSpans (getExpDecoration e1) (getExpDecoration e2)
 
 quit = print "runCnc failed\n"
 
