@@ -99,7 +99,7 @@ Chain : Link                               { [$1] }
       | Link Chain                         { $1 : $2 }
 Link  :  "->" Instances                    { ProduceLink (lexSpan $1) $2 }
 
-Instances :: { [Instance] }
+Instances :: { [CollectionInstance SrcSpan] }
 Instances
   : Instance                               { [$1] }
   | Instance ',' Instances                 { $1 : $3 }
@@ -109,12 +109,11 @@ Instance
   | var '[' TagExps ']'                    { InstDataTags    (lexStr $1) $3 }
   | var '(' TagExps ')'                    { InstControlTags (lexStr $1) $3 }
 
+TagExps :: { [Exp SrcSpan] }
+TagExps : Exp                              { [$1] }
+	| Exp ',' TagExps                  { $1 : $3 }
 
-TagExps :: { [TagExp] }
-TagExps : Tag                              { [$1] }
-	| Tag ',' TagExps                  { $1 : $3 }
-
-Tag : var                                  { TEVar (lexStr $1) }
+--Tag : var                                  { TEVar (lexStr $1) }
 
 Exp :: { Exp SrcSpan } -- The haskell type of the result of parsing this syntax class.
 

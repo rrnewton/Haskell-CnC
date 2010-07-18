@@ -75,10 +75,9 @@ instance Pretty (Type) where
 -- These are the statements produced by parsing (hence 'P')
 -- They get converted to a different format post-parsing
 data PStatement dec = 
---   Produce dec [Instance] [Instance] 
    -- When we parse a file we allow statements to be arbitrarily long chains of relations:
    -- We represent this as a starting instance(s) followed by an arbitrary number of links.
-   Chain [Instance] [RelLink dec]
+   Chain [CollectionInstance dec] [RelLink dec]
  | Function
  | DeclareExtern
  | DeclareTags  dec String (Maybe Type)
@@ -91,7 +90,7 @@ commasep ls = hcat (intersperse (text ", ") $ map pPrint ls)
 instance Pretty (PStatement dec) where 
  pPrint (Chain first rest) = 
      commasep first <+>
-     hsep (map pPrint rest) <> text "\n"
+     hsep (map pPrint rest) <> text ";\n"
  pPrint (DeclareTags _ name Nothing)   = text "tags " <> text name <> text ";\n"
  pPrint (DeclareTags _ name (Just ty)) = text "tags " <> text name <> pPrint ty <> text ";\n"
 
@@ -100,22 +99,21 @@ instance Pretty (PStatement dec) where
 -- pPrint ls = vcat (map pPrint ls)
 
 data RelLink dec = 
-   ProduceLink      dec [Instance]
- | PrescribeLink    dec [Instance]
- | RevPrescribeLink dec [Instance]
+   ProduceLink      dec [CollectionInstance dec]
+ | PrescribeLink    dec [CollectionInstance dec]
+ | RevPrescribeLink dec [CollectionInstance dec]
  deriving (Eq,Ord,Show,Data,Typeable)
 
 instance Pretty (RelLink dec) where
- pPrint (ProduceLink _ ls) = text "->" <+> commasep ls <> text ";\n"
+ pPrint (ProduceLink _ ls) = text "->" <+> commasep ls 
 
-
-data Instance = 
+data CollectionInstance dec = 
    InstName String
- | InstDataTags    String [TagExp]
- | InstControlTags String [TagExp]
+ | InstDataTags    String [Exp dec]
+ | InstControlTags String [Exp dec]
  deriving (Eq,Ord,Show,Data,Typeable)
 
-instance Pretty (Instance) where 
+instance Pretty (CollectionInstance dec) where 
   pPrint (InstName s) = text s
   pPrint (InstDataTags    s exps) = text s <> pPrint exps
   pPrint (InstControlTags s exps) = text s <> parens (commasep exps)
@@ -137,7 +135,6 @@ instance Pretty TagExp where
   pPrint te =  case te of
     TEVar s       -> text s 
     TEApp s rands -> text s <> parens (commasep rands)
-
 
 ----------------------------------------------------------------------------------------------------
 -- CnC Graph Representation:
