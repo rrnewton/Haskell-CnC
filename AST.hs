@@ -1,10 +1,13 @@
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable  #-}
+{-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
+
 module AST where 
 --module Intel.Cnc.Translator.AST where 
 
 import StringTable.Atom
 import Data.Data
 import Data.List
+import Data.Char
 import Text.PrettyPrint.HughesPJClass
 import Data.Generics.Serialization.SExp
 import Data.Generics.Serialization.Streams
@@ -39,9 +42,26 @@ instance Pretty (Exp dec) where
  pPrint (Lit _ l) = pPrint l
  pPrint (Var _ s) = text s
  pPrint (App _ rator rands) = 
-     parens $  
-        pPrint rator <+> sep (map pPrint rands)
+
+     case (rator,rands) of 
+       -- If it's a binop we should print appropriately.
+       (Var _ name, [left,right]) | (not $ isAlpha (head name)) -> 
+	     -- Sep can actually yield some very wierd behavior:
+--	     pPrint left `sep2` text name `sep2` pPrint right
+	     pPrint left <+> text name <+> pPrint right
+       _ ->  pPrint rator <> (parens $ commasep rands)
+
+ pPrint (If _ a b c) = 
+     sep [text "if (" <> pPrint a <> text ")",
+          nest 5 $ pPrint b, 
+	  text "else " <> pPrint c]
+
+
 --      sep (pPrint rator : map pPrint rands)
+
+commacat ls = hcat (intersperse (text ", ") $ map pPrint ls)
+commasep ls = sep (intersperse (text ", ") $ map pPrint ls)
+sep2 a b = sep [a,b]
 
 
 -- This is the price of tagging the source locations (and other
@@ -52,7 +72,7 @@ getExpDecoration e =
    Lit s _        -> s
    Var s _        -> s
    App s _ _      -> s
-
+   If  s _ _ _    -> s
 
 --------------------------------------------------------------------------------
 -- Types
@@ -62,11 +82,18 @@ getExpDecoration e =
 data Type =
    TInt
  | TFloat
+ -- An abstract type not intpreted by CnC:
+ | TSym String
+ | TPtr Type
+ | TTuple [Type]
  deriving (Eq,Ord,Show,Data,Typeable)
 
 instance Pretty (Type) where
- pPrint (TInt)   = text "int"
- pPrint (TFloat) = text "float"
+ pPrint (TInt)      = text "int"
+ pPrint (TFloat)    = text "float"
+ pPrint (TSym str)  = text str
+ pPrint (TPtr ty)   = pPrint ty <> text "*"
+ pPrint (TTuple ty) = text "(" <> commacat ty <> text ")"
 
 ----------------------------------------------------------------------------------------------------
 -- Top level Statements in a .cnc file:
@@ -85,27 +112,31 @@ data PStatement dec =
  | DeclareSteps dec String 
  deriving (Eq,Ord,Show,Data,Typeable)
 
-commasep ls = hcat (intersperse (text ", ") $ map pPrint ls)
-
 instance Pretty (PStatement dec) where 
  pPrint (Chain first rest) = 
-     commasep first <+>
+     commacat first <+>
      hsep (map pPrint rest) <> text ";\n"
  pPrint (DeclareTags _ name Nothing)   = text "tags " <> text name <> text ";\n"
- pPrint (DeclareTags _ name (Just ty)) = text "tags " <> text name <> pPrint ty <> text ";\n"
+ pPrint (DeclareTags _ name (Just ty)) = text "tags<" <> pPrint ty <> text "> " <> text name <> text ";\n"
+
+ pPrint (DeclareItems _ name Nothing) = text "items " <> text name <> text ";\n"
+ pPrint (DeclareItems _ name (Just (ty1,ty2))) = 
+     text "items<" <> pPrint ty1 <> text ", " <> pPrint ty2 <> text "> " <> text name <> text ";\n"
 
 
 --instance Pretty [PStatement dec] where 
 -- pPrint ls = vcat (map pPrint ls)
 
 data RelLink dec = 
-   ProduceLink      dec [CollectionInstance dec]
- | PrescribeLink    dec [CollectionInstance dec]
- | RevPrescribeLink dec [CollectionInstance dec]
+   ProduceLink    dec [CollectionInstance dec]
+ | PrescribeLink  dec [CollectionInstance dec]
+ | RevProduceLink dec [CollectionInstance dec]
  deriving (Eq,Ord,Show,Data,Typeable)
 
 instance Pretty (RelLink dec) where
- pPrint (ProduceLink _ ls) = text "->" <+> commasep ls 
+ pPrint (ProduceLink    _ ls) = text "->" <+> commacat ls 
+ pPrint (PrescribeLink  _ ls) = text "::" <+> commacat ls 
+ pPrint (RevProduceLink _ ls) = text "<-" <+> commacat ls 
 
 data CollectionInstance dec = 
    InstName String
@@ -116,7 +147,7 @@ data CollectionInstance dec =
 instance Pretty (CollectionInstance dec) where 
   pPrint (InstName s) = text s
   pPrint (InstDataTags    s exps) = text s <> pPrint exps
-  pPrint (InstControlTags s exps) = text s <> parens (commasep exps)
+  pPrint (InstControlTags s exps) = text s <> parens (commacat exps)
 
 
 ----------------------------------------------------------------------------------------------------
@@ -126,15 +157,15 @@ instance Pretty (CollectionInstance dec) where
 -- Tag expressions are distinct from Exp and much more restrictive.
 -- (For example, conditionals are not allowed.)
 
-data TagExp = 
-   TEVar String 
- | TEApp String [TagExp]
- deriving (Eq,Ord,Show,Data,Typeable)
+-- data TagExp = 
+--    TEVar String 
+--  | TEApp String [TagExp]
+--  deriving (Eq,Ord,Show,Data,Typeable)
 
-instance Pretty TagExp where 
-  pPrint te =  case te of
-    TEVar s       -> text s 
-    TEApp s rands -> text s <> parens (commasep rands)
+-- instance Pretty TagExp where 
+--   pPrint te =  case te of
+--     TEVar s       -> text s 
+--     TEApp s rands -> text s <> parens (commacat rands)
 
 ----------------------------------------------------------------------------------------------------
 -- CnC Graph Representation:

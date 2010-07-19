@@ -275,8 +275,22 @@ instance Pretty SrcLoc where
 
 -- Eventually this should print a snippet of the file:
 instance Pretty SrcSpan where
-  pPrint span = pPrint (srcSpanStart span) <> text " : " <>
-		pPrint (srcSpanEnd span)
+  pPrint span = 
+      let startL = srcLine$   srcSpanStart span
+	  startC = srcColumn$ srcSpanStart span
+	  endL   = srcLine$   srcSpanEnd span
+	  endC   = srcLine$   srcSpanEnd span
+      in
+      sep [text ("file " ++ (srcFilename $ srcSpanStart span)),
+	   --if (startL,startC) == (endL,endC)
+	   --then text "FOOBAR"
+	   --else 
+	        text $ "between line:column " ++ (show startL) ++ ":" ++ (show startC)
+   	               ++ " and " ++ (show endL) ++ ":" ++ (show endC)]
+
+
+--              pPrint (srcSpanStart span) <> text " : " <>
+--		pPrint (srcSpanEnd span)
 
 ----------------------------------------------------------------------------------------------------
 

@@ -13,14 +13,16 @@ module CncLexer where
 -- First some useful macros:
 ----------------------------------------------------------------------------------------------------
 $whitechar = [ \t\n\r\f\v]
-$special   = [\(\)\,\;\[\]\`\{\}]
+-- RRN [2010.07.19] Moving asterisk to special category:
+-- This may be a bad idea wrt extensibility.
+$special   = [\(\)\,\;\[\]\`\{\}\*]
 
 $digit     = 0-9
 $large     = [A-Z \xc0-\xd6 \xd8-\xde]
 $small     = [a-z \xdf-\xf6 \xf8-\xff \_]
 $alpha     = [$small $large]
 
-$ascsymbol = [\!\#\$\%\&\*\+\.\/\<\=\>\?\@\\\^\|\-\~]
+$ascsymbol = [\!\#\$\%\&\+\.\/\<\=\>\?\@\\\^\|\-\~]
 $symbol    = [$ascsymbol] # [$special \_\:\"\']
 
 -- Almost everything:
@@ -33,8 +35,8 @@ $symchar   = [$symbol \:]
 	module|step|fun|tags|items|steps
 
 @reservedop =
-        "::" | "|" | "<-" | "->" | "{" | "}" | "<" | ">" | "[" | "]"  
-
+        "::" | "|" | "<-" | "->" | "{" | "}"  | "<" | ">" 
+-- | "[" | "]"  
  -- | "*" | "+"
 
 @varid  = $idchar+
@@ -65,7 +67,8 @@ haskell :-
 
 <0> $white+			{ skip }
 
-<0> "//"\-*[^$symbol].*		{ mkL LComment }
+-- <0> "//"\-*[^$symbol].*		{ mkL LComment }
+<0> "//".*		{ mkL LComment }
 "/*"				{ nested_comment }
 
 <0> $special			{ mkL LSpecial }
@@ -167,13 +170,6 @@ lexError s = do
 		     then " before " ++ show (head input)
 		     else " at end of file"))
 
-scanner str = runAlex str $ do
-  let loop i = do tok@(L _ cl _) <- alexMonadScan; 
-		  if cl == LEOF
-			then return i
-			else do loop $! (i+1)
-  loop 0
-
 -- Returns either a list of tokens or an error:
 scan_to_list :: String -> [Lexeme]
 scan_to_list str = 
@@ -182,6 +178,11 @@ scan_to_list str =
      Right ls -> ls
  where 
    result = runAlex str $ do
+{-
+-- TODO: get line number for lex error:
+     let loop i = do tok@(L _ cl _) <- alexMonadScan; 
+-}		     
+-- Maybe we can hack the monad here by replacing bind with our own version.
      let loop i = do tok@(L _ cl _) <- alexMonadScan; 
 		     if cl == LEOF
 		        then return []
@@ -198,7 +199,7 @@ main = do
   putStrLn "HEllo!\n"
   s <- getContents
   --s <- getLine
-  print (scanner s)
+  --print (scanner s)
   sequence_ (map print $ scan_to_list s)
   -- case scan_to_list s of 
   --   Left err -> print err

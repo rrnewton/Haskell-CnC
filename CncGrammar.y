@@ -1,14 +1,12 @@
 {
 {-# LANGUAGE DeriveDataTypeable #-}
-module Main where
+module CncGrammar where
 --module CncGrammar where
 import Char
 import CncLexer hiding (main)
 import StringTable.Atom
 import Data.Data
 import Text.PrettyPrint.HughesPJClass
-import Data.Generics.Serialization.SExp
-import Data.Generics.Serialization.Streams
 --import Intel.Cnc.Translator.AST
 import AST
 import SrcLoc
@@ -43,15 +41,17 @@ import SrcLoc
 
 	'('		{ L _ LSpecial "(" }
 	')'		{ L _ LSpecial ")" }
-	';'		{ L _ LSpecial ";" }
-
 	'['		{ L _ LSpecial "[" }
 	']'		{ L _ LSpecial "]" }
+	';'		{ L _ LSpecial ";" }
 	','		{ L _ LSpecial "," }
+	'<'		{ L _ LReservedOp "<" }
+	'>'		{ L _ LReservedOp ">" }
 
 	'+'		{ L _ LVarOp "+" }
 	'-'		{ L _ LVarOp "-" }
-	'*'		{ L _ LVarOp "*" }
+--	'*'		{ L _ LVarOp "*" }
+	'*'		{ L _ LSpecial "*" }
 	'/'		{ L _ LVarOp "/" }
 	op		{ L _ LVarOp _ }
 
@@ -90,27 +90,39 @@ Terminated_Decl     : Decl     ';'         { $1 }
 Decl :: { PStatement SrcSpan } 
 Decl     
   : tags var                               { DeclareTags (lexSpan $1) (lexStr $2) Nothing }
+  | tags '<' Type '>' var                  { DeclareTags (lexSpan $1) (lexStr $5) (Just $3) }
+  | items var                              { DeclareItems (lexSpan $1) (lexStr $2) Nothing }
+  | items '<' Type ',' Type '>' var        { DeclareItems (lexSpan $1) (lexStr $7) (Just ($3, $5)) }
+
 
 Relation :: { PStatement SrcSpan }
 Relation :  Instances Chain                { Chain $1 $2 }
 
 Chain :: { [RelLink SrcSpan] }
-Chain : Link                               { [$1] }
+Chain :                                    { []   }
+      | Link                               { [$1] }
       | Link Chain                         { $1 : $2 }
-Link  :  "->" Instances                    { ProduceLink (lexSpan $1) $2 }
+Link  :  "->" Instances                    { ProduceLink    (lexSpan $1) $2 }
+      |  "<-" Instances                    { RevProduceLink (lexSpan $1) $2 }
+      |  "::" Instances                    { PrescribeLink  (lexSpan $1) $2 }
 
 Instances :: { [CollectionInstance SrcSpan] }
 Instances
-  : Instance                               { [$1] }
+  :                                        { []   }
+  | Instance                               { [$1] }
   | Instance ',' Instances                 { $1 : $3 }
 
 Instance 
   : var                                    { InstName        (lexStr $1) }
   | var '[' TagExps ']'                    { InstDataTags    (lexStr $1) $3 }
   | var '(' TagExps ')'                    { InstControlTags (lexStr $1) $3 }
+--  | var '<' TagExps '>'                    { InstControlTags (lexStr $1) $3 }
+
+  | tags                                   { parseErrorSDoc (lexSpan $1) $ text "Keyword 'tags' used incorrectly." }
 
 TagExps :: { [Exp SrcSpan] }
 TagExps : Exp                              { [$1] }
+	|                                  { []   }
 	| Exp ',' TagExps                  { $1 : $3 }
 
 --Tag : var                                  { TEVar (lexStr $1) }
@@ -129,6 +141,15 @@ Exp : var	             	{ Var (lexSpan $1) (lexStr $1) }
     | Exp '/' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) "/") [$1, $3] }
     | Exp op Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) (lexStr $2)) [$1, $3] } 
 
+Type 
+    : var                       { TSym (lexStr $1) } 
+    | Type '*'                  { TPtr $1 } 
+    | '(' Types ')'             { TTuple $2 } 
+
+Types :                         { [] }
+      | Type                    { [$1] }
+      | Type ',' Types          { $1 : $3 }
+  
 
 -- We are simply returning the parsed data structure!  Now we need
 -- some extra code, to support this parser, and make in complete:
@@ -143,6 +164,10 @@ happyError :: [Lexeme] -> a
 happyError ls =
  error ("Parse error before token at location : \n   " ++
         show (pPrint (lexLoc $ head ls)))
+
+parseErrorSDoc span doc =
+   error $ show $ text "\n\nPARSE ERROR!\n  " <> doc $$ 
+	          text "At location: " <> pPrint span
 
 -- Now we declare the datastructure that we are parsing.
 
@@ -166,26 +191,5 @@ lexSpan (L (AlexPn n l c) _ _) = srcLocSpan (SrcLoc "unknownfile" l c)
 combExpSpans e1 e2 = combineSrcSpans (getExpDecoration e1) (getExpDecoration e2)
 
 quit = print "runCnc failed\n"
-
-
-
--- Here we test our parser.
-main = do 
- s <- getContents
- putStrLn "Lexed: "
- sequence_ $ map print $ scan_to_list s
-
- let parsed = runCnc s
- putStrLn "\nParsed:"
- print parsed
- putStrLn "\nPretty:"
- putStrLn$ renderStyle style $ hcat $ map pPrint parsed
-
- putStrLn "\n Ok how bout sexp:"
- let str = buildList $ sexpSerialize parsed
-
- putStrLn str
-
- putStrLn "\n Done.."    
     
 }
