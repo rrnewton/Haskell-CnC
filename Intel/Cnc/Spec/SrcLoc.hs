@@ -130,7 +130,7 @@ data SrcSpan
 
   | UnhelpfulSpan !FileNameString  -- Just a general indication
 				   -- also used to indicate an empty span
- deriving (Eq,Show,Typeable,Data)
+ deriving (Eq,Typeable,Data)
 
 
 -- | Create a 'SrcSpan' corresponding to a single point
@@ -291,6 +291,14 @@ instance Pretty SrcSpan where
 
 --              pPrint (srcSpanStart span) <> text " : " <>
 --		pPrint (srcSpanEnd span)
+
+-- Might as well use the pretty version for plain show:
+instance Show SrcSpan where
+    show = show . pPrint 
+
+-- An error with a location.
+locErr span msg = 
+  error$ msg ++ "\n Location: "++ (show span)
 
 ----------------------------------------------------------------------------------------------------
 

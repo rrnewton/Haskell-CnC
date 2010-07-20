@@ -59,6 +59,8 @@ import Text.PrettyPrint.HughesPJClass
 	tags		{ L _ LReservedId "tags" }
 	items		{ L _ LReservedId "items" }
 	steps		{ L _ LReservedId "steps" }
+	dense		{ L _ LReservedId "dense" }
+	bounded		{ L _ LReservedId "bounded" }
 
 --	comment		{ L _ LComment _ }
 
@@ -90,16 +92,31 @@ Terminated_Decl     : Decl     ';'         { $1 }
 
 Decl :: { [PStatement SrcSpan] } 
 Decl     
+--   : Mods tags var                          { [DeclareTags (lexSpan $2) (lexStr $3) Nothing] }
+--   -- [2010.07.20] I'm having a strange problem making Mods optional:
+--   | Mods tags '<' Type '>' var             { [DeclareTags (lexSpan $2) (lexStr $6) (Just $4)] }
+-- --  | Mod Mods tags '<' Type '>' var         { [DeclareTags (lexSpan $3) (lexStr $7) (Just $5)] }
+--   : tags '<' Type '>' var                  { [DeclareTags (lexSpan $1) (lexStr $5) (Just $3)] }
+--   | Mods items var                         { [DeclareItems (lexSpan $2) (lexStr $3) Nothing] }
+--   | Mods items '<' Type ',' Type '>' var   { [DeclareItems (lexSpan $2) (lexStr $8) (Just ($4, $6))] }
+--   | steps VarLs                            { map (\x -> DeclareSteps (lexSpan $1) (lexStr x)) $2 }
+
   : tags var                               { [DeclareTags (lexSpan $1) (lexStr $2) Nothing] }
   | tags '<' Type '>' var                  { [DeclareTags (lexSpan $1) (lexStr $5) (Just $3)] }
   | items var                              { [DeclareItems (lexSpan $1) (lexStr $2) Nothing] }
   | items '<' Type ',' Type '>' var        { [DeclareItems (lexSpan $1) (lexStr $7) (Just ($3, $5))] }
-
   | steps VarLs                            { map (\x -> DeclareSteps (lexSpan $1) (lexStr x)) $2 }
+
+
+--  | bounded                                { }
 
 VarLs : var                                { [$1] }
       | var ',' VarLs                      { $1 : $3 }
 
+-- Modifier keywords can precede declarations.
+--Mods : {- empty -}                         { [] }
+--     | Mod Mods                            { $1 : $2 }
+Mod  : dense                               { "dense" }
 
 Relation :: { PStatement SrcSpan }
 Relation :  Instances Chain                { Chain $1 $2 }

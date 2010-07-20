@@ -13,6 +13,8 @@ import Data.Generics.Serialization.SExp
 import Data.Generics.Serialization.Streams
 --import SrcLoc
 
+-- Export this friendly shortcut:
+pp x = pPrint x -- Eta expand, monomorphism restriction.
 
 -- For now there is exactly one predefined step collection:
 isBuiltin "env" = True
@@ -46,13 +48,12 @@ instance Pretty (Exp dec) where
  pPrint (Lit _ l) = pPrint l
  pPrint (Var _ s) = text (fromAtom s)
  pPrint (App _ rator rands) = 
-
      case (rator,rands) of 
        -- If it's a binop we should print appropriately.
        (Var _ name, [left,right]) | (not $ isAlpha (head (fromAtom name))) -> 
 	     -- Sep can actually yield some very wierd behavior:
 --	     pPrint left `sep2` text name `sep2` pPrint right
-	     pPrint left <+> text (fromAtom name) <+> pPrint right
+	     parens (pp left <+> text (fromAtom name) <+> pp right)
        _ ->  pPrint rator <> (parens $ commasep rands)
 
  pPrint (If _ a b c) = 
@@ -152,8 +153,9 @@ data CollectionInstance dec =
 
 instance Pretty (CollectionInstance dec) where 
   pPrint (InstName s) = text s
-  pPrint (InstDataTags    s exps) = text s <> pPrint exps
-  pPrint (InstControlTags s exps) = text s <> parens (commacat exps)
+--  pPrint (InstDataTags    s exps) = text s <> pPrint exps -- WEIRD indent behaviour, commasep is ALSO weird
+  pPrint (InstDataTags    s exps) = text s <> brackets (commacat exps)
+  pPrint (InstControlTags s exps) = text s <> parens   (commacat exps)
 
 
 ----------------------------------------------------------------------------------------------------
@@ -163,15 +165,35 @@ instance Pretty (CollectionInstance dec) where
 -- Tag expressions are distinct from Exp and much more restrictive.
 -- (For example, conditionals are not allowed.)
 
--- data TagExp = 
---    TEVar String 
---  | TEApp String [TagExp]
---  deriving (Eq,Ord,Show,Data,Typeable)
+data TagExp = 
+   TEVar Atom
+ | TEInt Int -- Is there any conceivable need for arbitrary precision here?
+ | TEApp Atom [TagExp]
+ deriving (Eq,Ord,Show,Data,Typeable)
 
--- instance Pretty TagExp where 
---   pPrint te =  case te of
---     TEVar s       -> text s 
---     TEApp s rands -> text s <> parens (commacat rands)
+instance Pretty TagExp where 
+  pPrint te =  case te of
+    TEVar s       -> text (fromAtom s)
+--    TEApp s rands -> text (fromAtom s) <> parens (commacat rands)
+    TEApp rat rands -> 
+     case rands of 
+       [left,right] | not $ isAlpha (head (fromAtom rat)) -> 
+     	     parens (pp left <+> text (fromAtom rat) <+> pp right)
+       _ ->  text (fromAtom rat) <> (parens $ commasep rands)
+
+-- A tag function of dimension N has N formal parameters and N "bodies".
+data TagFun = TF [Atom] [TagExp]
+  deriving (Eq, Ord)
+
+instance Pretty TagFun where 
+  pPrint (TF formals bods) =
+    text "\\" <> hsep (map (text . fromAtom) formals) <+> text "->" <+> 
+    commacat bods
+
+-- Again, might as well use the pretty version
+instance Show TagFun where 
+  show = show . pp
+
 
 ----------------------------------------------------------------------------------------------------
 -- CnC Graph Representation:

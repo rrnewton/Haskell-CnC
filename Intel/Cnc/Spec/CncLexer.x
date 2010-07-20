@@ -32,7 +32,7 @@ $idchar    = [$alpha $digit \']
 $symchar   = [$symbol \:]
 
 @reservedid = 
-	module|step|fun|tags|items|steps
+	module|step|fun|tags|items|steps|dense|bounded
 
 @reservedop =
         "::" | "|" | "<-" | "->" | "{" | "}"  | "<" | ">" 

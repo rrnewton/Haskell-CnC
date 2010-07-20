@@ -9,9 +9,10 @@
 
 module Intel.Cnc.Spec.GatherGraph where
 import Intel.Cnc.Spec.AST
+import Intel.Cnc.Spec.SrcLoc
 
-import Data.Map hiding (empty)
-import Data.Set as Set 
+import Data.Map        hiding (empty,map)
+import Data.Set as Set hiding (map)
 import StringTable.Atom 
 import Control.Monad
 import Debug.Trace
@@ -23,9 +24,8 @@ import Data.Graph.Inductive as G
 builtinSteps = [toAtom "env"]
 
 --data CncGraph = CncGraph (Gr CncGraphNode TagFun)
-type CncGraph =  (Gr CncGraphNode TagFun)
+type CncGraph =  (Gr CncGraphNode (Maybe TagFun))
 
-type TagFun = ()
 type ColName = Atom
 
 data CncGraphNode  = 
@@ -34,12 +34,46 @@ data CncGraphNode  =
   | CGItems ColName 
  deriving (Eq, Ord, Show)
 
-mkTagFun exps1 exps2 = ()
+
+-- The left argument is the "formal parameter" and the right argument the "body".
+-- But really it's just an equality.
+-- Note, the reason these are Exp LISTS is because these are implicitly tuples.
+-- The tag functions are multi-dimensional.
+mkTagFun exps1 exps2 = 
+ let e1s = map checkConvertTF exps1
+     e2s = map checkConvertTF exps2
+ in if all isTEVar e1s
+    then if length exps1 == length exps2 
+         then Just (TF (map unTEVar e1s) e2s)
+	 else if Prelude.null exps2 
+	      then Nothing -- It's ok to simply leave off a tag function (but to have some var names on the step).
+	      else error$ "It is not acceptable to use the following tag expressions without\n"++
+		          "the same number of corresponding tag components indexing the step: "
+		          ++ (show$ pp exps2)
+    else error$ "Presently the tag expressions indexing step collections must be simple variables, not: " 
+	        ++ (show$ pp exps1)
+
+isTEVar (TEVar _) = True
+isTEVar _ = False
+
+unTEVar (TEVar name) = name
+
+-- This is where we convert arbitrary Exps into more restricted tag expressions that
+-- support symbolic manipulation.
+checkConvertTF e = 
+  case e of 
+    Lit s l -> case l of 
+	         LitInt i -> TEInt i; 
+		 _ -> locErr s "Only integer literals supported in tag functions presently."
+    Var s name -> TEVar name 
+    App _ (Var _ name) rands -> TEApp name (map checkConvertTF rands)
+    App s _ _  -> locErr s "Only very simple function applications allowed in tag functions presently."
+    If s _ _ _ -> locErr s "Conditionals disallowed in tag functions."
 
 ----------------------------------------------------------------------------------------------------
 
 -- Transform the not-directly-useful list of parsed statements into a real graph datatype.
-coalesceGraph :: [PStatement dec] -> CncGraph
+coalesceGraph :: [PStatement SrcSpan] -> CncGraph
 coalesceGraph parsed = 
     -- First add all the nodes to the graph
     let g1 :: CncGraph = run_ G.empty $ 
@@ -170,8 +204,8 @@ allDeclaredNames                      (_: tl) =        allDeclaredNames tl
 
 
 -- Continue extending a graph with nodes from a parsed chain.
-coalesceChain :: AllNodes -> [CollectionInstance dec] -> [RelLink dec] -> NodeMapM CncGraphNode TagFun Gr ()
-coalesceChain allnodes start ls = loop (process start) ls       
+coalesceChain :: Show dec => AllNodes -> [CollectionInstance dec] -> [RelLink dec] -> NodeMapM CncGraphNode (Maybe TagFun) Gr ()
+coalesceChain allnodes start ls = loop (process start) ls 
  where 
   process = Prelude.map (\x -> (instToNode allnodes x, instToExps x)) 
   loop prevs [] = return ()
