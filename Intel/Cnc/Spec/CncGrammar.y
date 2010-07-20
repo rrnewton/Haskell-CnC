@@ -1,15 +1,16 @@
 {
 {-# LANGUAGE DeriveDataTypeable #-}
-module CncGrammar where
---module CncGrammar where
-import Char
-import CncLexer hiding (main)
+module Intel.Cnc.Spec.CncGrammar where
+
+import Intel.Cnc.Spec.CncLexer hiding (main)
+import Intel.Cnc.Spec.AST
+import Intel.Cnc.Spec.SrcLoc
+
+import Data.Char
 import StringTable.Atom
 import Data.Data
 import Text.PrettyPrint.HughesPJClass
---import Intel.Cnc.Translator.AST
-import AST
-import SrcLoc
+
 }
 
 -- (Based on example from Simon Marlow.)

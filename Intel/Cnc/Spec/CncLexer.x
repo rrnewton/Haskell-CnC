@@ -3,7 +3,7 @@
 --module Main  where
 --module Main (main) where
 --module CncLexer (Token(..), alexScanTokens) where
-module CncLexer where
+module Intel.Cnc.Spec.CncLexer where
 }
 
 %wrapper "monad"

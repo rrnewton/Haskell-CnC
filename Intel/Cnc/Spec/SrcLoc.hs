@@ -38,7 +38,7 @@
 -- OF THE POSSIBILITY OF SUCH DAMAGE.
 --------------------------------------------------------------------------------
 
-module SrcLoc where
+module Intel.Cnc.Spec.SrcLoc where
 import Data.Data
 import Data.Bits
 import Text.PrettyPrint.HughesPJClass

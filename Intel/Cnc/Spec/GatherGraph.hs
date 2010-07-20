@@ -7,8 +7,9 @@
 
 -- 
 
-module GatherGraph where
-import AST
+module Intel.Cnc.Spec.GatherGraph where
+import Intel.Cnc.Spec.AST
+
 import Data.Map hiding (empty)
 import Data.Set as Set 
 import StringTable.Atom 

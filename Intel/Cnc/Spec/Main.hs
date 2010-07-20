@@ -1,10 +1,10 @@
 
 module Main where
 
-import CncLexer hiding (main)
-import CncGrammar
-import AST
-import GatherGraph
+import Intel.Cnc.Spec.CncLexer hiding (main)
+import Intel.Cnc.Spec.CncGrammar
+import Intel.Cnc.Spec.AST
+import Intel.Cnc.Spec.GatherGraph
 
 import Text.PrettyPrint.HughesPJClass
 import Data.Generics.Serialization.SExp

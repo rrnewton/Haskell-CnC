@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable  #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
-module AST where 
+module Intel.Cnc.Spec.AST where 
 --module Intel.Cnc.Translator.AST where 
 
 import StringTable.Atom
