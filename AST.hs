@@ -14,6 +14,10 @@ import Data.Generics.Serialization.Streams
 --import SrcLoc
 
 
+-- For now there is exactly one predefined step collection:
+isBuiltin "env" = True
+isBuiltin _     = False
+
 --------------------------------------------------------------------------------
 -- Expressions and Literals
 --------------------------------------------------------------------------------
@@ -122,6 +126,8 @@ instance Pretty (PStatement dec) where
  pPrint (DeclareItems _ name Nothing) = text "items " <> text name <> text ";\n"
  pPrint (DeclareItems _ name (Just (ty1,ty2))) = 
      text "items<" <> pPrint ty1 <> text ", " <> pPrint ty2 <> text "> " <> text name <> text ";\n"
+
+ pPrint (DeclareSteps _ name) =  text "steps " <> text name <> text ";\n"
 
 
 --instance Pretty [PStatement dec] where 

@@ -28,6 +28,10 @@ main = do
  putStrLn "\nPretty:"
  putStrLn$ renderStyle style $ hcat $ map pPrint parsed
 
+ putStrLn "\nGRAPH:"
+ let graph = coalesceGraph parsed
+ print graph
+
  putStrLn "\n Done.."    
 
 

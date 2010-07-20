@@ -1,4 +1,5 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, ScopedTypeVariables #-}
+{-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 ----------------------------------------------------------------------------------------------------
 -- This module implements a pass over the parser output that coalesces
 -- all the relations in a .cnc file into a more manageable graph type.
@@ -11,41 +12,17 @@ import AST
 import Data.Map hiding (empty)
 import Data.Set as Set 
 import StringTable.Atom 
+import Control.Monad
+import Debug.Trace
 
 import Data.Graph.Inductive as G
-import Data.Graph.Inductive.Example
 
-main :: IO ()
-main = return ()
+----------------------------------------------------------------------------------------------------
 
-m486 :: NodeMap String
-m486 = fromGraph clr486
+builtinSteps = [toAtom "env"]
 
-t1 :: Gr String ()
-t1 = insMapEdge m486 ("shirt", "watch", ()) clr486
-
-t2 :: Gr String ()
-t2 = insMapEdge m486 ("watch", "pants", ()) t1
-
-
-
-
-t3 :: Gr Char String
-t3 = run_ G.empty $
-    do insMapNodeM 'a'
-       insMapNodeM 'b'
-       insMapNodeM 'c'
-       insMapEdgesM [('a', 'b', "right"),
-		     ('b', 'a', "left"),
-		     ('b', 'c', "down"),
-		     ('c', 'a', "up")]
-
-
-blah  :: Gr String ()
-blah  = mkGraph (zip [1..9] ["shorts","socks","watch","pants","shoes",
-                              "shirt","belt","tie","jacket"])
-                 (labUEdges [(1,4),(1,5),(2,5),(4,5),(4,7),(6,7),(6,8),(7,9),(8,9)])
-
+--data CncGraph = CncGraph (Gr CncGraphNode TagFun)
+type CncGraph =  (Gr CncGraphNode TagFun)
 
 type TagFun = ()
 type ColName = Atom
@@ -56,62 +33,58 @@ data CncGraphNode  =
   | CGItems ColName 
  deriving (Eq, Ord, Show)
 
-
-mkTagFun :: [Exp a] -> [Exp a] -> TagFun
-mkTagFun _ _ = ()
-
-t4 :: Gr CncGraphNode String
-t4 = run_ G.empty $
-    do let a = CGSteps (toAtom "foo")
-	   b = CGTags  (toAtom "bar")
-	   c = CGItems (toAtom "baz")
-       insMapNodeM a 
-       insMapNodeM b
-       insMapNodeM c
-       insMapEdgesM [(b, a, "prescribe"),
-       		     (a, c, "produce"),
-       		     (c, a, "get")]
-
-t5 :: Gr CncGraphNode TagFun
-t5 = run_ G.empty $
-    do let a = CGSteps (toAtom "foo")
-	   b = CGTags  (toAtom "bar")
-	   c = CGItems (toAtom "baz")
-       insMapNodeM a 
-       insMapNodeM b
-       insMapNodeM c
-       insMapEdgesM [(b, a, ()),
-       		     (a, c, ()),
-       		     (c, a, ())]
-
---data CncGraph = CncGraph (Gr CncGraphNode TagFun)
-type CncGraph =  (Gr CncGraphNode TagFun)
+mkTagFun exps1 exps2 = ()
 
 ----------------------------------------------------------------------------------------------------
 
+-- Transform the not-directly-useful list of parsed statements into a real graph datatype.
 coalesceGraph :: [PStatement dec] -> CncGraph
-coalesceGraph = 
-   do undefined
+coalesceGraph parsed = 
+    -- First add all the nodes to the graph
+    let g1 :: CncGraph = run_ G.empty $ 
+	      do mapM_ declare parsed 
+		 mapM_ (insMapNodeM . CGSteps) builtinSteps 
+    in
+      trace ("Done collecting declares.. all nodes: " ++ show g1) $ 
+      run_ g1 $ forM_ parsed collect -- Then add the edges.
+ where 
+  declare stmt = 
+   case stmt of 
+      Chain start links  -> return ()
+      Function           -> return ()
+      DeclareExtern      -> return ()
+      DeclareTags  _ n _ -> do insMapNodeM $ CGTags $toAtom n; return ()
+      DeclareItems _ n _ -> do insMapNodeM $ CGItems$toAtom n; return ()
+      DeclareSteps _ n   -> do insMapNodeM $ CGSteps$toAtom n; return ()
+  allnodes = collectNodes parsed
+  collect stmt = 
+   case stmt of 
+      Chain start links -> coalesceChain allnodes start links
+      Function           -> return ()
+      DeclareExtern      -> return ()
+      DeclareTags  _ _ _ -> return ()
+      DeclareItems _ _ _ -> return ()
+      DeclareSteps _ _   -> return ()
 
 
---coalesceChain :: CollectionInstance dec -> [RelLink dec] -> CncGraph -> CncGraph
---coalesceChain prev [] graph = graph
---coalesceChain prev (hd:links) graph =
---   run_ graph $ 
-
+-- Collect a global set of all collection names.
 data AllNodes = AllNodes {
   steps :: Set ColName,
   tags  :: Set ColName,
   items :: Set ColName
 }
 
+
+
 -- Based on global sets of nodes/items/tags classify collection references.
+-- That is, turn "Instances" in the parse into real graph nodes.
 instToNode :: AllNodes -> CollectionInstance t -> CncGraphNode 
 instToNode (AllNodes { .. }) inst = 
     let classify name | Set.member name steps = CGSteps name
 		      | Set.member name tags  = CGTags  name
 		      | Set.member name items = CGItems name 
-                      | True                  = error$ "Collection was not declared: " ++ show name
+--		      | isBuiltin (fromAtom name) = CGSteps name
+                      | True                      = error$ "Collection was not declared: " ++ show name
     in case inst of 
         InstName name        -> classify $ toAtom name
 	InstDataTags name _  -> 
@@ -119,50 +92,134 @@ instToNode (AllNodes { .. }) inst =
 	      x@(CGItems _) -> x
 	      _ -> error$ "instToNode: collection indexed with [] but was not an item collection: "++ show name
 
+	InstControlTags name _  -> 
+	    case classify $ toAtom name of 
+	      x@(CGTags  _) -> x
+	      x@(CGSteps _) -> x
+	      _ -> error$ "instToNode: Error, collection is an item collection but is indexed with (), not [] : "++ show name
+
+
+instToExps :: CollectionInstance t -> [Exp t]
+instToExps (InstName        _)      = []
+instToExps (InstDataTags    _ exps) = exps
+instToExps (InstControlTags _ exps) = exps
+    
 
 -- This is tedious, but here we simply go over the big list of statements that come out of
 -- the parser and collect the declarations for items, steps, and tags.
+-- collectNodes :: [PStatement dec] -> AllNodes
+-- collectNodes [] = 
+--     AllNodes { steps= Set.empty, tags= Set.empty, items= Set.empty }
+-- collectNodes (DeclareTags _ name _ : tl) = 
+--     let a@(AllNodes{..}) = collectNodes tl 
+--     in  a { tags= Set.insert (toAtom name) tags }
+
+-- collectNodes (DeclareItems _ name _ : tl) = 
+--     let a@(AllNodes{..}) = collectNodes tl 
+--     in  a { items= Set.insert (toAtom name) items }
+
+-- collectNodes (DeclareSteps _ name : tl) = 
+--     let a@(AllNodes{..}) = collectNodes tl 
+--     in  a { steps= Set.insert (toAtom name) steps }
+
+-- collectNodes (_: tl) = collectNodes tl
+
+seedWorld =
+  AllNodes { steps= Set.fromList builtinSteps,
+	     tags=  Set.empty, 
+	     items= Set.empty }
+
 collectNodes :: [PStatement dec] -> AllNodes
-collectNodes [] = 
-    AllNodes { steps= Set.empty, tags= Set.empty, items= Set.empty }
-collectNodes (DeclareTags _ name _ : tl) = 
-    let a@(AllNodes{..}) = collectNodes tl 
-    in  a { tags= Set.insert (toAtom name) tags }
+collectNodes [] = seedWorld
+collectNodes (DeclareTags  s name _ : tl) = extendTags  s name $ collectNodes tl
+collectNodes (DeclareItems s name _ : tl) = extendItems s name $ collectNodes tl
+collectNodes (DeclareSteps s name   : tl) = extendSteps s name $ collectNodes tl
+collectNodes                     (_ : tl) = collectNodes tl
 
-collectNodes (DeclareItems _ name _ : tl) = 
-    let a@(AllNodes{..}) = collectNodes tl 
-    in  a { items= Set.insert (toAtom name) items }
+extendItems span name (a@(AllNodes{..})) =
+    let atom = checkDup a name in
+    a { items= Set.insert atom items }
+-- Annoying duplicated code:
+extendSteps span name (a@(AllNodes{..})) =
+    let atom = checkDup a name in
+    a { steps= Set.insert atom steps }
 
-collectNodes (DeclareSteps _ name : tl) = 
-    let a@(AllNodes{..}) = collectNodes tl 
-    in  a { steps= Set.insert (toAtom name) steps }
+extendTags span name  (a@(AllNodes{..})) =
+    let atom = checkDup a name in
+    a { tags= Set.insert atom tags }
 
-collectNodes (_: tl) = collectNodes tl
+checkDup all name = 
+    let atom = toAtom name in
+    if allNodesMember atom all
+    then error "DUP" 
+    else atom
+
+allNodesMember atom (AllNodes{..}) =
+    Set.member atom tags  ||
+    Set.member atom steps ||
+    Set.member atom items
+    
+allDeclaredNames :: [PStatement dec] -> [String]
+allDeclaredNames [] = []
+allDeclaredNames (DeclareTags _ name _  : tl) = name : allDeclaredNames tl
+allDeclaredNames (DeclareItems _ name _ : tl) = name : allDeclaredNames tl
+allDeclaredNames (DeclareSteps _ name   : tl) = name : allDeclaredNames tl
+allDeclaredNames                      (_: tl) =        allDeclaredNames tl
+
 
 
 -- Continue extending a graph with nodes from a parsed chain.
---coalesceChain :: CollectionInstance dec -> [RelLink dec] -> NodeMapM CncGraphNode TagFun Gr ()
---coalesceChain :: CncGraphNode -> [RelLink dec] -> NodeMapM CncGraphNode TagFun Gr ()
-coalesceChain allnodes prev prevTF [] = return ()
-coalesceChain allnodes prev prevTF (hd:links) =
-   case hd of 
-     ProduceLink _ insts -> 
---	 case instToNode allnodes $ head insts of 
---	   CGItems 
---let node = CGItems $ toAtom str
-       case head insts of 
-         InstDataTags str exps ->
-	     do let node = instToNode allnodes (head insts) 
-		insMapNodeM node
-		-- Connect the previous node to this one using a forward edge:
-		-- This is tricky because depending on whether the left or the right hand
-		-- side is the step collection the tag expressions are interpreted
-		-- differently.
-		case prev of 
-		  CGSteps _ -> insMapEdgeM (prev, node, mkTagFun prevTF exps)
-		  _ -> error$ "Only a step collection may produce output to item collection "++ show str
-		return ()
+coalesceChain :: AllNodes -> [CollectionInstance dec] -> [RelLink dec] -> NodeMapM CncGraphNode TagFun Gr ()
+coalesceChain allnodes start ls = loop (process start) ls       
+ where 
+  process = Prelude.map (\x -> (instToNode allnodes x, instToExps x)) 
+  loop prevs [] = return ()
+  loop prevs (hd:tl) = 
+    -- FIXME: inefficent redundant classifications
+    let produce prevs insts next = 
+         forM_ insts $ \ (node,exps) -> 
+         forM_ prevs $ \ (pnode,pexps) -> 
+	   do case (pnode, node) of 
+	        -- Valid combinations for a producer relation:
+	        (CGItems _, CGSteps _) -> trace ("Adding "++show (pnode,node))$ insMapEdgeM (pnode, node, mkTagFun exps pexps)
+	        (CGSteps _, CGItems _) -> trace ("Adding "++show (pnode,node))$ insMapEdgeM (pnode, node, mkTagFun pexps exps)
+	        (CGSteps _, CGTags _)  -> trace ("Adding "++show (pnode,node))$ insMapEdgeM (pnode, node, mkTagFun pexps exps)
+	        _                      -> error$ "coalesceChain: FIXME "++ show (pnode,node)
+              loop next tl
+    in
+    case hd of 
+     -- Connect the previous node to this one using a forward edge:
+     ProduceLink _ insts    -> let pi = process insts in produce prevs pi pi
+     RevProduceLink s insts -> let pi = process insts in produce pi prevs pi
+     PrescribeLink _ insts -> 
+       let processed = process insts in
+       forM_ (process insts) $ \ (node,exps) -> 
+       forM_ prevs $ \ (pnode,pexps) -> 
+	   -- This is a bit simpler because there is only one valid prescribe:
+	   do case (pnode, node) of 
+	        (CGTags _, CGSteps _) -> trace ("Adding "++show (pnode,node))$ insMapEdgeM (pnode, node, mkTagFun exps pexps)	  
+	        _                      -> error$ "coalesceChain: FIXME2 " ++ show (pnode,node)
+              loop processed tl
 
+-- This is tricky because depending on whether the left or the right
+-- hand side is the step collection the tag expressions are interpreted
+-- differently.
+
+
+{-
+         case this of 
+           InstDataTags str exps ->
+	       -- This is an item collection:
+  	       do let node = instToNode allnodes this 
+	  	  insMapNodeM node
+		  -- This is tricky because depending on whether the left or the right
+		  -- hand side is the step collection the tag expressions are interpreted
+		  -- differently.
+		  case prev of 
+		    CGSteps _ -> insMapEdgeM (prev, node, mkTagFun prevTF exps)
+		    _ -> error$ "Only a step collection may produce output to item collection "++ show str
+		  return ()
+-}
 
 ----------------------------------------------------------------------------------------------------
 {-

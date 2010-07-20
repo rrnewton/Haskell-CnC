@@ -79,20 +79,25 @@ import SrcLoc
 File :: { [PStatement SrcSpan] } 
 File : Statements                          { $1 }
 
-Statements : Statement Statements          { $1 : $2 }
-           | Statement                     { [$1] }
-Statement  : Terminated_Relation           { $1 }
+Statements : Statement Statements          { $1 ++ $2 }
+           | Statement                     { $1 }
+Statement  : Terminated_Relation           { [$1] }
            | Terminated_Decl               { $1 }
 
 Terminated_Relation : Relation ';'         { $1 }
 Terminated_Decl     : Decl     ';'         { $1 }
 
-Decl :: { PStatement SrcSpan } 
+Decl :: { [PStatement SrcSpan] } 
 Decl     
-  : tags var                               { DeclareTags (lexSpan $1) (lexStr $2) Nothing }
-  | tags '<' Type '>' var                  { DeclareTags (lexSpan $1) (lexStr $5) (Just $3) }
-  | items var                              { DeclareItems (lexSpan $1) (lexStr $2) Nothing }
-  | items '<' Type ',' Type '>' var        { DeclareItems (lexSpan $1) (lexStr $7) (Just ($3, $5)) }
+  : tags var                               { [DeclareTags (lexSpan $1) (lexStr $2) Nothing] }
+  | tags '<' Type '>' var                  { [DeclareTags (lexSpan $1) (lexStr $5) (Just $3)] }
+  | items var                              { [DeclareItems (lexSpan $1) (lexStr $2) Nothing] }
+  | items '<' Type ',' Type '>' var        { [DeclareItems (lexSpan $1) (lexStr $7) (Just ($3, $5))] }
+
+  | steps VarLs                            { map (\x -> DeclareSteps (lexSpan $1) (lexStr x)) $2 }
+
+VarLs : var                                { [$1] }
+      | var ',' VarLs                      { $1 : $3 }
 
 
 Relation :: { PStatement SrcSpan }
