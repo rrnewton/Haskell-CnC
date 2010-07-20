@@ -28,7 +28,7 @@ data Lit =
 -- Expressions are decorated with values of an arbitrary type:
 data Exp dec = 
    Lit dec Lit
- | Var dec String
+ | Var dec Atom
  | App dec (Exp dec) [Exp dec]
  | If  dec (Exp dec) (Exp dec) (Exp dec) 
  deriving (Eq, Ord, Show, Data, Typeable)
@@ -40,15 +40,15 @@ instance Pretty Lit where
 
 instance Pretty (Exp dec) where 
  pPrint (Lit _ l) = pPrint l
- pPrint (Var _ s) = text s
+ pPrint (Var _ s) = text (fromAtom s)
  pPrint (App _ rator rands) = 
 
      case (rator,rands) of 
        -- If it's a binop we should print appropriately.
-       (Var _ name, [left,right]) | (not $ isAlpha (head name)) -> 
+       (Var _ name, [left,right]) | (not $ isAlpha (head (fromAtom name))) -> 
 	     -- Sep can actually yield some very wierd behavior:
 --	     pPrint left `sep2` text name `sep2` pPrint right
-	     pPrint left <+> text name <+> pPrint right
+	     pPrint left <+> text (fromAtom name) <+> pPrint right
        _ ->  pPrint rator <> (parens $ commasep rands)
 
  pPrint (If _ a b c) = 
@@ -83,7 +83,7 @@ data Type =
    TInt
  | TFloat
  -- An abstract type not intpreted by CnC:
- | TSym String
+ | TSym Atom
  | TPtr Type
  | TTuple [Type]
  deriving (Eq,Ord,Show,Data,Typeable)
@@ -91,7 +91,7 @@ data Type =
 instance Pretty (Type) where
  pPrint (TInt)      = text "int"
  pPrint (TFloat)    = text "float"
- pPrint (TSym str)  = text str
+ pPrint (TSym str)  = text (fromAtom str)
  pPrint (TPtr ty)   = pPrint ty <> text "*"
  pPrint (TTuple ty) = text "(" <> commacat ty <> text ")"
 

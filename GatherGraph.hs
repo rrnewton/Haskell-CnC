@@ -6,12 +6,20 @@
 module GatherGraph where
 import AST
 import Data.Map
+import StringTable.Atom
+
+--type InData = 
+
+data StepEntry = 
+  StepEntry {
+    sePrescribingTagCol :: Atom
+  }
+-- TagCol OutTags InData OutData
 
 data CncGraph = 
   CncGraph { 
-    steps :: ()
+    steps :: (Map String StepEntry)
   }
-  
 
 
 coalesceGraph = undefined

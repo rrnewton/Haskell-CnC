@@ -129,20 +129,20 @@ TagExps : Exp                              { [$1] }
 
 Exp :: { Exp SrcSpan } -- The haskell type of the result of parsing this syntax class.
 
-Exp : var	             	{ Var (lexSpan $1) (lexStr $1) }
-    | qvar	             	{ Var (lexSpan $1) (lexStr $1) }
+Exp : var	             	{ Var (lexSpan $1) (toAtom$ lexStr $1) }
+    | qvar	             	{ Var (lexSpan $1) (toAtom$ lexStr $1) }
     | int	             	{ Lit (lexSpan $1) (LitInt $ read (lexStr $1)) }
     | '(' Exp ')'               { $2 }
 
 -- Including explicit productions for arithmetic just to handle precedence/associativity:
-    | Exp '+' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) "+") [$1, $3] }
-    | Exp '-' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) "-") [$1, $3] }
-    | Exp '*' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) "*") [$1, $3] }
-    | Exp '/' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) "/") [$1, $3] }
-    | Exp op Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) (lexStr $2)) [$1, $3] } 
+    | Exp '+' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) (toAtom "+")) [$1, $3] }
+    | Exp '-' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) (toAtom "-")) [$1, $3] }
+    | Exp '*' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) (toAtom "*")) [$1, $3] }
+    | Exp '/' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) (toAtom "/")) [$1, $3] }
+    | Exp op Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) (toAtom$ lexStr $2)) [$1, $3] } 
 
 Type 
-    : var                       { TSym (lexStr $1) } 
+    : var                       { TSym (toAtom $ lexStr $1) } 
     | Type '*'                  { TPtr $1 } 
     | '(' Types ')'             { TTuple $2 } 
 
