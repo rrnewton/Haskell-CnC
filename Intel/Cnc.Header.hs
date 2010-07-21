@@ -79,7 +79,7 @@ module MODNAME (
 
                   -- Undocumented experimental features:
                   Item, newItem, readItem, putItem,
-                  cncFor, cncFor2D,
+                  cncFor, cncFor2D, graphInStep,
 
                   tests, 
 -- * Example Program
