@@ -20,6 +20,19 @@ pp x = pPrint x -- Eta expand, monomorphism restriction.
 isBuiltin "env" = True
 isBuiltin _     = False
 
+-- Everything that is decorated with annotations (e.g. source
+-- locations) should be able to provide them or strip them.
+--
+-- Some generic programming could probably provide this for free.
+class Decorated t where 
+  stripDecor :: t a -> t ()
+  getDecor   :: t a -> a
+
+-- Oops, I don't know how to compose type constructors in a "curried" way:
+--instance Decorated t => Decorated ([] . t) where 
+--  stripDecor = map stripDecor
+--  getDecor = undefined
+
 --------------------------------------------------------------------------------
 -- Expressions and Literals
 --------------------------------------------------------------------------------
@@ -69,6 +82,22 @@ commasep ls = sep (intersperse (text ", ") $ map pPrint ls)
 sep2 a b = sep [a,b]
 
 
+instance Decorated Exp where 
+  stripDecor e = 
+   case e of 
+    Lit _ l        -> Lit () l
+    Var _ v        -> Var () v
+    App _ r d      -> App () (stripDecor r) (map stripDecor d)
+    If  _ a b c    -> If  () (stripDecor a) (stripDecor b) (stripDecor c)
+
+  getDecor e = 
+   case e of 
+    Lit s _        -> s
+    Var s _        -> s
+    App s _ _      -> s
+    If  s _ _ _    -> s
+
+
 -- This is the price of tagging the source locations (and other
 -- decorations) right on the Exprs rather than the even/odd
 -- alternating expression/decoration types.
@@ -110,11 +139,14 @@ data PStatement dec =
    -- When we parse a file we allow statements to be arbitrarily long chains of relations:
    -- We represent this as a starting instance(s) followed by an arbitrary number of links.
    Chain [CollectionInstance dec] [RelLink dec]
- | Function
- | DeclareExtern
  | DeclareTags  dec String (Maybe Type)
  | DeclareItems dec String (Maybe (Type, Type))
  | DeclareSteps dec String 
+
+ | Function
+ | DeclareExtern
+ | Constraints  dec (CollectionInstance dec) [Exp dec]
+
  deriving (Eq,Ord,Show,Data,Typeable)
 
 instance Pretty (PStatement dec) where 
@@ -130,10 +162,25 @@ instance Pretty (PStatement dec) where
 
  pPrint (DeclareSteps _ name) =  text "steps " <> text name <> text ";\n"
 
+ pPrint (Function )     = text "FUNCTION NOT WORKING YET"
+ pPrint (DeclareExtern) = text "DECLARE EXTERN NOT WORKING YET"
+
+ pPrint (Constraints _ inst exps) = text "constrain " <> pp inst <+> 
+				    hcat (intersperse (text ", ") $ map pp exps) <> text ";\n"
 
 --instance Pretty [PStatement dec] where 
 -- pPrint ls = vcat (map pPrint ls)
 
+instance Decorated PStatement where 
+  stripDecor stmt = 
+   case stmt of 
+     Chain insts links -> Chain (map stripDecor insts) (map stripDecor links)
+     DeclareTags  _ name ty -> DeclareTags  () name ty
+     DeclareItems _ name ty -> DeclareItems () name ty
+     DeclareSteps _ name    -> DeclareSteps () name
+  getDecor = undefined
+
+------------------------------------------------------------
 data RelLink dec = 
    ProduceLink    dec [CollectionInstance dec]
  | PrescribeLink  dec [CollectionInstance dec]
@@ -145,6 +192,11 @@ instance Pretty (RelLink dec) where
  pPrint (PrescribeLink  _ ls) = text "::" <+> commacat ls 
  pPrint (RevProduceLink _ ls) = text "<-" <+> commacat ls 
 
+instance Decorated RelLink where 
+  stripDecor = undefined
+  getDecor = undefined
+
+------------------------------------------------------------
 data CollectionInstance dec = 
    InstName String
  | InstDataTags    String [Exp dec]
@@ -156,6 +208,11 @@ instance Pretty (CollectionInstance dec) where
 --  pPrint (InstDataTags    s exps) = text s <> pPrint exps -- WEIRD indent behaviour, commasep is ALSO weird
   pPrint (InstDataTags    s exps) = text s <> brackets (commacat exps)
   pPrint (InstControlTags s exps) = text s <> parens   (commacat exps)
+
+
+instance Decorated CollectionInstance where 
+  stripDecor = undefined
+  getDecor = undefined
 
 
 ----------------------------------------------------------------------------------------------------
@@ -173,7 +230,8 @@ data TagExp =
 
 instance Pretty TagExp where 
   pPrint te =  case te of
-    TEVar s       -> text (fromAtom s)
+    TEVar s  -> text (fromAtom s)
+    TEInt n  -> text (show n)
 --    TEApp s rands -> text (fromAtom s) <> parens (commacat rands)
     TEApp rat rands -> 
      case rands of 

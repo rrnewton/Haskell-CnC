@@ -9,6 +9,7 @@ import Intel.Cnc.Spec.GatherGraph
 import Text.PrettyPrint.HughesPJClass
 import Data.Generics.Serialization.SExp
 import Data.Generics.Serialization.Streams
+import Data.List
 
 import System.Environment
 import System.Console.GetOpt
@@ -23,51 +24,62 @@ import Data.Maybe ( fromMaybe )
 data Flag 
     = Verbose  | Version 
     | Input String | Output String | LibDir String
-      deriving Show
+  deriving (Show, Eq)
     
 options :: [OptDescr Flag]
 options =
      [ Option ['v']     ["verbose"] (NoArg Verbose)       "verbose translator output to stdout"
      , Option ['V']     ["version"] (NoArg Version)       "show version number"
      ]
-    
+  
+
+when b action = if b then action else return ()
+  
 -- Here we test our parser.
 main = do 
- argv <- getArgs
- let header = "\nUsage: cnctrans [OPTION...] files..."
-     --defaultErr errs = ioError (userError (concat errs ++ usageInfo header options))
-     defaultErr errs = error $ "ERROR!\n" ++ (concat errs ++ usageInfo header options)
- (opts,files) <- 
+  argv <- getArgs
+  let header = "\nUsage: cnctrans [OPTION...] files..."
+      --defaultErr errs = ioError (userError (concat errs ++ usageInfo header options))
+      defaultErr errs = error $ "ERROR!\n" ++ (concat errs ++ usageInfo header options)
+
+  (opts,files) <- 
      case getOpt Permute options argv of
        (o,n,[]  ) -> return (o,n)
        (_,_,errs) -> defaultErr errs
- case files of 
-   [file] -> do h <- openFile file ReadMode; run h
-   []     -> defaultErr ["\nNo files provided!\n"]
-   ls     -> defaultErr ["\nCurrently the translator expects exactly one input file.\n"]
 
+  let file = 
+       case files of 
+        [file] -> file
+        []     -> defaultErr ["\nNo files provided!\n"]
+        ls     -> defaultErr ["\nCurrently the translator expects exactly one input file.\n"]
+      verbose = Verbose `elem` opts
 
-run handle = do
- s <- hGetContents handle
+  handle <- openFile file ReadMode
+  str <- hGetContents handle
 
- putStrLn "Lexed: "
- sequence_ $ map print $ scan_to_list s
+  when verbose$ putStrLn "\nAll Lexed Tokens: "
+  when verbose$ putStrLn "================================================================================"
+  --when verbose$ print $ hcat $ intersperse (text ", ") $ map (\ (L _ cl str) -> text (show cl) <+> pp str) $ scan_to_list str
+  when verbose$ print $ sep $ map (\ (L _ cl str) -> text (show cl) <+> pp str) $ scan_to_list str
+       --filter (not . is_comment) $ scan_to_list str -- Even filtering the long lines still doesn't `sep` to do the right thing.
 
- let parsed = runCnc s
- putStrLn "\nParsed:"
- print parsed
+  let parsed = runCnc str
+  when verbose$ putStrLn "\nParsed AST (detailed):"
+  when verbose$ putStrLn "================================================================================"
+  when verbose$ sequence_ $ map print parsed
 
- putStrLn "\n Ok how bout sexp:"
- sequence_ $ map (\stmt -> putStrLn $ buildList $ sexpSerialize stmt) parsed
+  when verbose$ putStrLn "\nParsed AST rendered as a SExp:"
+  when verbose$ putStrLn "================================================================================"
+  when verbose$ sequence_ $ map (\stmt -> putStrLn $ buildList $ sexpSerialize stmt) parsed
 
- putStrLn "\nPretty:"
- putStrLn$ renderStyle style $ hcat $ map pPrint parsed
+  putStrLn "\nPretty printed parsed AST:"
+  putStrLn "================================================================================"
+  putStrLn$ renderStyle style $ hcat $ map pPrint parsed
 
- putStrLn "\nGRAPH:"
- let graph = coalesceGraph parsed
- print graph
+  putStrLn "\nCoalesced CnC Graph:"
+  putStrLn "================================================================================"
+  let graph = coalesceGraph parsed
+  print graph
 
- putStrLn "\n Done.."    
-
-
+  putStrLn "\n Done.."    
 

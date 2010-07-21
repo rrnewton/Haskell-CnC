@@ -56,7 +56,8 @@ mkTagFun exps1 exps2 =
 isTEVar (TEVar _) = True
 isTEVar _ = False
 
-unTEVar (TEVar name) = name
+-- Avoid exhaustiveness warnings here:
+unTEVar = \ (TEVar name) -> name
 
 -- This is where we convert arbitrary Exps into more restricted tag expressions that
 -- support symbolic manipulation.
@@ -87,6 +88,7 @@ coalesceGraph parsed =
    case stmt of 
       Chain start links  -> return ()
       Function           -> return ()
+      Constraints _ _ _  -> return ()
       DeclareExtern      -> return ()
       DeclareTags  _ n _ -> do insMapNodeM $ CGTags $toAtom n; return ()
       DeclareItems _ n _ -> do insMapNodeM $ CGItems$toAtom n; return ()
@@ -96,6 +98,7 @@ coalesceGraph parsed =
    case stmt of 
       Chain start links -> coalesceChain allnodes start links
       Function           -> return ()
+      Constraints _ _ _  -> return ()
       DeclareExtern      -> return ()
       DeclareTags  _ _ _ -> return ()
       DeclareItems _ _ _ -> return ()

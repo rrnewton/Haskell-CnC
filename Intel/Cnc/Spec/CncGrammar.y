@@ -40,6 +40,8 @@ import Text.PrettyPrint.HughesPJClass
 	"<-"		{ L _ LReservedOp "<-" }
 	"::"		{ L _ LReservedOp "::" }
 
+	':'		{ L _ LReservedOp ":" }
+
 	'('		{ L _ LSpecial "(" }
 	')'		{ L _ LSpecial ")" }
 	'['		{ L _ LSpecial "[" }
@@ -60,7 +62,9 @@ import Text.PrettyPrint.HughesPJClass
 	items		{ L _ LReservedId "items" }
 	steps		{ L _ LReservedId "steps" }
 	dense		{ L _ LReservedId "dense" }
-	bounded		{ L _ LReservedId "bounded" }
+	prescribes      { L _ LReservedId "prescribes" }
+
+	constrain       { L _ LReservedId "constrain" }
 
 --	comment		{ L _ LComment _ }
 
@@ -92,20 +96,29 @@ Terminated_Decl     : Decl     ';'         { $1 }
 
 Decl :: { [PStatement SrcSpan] } 
 Decl     
---   : Mods tags var                          { [DeclareTags (lexSpan $2) (lexStr $3) Nothing] }
---   -- [2010.07.20] I'm having a strange problem making Mods optional:
---   | Mods tags '<' Type '>' var             { [DeclareTags (lexSpan $2) (lexStr $6) (Just $4)] }
--- --  | Mod Mods tags '<' Type '>' var         { [DeclareTags (lexSpan $3) (lexStr $7) (Just $5)] }
---   : tags '<' Type '>' var                  { [DeclareTags (lexSpan $1) (lexStr $5) (Just $3)] }
---   | Mods items var                         { [DeclareItems (lexSpan $2) (lexStr $3) Nothing] }
---   | Mods items '<' Type ',' Type '>' var   { [DeclareItems (lexSpan $2) (lexStr $8) (Just ($4, $6))] }
---   | steps VarLs                            { map (\x -> DeclareSteps (lexSpan $1) (lexStr x)) $2 }
-
-  : tags var                               { [DeclareTags (lexSpan $1) (lexStr $2) Nothing] }
+  : Mods tags var                          { [DeclareTags (lexSpan $2) (lexStr $3) Nothing] }
+  -- [2010.07.20] I'm having a strange problem making Mods optional:
+--  | Mods tags '<' Type '>' var             { [DeclareTags (lexSpan $2) (lexStr $6) (Just $4)] }
+  | Mod Mods tags '<' Type '>' var         { [DeclareTags (lexSpan $3) (lexStr $7) (Just $5)] }
   | tags '<' Type '>' var                  { [DeclareTags (lexSpan $1) (lexStr $5) (Just $3)] }
-  | items var                              { [DeclareItems (lexSpan $1) (lexStr $2) Nothing] }
-  | items '<' Type ',' Type '>' var        { [DeclareItems (lexSpan $1) (lexStr $7) (Just ($3, $5))] }
+  | Mods items var                         { [DeclareItems (lexSpan $2) (lexStr $3) Nothing] }
+  | Mods items '<' Type ',' Type '>' var   { [DeclareItems (lexSpan $2) (lexStr $8) (Just ($4, $6))] }
   | steps VarLs                            { map (\x -> DeclareSteps (lexSpan $1) (lexStr x)) $2 }
+
+  | constrain Instance ':' TagExps         { [Constraints (lexSpan $1) $2 $4] }
+  -- One additional shift/reduce conflict if we do not use a separator:
+  | constrain Instance TagExps             { [Constraints (lexSpan $1) $2 $3] }
+
+  --| constrain TagExps                      { [Constraints (lexSpan $1) (InstName "foo") []] }
+  --| constrain  Instance                      { [Constraints (lexSpan $1) (InstName "foo") []] }
+  --| constrain  var                           { [Constraints (lexSpan $1) (InstName "foo") []] }
+
+
+  -- : tags var                               { [DeclareTags (lexSpan $1) (lexStr $2) Nothing] }
+  -- | tags '<' Type '>' var                  { [DeclareTags (lexSpan $1) (lexStr $5) (Just $3)] }
+  -- | items var                              { [DeclareItems (lexSpan $1) (lexStr $2) Nothing] }
+  -- | items '<' Type ',' Type '>' var        { [DeclareItems (lexSpan $1) (lexStr $7) (Just ($3, $5))] }
+  -- | steps VarLs                            { map (\x -> DeclareSteps (lexSpan $1) (lexStr x)) $2 }
 
 
 --  | bounded                                { }
@@ -114,8 +127,8 @@ VarLs : var                                { [$1] }
       | var ',' VarLs                      { $1 : $3 }
 
 -- Modifier keywords can precede declarations.
---Mods : {- empty -}                         { [] }
---     | Mod Mods                            { $1 : $2 }
+Mods : {- empty -}                         { [] }
+     | Mod Mods                            { $1 : $2 }
 Mod  : dense                               { "dense" }
 
 Relation :: { PStatement SrcSpan }
@@ -123,11 +136,12 @@ Relation :  Instances Chain                { Chain $1 $2 }
 
 Chain :: { [RelLink SrcSpan] }
 Chain :                                    { []   }
-      | Link                               { [$1] }
+--      | Link                               { [$1] }
       | Link Chain                         { $1 : $2 }
 Link  :  "->" Instances                    { ProduceLink    (lexSpan $1) $2 }
       |  "<-" Instances                    { RevProduceLink (lexSpan $1) $2 }
       |  "::" Instances                    { PrescribeLink  (lexSpan $1) $2 }
+      |  prescribes Instances            { PrescribeLink  (lexSpan $1) $2 }
 
 Instances :: { [CollectionInstance SrcSpan] }
 Instances
@@ -141,6 +155,7 @@ Instance
   | var '(' TagExps ')'                    { InstControlTags (lexStr $1) $3 }
 --  | var '<' TagExps '>'                    { InstControlTags (lexStr $1) $3 }
 
+  -- Sadly, this error checking should go EVERYWHERE:
   | tags                                   { parseErrorSDoc (lexSpan $1) $ text "Keyword 'tags' used incorrectly." }
 
 TagExps :: { [Exp SrcSpan] }
@@ -162,6 +177,11 @@ Exp : var	             	{ Var (lexSpan $1) (toAtom$ lexStr $1) }
     | Exp '-' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) (toAtom "-")) [$1, $3] }
     | Exp '*' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) (toAtom "*")) [$1, $3] }
     | Exp '/' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) (toAtom "/")) [$1, $3] }
+
+    -- These need to be handled because they are lexed differently, being reserved characters:
+    | Exp '<' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) (toAtom "<")) [$1, $3] }
+    | Exp '>' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) (toAtom ">")) [$1, $3] }
+
     | Exp op Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) (toAtom$ lexStr $2)) [$1, $3] } 
 
 Type 

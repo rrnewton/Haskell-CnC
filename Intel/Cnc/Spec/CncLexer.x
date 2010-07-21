@@ -1,8 +1,5 @@
 
 {
---module Main  where
---module Main (main) where
---module CncLexer (Token(..), alexScanTokens) where
 module Intel.Cnc.Spec.CncLexer where
 }
 
@@ -32,7 +29,7 @@ $idchar    = [$alpha $digit \']
 $symchar   = [$symbol \:]
 
 @reservedid = 
-	module|step|fun|tags|items|steps|dense|bounded
+	module|step|fun|tags|items|steps|dense|constrain|prescribes
 
 @reservedop =
         "::" | "|" | "<-" | "->" | "{" | "}"  | "<" | ">" 
