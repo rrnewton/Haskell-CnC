@@ -5,6 +5,7 @@ import Intel.Cnc.Spec.CncLexer hiding (main)
 import Intel.Cnc.Spec.CncGrammar
 import Intel.Cnc.Spec.AST
 import Intel.Cnc.Spec.GatherGraph
+import Intel.Cnc.Spec.Codegen.CppOld
 
 import Text.PrettyPrint.HughesPJClass
 import Data.Generics.Serialization.SExp
@@ -66,7 +67,7 @@ main = do
   let parsed = runCnc str
   when verbose$ putStrLn "\nParsed AST (detailed):"
   when verbose$ putStrLn "================================================================================"
-  when verbose$ sequence_ $ map print parsed
+  when verbose$ sequence_ $ map (print . stripDecor) parsed
 
   when verbose$ putStrLn "\nParsed AST rendered as a SExp:"
   when verbose$ putStrLn "================================================================================"

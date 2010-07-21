@@ -22,6 +22,7 @@ isBuiltin _     = False
 
 -- Everything that is decorated with annotations (e.g. source
 -- locations) should be able to provide them or strip them.
+-- This replicates most of the benefit of using a "Located" type.
 --
 -- Some generic programming could probably provide this for free.
 class Decorated t where 
@@ -31,7 +32,7 @@ class Decorated t where
 -- Oops, I don't know how to compose type constructors in a "curried" way:
 --instance Decorated t => Decorated ([] . t) where 
 --  stripDecor = map stripDecor
---  getDecor = undefined
+--  getDecor = 
 
 --------------------------------------------------------------------------------
 -- Expressions and Literals
@@ -178,7 +179,17 @@ instance Decorated PStatement where
      DeclareTags  _ name ty -> DeclareTags  () name ty
      DeclareItems _ name ty -> DeclareItems () name ty
      DeclareSteps _ name    -> DeclareSteps () name
-  getDecor = undefined
+     Constraints _ inst ls  -> Constraints () (stripDecor inst) (map stripDecor ls)
+
+  getDecor stmt = 
+   case stmt of 
+     Chain (hd:_) _  -> getDecor hd
+     Chain [] (hd:_) -> getDecor hd
+     Chain [] []     -> error "getDecor: cannot get decoration from an empty 'Chain'.  Shouldn't have such a thing anyway."
+     DeclareTags  s _ _ -> s
+     DeclareItems s _ _ -> s
+     DeclareSteps s _   -> s
+     Constraints  s _ _ -> s
 
 ------------------------------------------------------------
 data RelLink dec = 
@@ -193,8 +204,16 @@ instance Pretty (RelLink dec) where
  pPrint (RevProduceLink _ ls) = text "<-" <+> commacat ls 
 
 instance Decorated RelLink where 
-  stripDecor = undefined
-  getDecor = undefined
+  stripDecor link = 
+    case link of 
+     ProduceLink    _ ls -> ProduceLink    () (map stripDecor ls)
+     PrescribeLink  _ ls -> PrescribeLink  () (map stripDecor ls)
+     RevProduceLink _ ls -> RevProduceLink () (map stripDecor ls)  
+  getDecor link = 
+    case link of 
+     ProduceLink    s _ -> s
+     PrescribeLink  s _ -> s
+     RevProduceLink s _ -> s
 
 ------------------------------------------------------------
 data CollectionInstance dec = 
@@ -211,8 +230,18 @@ instance Pretty (CollectionInstance dec) where
 
 
 instance Decorated CollectionInstance where 
-  stripDecor = undefined
-  getDecor = undefined
+  stripDecor inst = 
+    case inst of 
+      InstName        n    -> InstName n 
+      InstDataTags    n ls -> InstDataTags    n (map stripDecor ls)
+      InstControlTags n ls -> InstControlTags n (map stripDecor ls)
+  getDecor inst = 
+    case inst of 
+      InstDataTags    _ (h:_) -> getDecor h
+      InstControlTags _ (h:_) -> getDecor h
+      InstName        _    -> error "getDecor: collection references aren't currently themselves decorated"
+      InstDataTags    _ [] -> error "getDecor: empty item collection reference has no decorations"
+      InstControlTags _ [] -> error "getDecor: empty collection reference has no decorations"
 
 
 ----------------------------------------------------------------------------------------------------

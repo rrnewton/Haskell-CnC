@@ -20,8 +20,18 @@ default:
 runtime:
 	cabal configure
 	cabal build
+	@echo 
+	@echo ================================================================================
+	@echo   Building Documentation
+	@echo ================================================================================
 	cabal haddock
+
+	@echo 
+	@echo ================================================================================
+	@echo   Running Test executable in the cabal distribution package
+	@echo ================================================================================
 	./Setup.hs test
+
 
 interact:
 	ghci -cpp -DCNC_SCHEDULER=2 Intel/CncPure.hs
@@ -78,9 +88,14 @@ examples/test_parfor.o : Intel/Cnc3.hi
 #====================================================================================================
 
 
-HSOURCE=SrcLoc.hs Main.hs GatherGraph.hs AST.hs
+HSOURCE=SrcLoc.hs Main.hs GatherGraph.hs AST.hs Codegen/CppOld.hs
 
-trans: cnctrans
+trans: 
+	@echo 
+	@echo ================================================================================
+	@echo   Building Translator.
+	@echo ================================================================================
+	$(MAKE) cnctrans
 cnctrans: Intel/Cnc/Spec/CncLexer.hs Intel/Cnc/Spec/CncGrammar.hs buildtrans
 
 Intel/Cnc/Spec/CncLexer.hs: Intel/Cnc/Spec/CncLexer.x
