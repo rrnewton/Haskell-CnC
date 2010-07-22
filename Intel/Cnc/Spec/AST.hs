@@ -159,7 +159,7 @@ instance Pretty (PStatement dec) where
 
  pPrint (DeclareItems _ name Nothing) = text "items " <> text (fromAtom name) <> text ";\n"
  pPrint (DeclareItems _ name (Just (ty1,ty2))) = 
-     text "items<" <> pPrint ty1 <> text ", " <> pPrint ty2 <> text "> " <> text (fromAtom name) <> text ";\n"
+     text "items<" <> pPrint ty1 <> comma <+> pPrint ty2 <> text "> " <> text (fromAtom name) <> text ";\n"
 
  pPrint (DeclareSteps _ name) =  text "steps " <> text (fromAtom name) <> text ";\n"
 
@@ -167,7 +167,7 @@ instance Pretty (PStatement dec) where
  pPrint (DeclareExtern) = text "DECLARE EXTERN NOT WORKING YET"
 
  pPrint (Constraints _ inst exps) = text "constrain " <> pp inst <+> 
-				    hcat (intersperse (text ", ") $ map pp exps) <> text ";\n"
+				    hcat (punctuate (text ", ") $ map pp exps) <> text ";\n"
 
 --instance Pretty [PStatement dec] where 
 -- pPrint ls = vcat (map pPrint ls)

@@ -5,7 +5,9 @@ import Intel.Cnc.Spec.CncLexer hiding (main)
 import Intel.Cnc.Spec.CncGrammar
 import Intel.Cnc.Spec.AST
 import Intel.Cnc.Spec.GatherGraph
+import Intel.Cnc.Spec.Util
 import Intel.Cnc.Spec.Codegen.CppOld
+
 
 import Text.PrettyPrint.HughesPJClass
 import Data.Generics.Serialization.SExp
@@ -88,7 +90,7 @@ main = do
   putStrLn "\nFinally, generating header:"
   putStrLn "================================================================================"
 
-  putStrLn$ emitCppOld graph
+  writeSB stdout $ (emitCppOld graph :: SimpleBuilder ())
 
   putStrLn "\n Done.."    
 
