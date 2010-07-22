@@ -80,7 +80,15 @@ main = do
   putStrLn "\nCoalesced CnC Graph:"
   putStrLn "================================================================================"
   let graph = coalesceGraph parsed
-  print graph
+
+  putStrLn "\n \n"
+  print $ pp graph
+
+
+  putStrLn "\nFinally, generating header:"
+  putStrLn "================================================================================"
+
+  putStrLn$ emitCppOld graph
 
   putStrLn "\n Done.."    
 

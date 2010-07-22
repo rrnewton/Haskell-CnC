@@ -16,6 +16,6 @@ import Text.PrettyPrint.HughesPJClass
 
 
 -- Could use bytestrings or handles.
-emitCppOld :: CncGraph -> String
+emitCppOld :: CncSpec -> String
 emitCppOld = undefined
 
