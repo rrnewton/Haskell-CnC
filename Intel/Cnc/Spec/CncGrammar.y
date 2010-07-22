@@ -214,9 +214,14 @@ parseErrorSDoc span doc =
 
 -- Now we declare the datastructure that we are parsing.
 
-runCnc :: String -> [PStatement SrcSpan]
--- For now filter out comments before parsing:
-runCnc = parse_cnc . filter (not . is_comment) . scan_to_list
+runCncParser :: String -> String -> [PStatement SrcSpan]
+runCncParser file str = 
+   -- Here's a hack that's a bit ineffecient.  We POST-FACTO put the right filename in the
+   -- sourceloc decorations.  It would be better to do it right the first time.
+   map (mapDecor (srcSpanSetFileName file)) $
+   -- For now filter out comments before parsing:
+   parse_cnc $ filter (not . is_comment) $ 
+   scan_to_list str
 
 is_comment ( L _ LComment _ ) = True 
 is_comment _ = False 
@@ -231,7 +236,7 @@ lexSpan :: Lexeme -> SrcSpan
 lexSpan (L (AlexPn n l c) _ _) = srcLocSpan (SrcLoc "unknownfile" l c)
 
 -- Combine the spans in two expressions.
-combExpSpans e1 e2 = combineSrcSpans (getExpDecoration e1) (getExpDecoration e2)
+combExpSpans e1 e2 = combineSrcSpans (getDecor e1) (getDecor e2)
 
 quit = print "runCnc failed\n"
     

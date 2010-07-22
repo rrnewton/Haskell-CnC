@@ -43,12 +43,10 @@ struct #{name}_context;
  return ()
 
 emitStep name ty = putD$ 
-  -- text "struct " <> text (fromAtom atom) <+> lbrace $+$
-  -- (nest indent (text "execute();")) $+$
-  -- rbrace
   hangbraces (text "struct " <> text name) indent 
 	     (text "int execute(" <+> constRefType ty <+> text "tag," <+> 
 	      text name <> text "_context & c) const;")
+  <> semi
 
 
 constRefType ty = text "const" <+> dType ty <+> text "&"
@@ -61,9 +59,8 @@ dType ty = case ty of
   -- Here is the convention for representing tuples in C++.
   TTuple [a,b] -> text "PAIR"
   
-
+-- Simple pretty printing helpers:
 vbraces d = lbrace $+$ d $+$ rbrace
-
 hangbraces d1 n d2 = sep [d1, vbraces$ nest n d2]
   
 

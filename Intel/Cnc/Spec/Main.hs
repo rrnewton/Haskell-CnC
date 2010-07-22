@@ -66,7 +66,7 @@ main = do
   when verbose$ print $ sep $ map (\ (L _ cl str) -> text (show cl) <+> pp str) $ scan_to_list str
        --filter (not . is_comment) $ scan_to_list str -- Even filtering the long lines still doesn't `sep` to do the right thing.
 
-  let parsed = runCnc str
+  let parsed = runCncParser file str
   when verbose$ putStrLn "\nParsed AST (detailed):"
   when verbose$ putStrLn "================================================================================"
   when verbose$ sequence_ $ map (print . stripDecor) parsed

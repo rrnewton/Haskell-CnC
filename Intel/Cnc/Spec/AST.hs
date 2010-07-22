@@ -26,8 +26,10 @@ isBuiltin _     = False
 --
 -- Some generic programming could probably provide this for free.
 class Decorated t where 
-  stripDecor :: t a -> t ()
+  mapDecor   :: (a -> b) -> t a -> t b
   getDecor   :: t a -> a
+  stripDecor :: t a -> t ()
+  stripDecor = mapDecor (\_ -> ())
 
 -- Oops, I don't know how to compose type constructors in a "curried" way:
 --instance Decorated t => Decorated ([] . t) where 
@@ -76,21 +78,20 @@ instance Pretty (Exp dec) where
 	  text "else " <> pPrint c]
 
 
---      sep (pPrint rator : map pPrint rands)
-
 commacat ls = hcat (intersperse (text ", ") $ map pPrint ls)
 commasep ls = sep (intersperse (text ", ") $ map pPrint ls)
-sep2 a b = sep [a,b]
-
 
 instance Decorated Exp where 
-  stripDecor e = 
+  mapDecor f e = 
    case e of 
-    Lit _ l        -> Lit () l
-    Var _ v        -> Var () v
-    App _ r d      -> App () (stripDecor r) (map stripDecor d)
-    If  _ a b c    -> If  () (stripDecor a) (stripDecor b) (stripDecor c)
+    Lit s l        -> Lit (f s) l
+    Var s v        -> Var (f s) v
+    App s r d      -> App (f s) (mapDecor f r) (map (mapDecor f) d)
+    If  s a b c    -> If  (f s) (mapDecor f a) (mapDecor f b) (mapDecor f c)
 
+  -- This is the price of tagging the source locations (and other
+  -- decorations) right on the Exprs rather than the even/odd
+  -- alternating expression/decoration types.
   getDecor e = 
    case e of 
     Lit s _        -> s
@@ -98,21 +99,9 @@ instance Decorated Exp where
     App s _ _      -> s
     If  s _ _ _    -> s
 
-
--- This is the price of tagging the source locations (and other
--- decorations) right on the Exprs rather than the even/odd
--- alternating expression/decoration types.
-getExpDecoration e = 
- case e of 
-   Lit s _        -> s
-   Var s _        -> s
-   App s _ _      -> s
-   If  s _ _ _    -> s
-
 --------------------------------------------------------------------------------
 -- Types
 --------------------------------------------------------------------------------
-
 
 data Type =
    TInt
@@ -156,30 +145,28 @@ instance Pretty (PStatement dec) where
      hsep (map pPrint rest) <> text ";\n"
  pPrint (DeclareTags _ name Nothing)   = text "tags " <> text (fromAtom name) <> text ";\n"
  pPrint (DeclareTags _ name (Just ty)) = text "tags<" <> pPrint ty <> text "> " <> text (fromAtom name) <> text ";\n"
-
- pPrint (DeclareItems _ name Nothing) = text "items " <> text (fromAtom name) <> text ";\n"
+ pPrint (DeclareItems _ name Nothing)  = text "items" <+> text (fromAtom name) <> text ";\n"
  pPrint (DeclareItems _ name (Just (ty1,ty2))) = 
      text "items<" <> pPrint ty1 <> comma <+> pPrint ty2 <> text "> " <> text (fromAtom name) <> text ";\n"
-
  pPrint (DeclareSteps _ name) =  text "steps " <> text (fromAtom name) <> text ";\n"
+ pPrint (Constraints _ inst exps) = text "constrain " <> pp inst <+> 
+				    hcat (punctuate (text ", ") $ map pp exps) <> text ";\n"
 
  pPrint (Function )     = text "FUNCTION NOT WORKING YET"
  pPrint (DeclareExtern) = text "DECLARE EXTERN NOT WORKING YET"
 
- pPrint (Constraints _ inst exps) = text "constrain " <> pp inst <+> 
-				    hcat (punctuate (text ", ") $ map pp exps) <> text ";\n"
 
 --instance Pretty [PStatement dec] where 
 -- pPrint ls = vcat (map pPrint ls)
 
 instance Decorated PStatement where 
-  stripDecor stmt = 
+  mapDecor f stmt = 
    case stmt of 
-     Chain insts links -> Chain (map stripDecor insts) (map stripDecor links)
-     DeclareTags  _ name ty -> DeclareTags  () name ty
-     DeclareItems _ name ty -> DeclareItems () name ty
-     DeclareSteps _ name    -> DeclareSteps () name
-     Constraints _ inst ls  -> Constraints () (stripDecor inst) (map stripDecor ls)
+     Chain insts links -> Chain (map (mapDecor f) insts) (map (mapDecor f) links)
+     DeclareTags  s name ty -> DeclareTags  (f s) name ty
+     DeclareItems s name ty -> DeclareItems (f s) name ty
+     DeclareSteps s name    -> DeclareSteps (f s) name
+     Constraints  s inst ls -> Constraints  (f s) (mapDecor f inst) (map (mapDecor f) ls)
 
   getDecor stmt = 
    case stmt of 
@@ -204,11 +191,11 @@ instance Pretty (RelLink dec) where
  pPrint (RevProduceLink _ ls) = text "<-" <+> commacat ls 
 
 instance Decorated RelLink where 
-  stripDecor link = 
+  mapDecor f link = 
     case link of 
-     ProduceLink    _ ls -> ProduceLink    () (map stripDecor ls)
-     PrescribeLink  _ ls -> PrescribeLink  () (map stripDecor ls)
-     RevProduceLink _ ls -> RevProduceLink () (map stripDecor ls)  
+     ProduceLink    s ls -> ProduceLink    (f s) (map (mapDecor f) ls)
+     PrescribeLink  s ls -> PrescribeLink  (f s) (map (mapDecor f) ls)
+     RevProduceLink s ls -> RevProduceLink (f s) (map (mapDecor f) ls)  
   getDecor link = 
     case link of 
      ProduceLink    s _ -> s
@@ -230,11 +217,11 @@ instance Pretty (CollectionInstance dec) where
 
 
 instance Decorated CollectionInstance where 
-  stripDecor inst = 
+  mapDecor f inst = 
     case inst of 
       InstName        n    -> InstName n 
-      InstDataTags    n ls -> InstDataTags    n (map stripDecor ls)
-      InstControlTags n ls -> InstControlTags n (map stripDecor ls)
+      InstDataTags    n ls -> InstDataTags    n (map (mapDecor f) ls)
+      InstControlTags n ls -> InstControlTags n (map (mapDecor f) ls)
   getDecor inst = 
     case inst of 
       InstDataTags    _ (h:_) -> getDecor h

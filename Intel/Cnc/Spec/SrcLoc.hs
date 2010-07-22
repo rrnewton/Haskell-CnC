@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable, RecordWildCards #-}
 
 --------------------------------------------------------------------------------
 -- This is an adaption of GHC's SrcLoc.lhs
@@ -245,6 +245,12 @@ srcSpanFileName_maybe (SrcSpanOneLine { srcSpanFile = nm })   = Just nm
 srcSpanFileName_maybe (SrcSpanMultiLine { srcSpanFile = nm }) = Just nm
 srcSpanFileName_maybe (SrcSpanPoint { srcSpanFile = nm})      = Just nm
 srcSpanFileName_maybe _                                       = Nothing
+
+srcSpanSetFileName :: FileNameString -> SrcSpan -> SrcSpan
+srcSpanSetFileName file (s@SrcSpanOneLine{..})   = s { srcSpanFile = file }
+srcSpanSetFileName file (s@SrcSpanMultiLine{..}) = s { srcSpanFile = file }
+srcSpanSetFileName file (s@SrcSpanPoint{..})     = s { srcSpanFile = file }
+srcSpanSetFileName file (UnhelpfulSpan _)        = UnhelpfulSpan file
 
 
 -- We want to order SrcSpans first by the start point, then by the end point.
