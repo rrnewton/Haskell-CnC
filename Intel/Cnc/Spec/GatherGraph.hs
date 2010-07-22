@@ -12,6 +12,7 @@ import Intel.Cnc.Spec.AST
 import Intel.Cnc.Spec.SrcLoc
 
 import Data.List
+import Data.Maybe
 import Data.Map        hiding (empty,map)
 import Data.Set as Set hiding (map)
 import StringTable.Atom 
@@ -22,25 +23,20 @@ import Debug.Trace
 
 import Text.PrettyPrint.HughesPJClass
 import Data.Graph.Inductive as G
+--import Data.Graph.Inductive.NodeMap as NM
 
 ----------------------------------------------------------------------------------------------------
 
 -- The total "Spec" includes the graph and other metadata.
-{-
-data CncSpec = CncSpec {
-    tagTypes  :: AtomMap (Maybe Type),
-    itemTypes :: AtomMap (Maybe (Type,Type))
-    --graph :: CncGraph
-  }
--}
-
 -- Collect a global set of all collection names.
 data CncSpec = CncSpec {
   steps :: AtomSet,
   tags  :: AtomMap (Maybe Type),
   items :: AtomMap (Maybe (Type,Type)),
   graph :: CncGraph,
-  appname :: String
+  appname :: String,
+  -- Might as well cache this after it is extracted:
+  nodemap :: NodeMap CncGraphNode
 }
 
 type CncGraph = (Gr CncGraphNode (Maybe TagFun))
@@ -131,14 +127,15 @@ checkConvertTF e =
 
 -- Transform the not-directly-useful list of parsed statements into a real graph datatype.
 coalesceGraph :: String -> [PStatement SrcSpan] -> CncSpec
-coalesceGraph name parsed = allnodes { graph = g2, appname = name }       
+coalesceGraph name parsed = 
+   allnodes { graph=g2, appname=name, nodemap=nm }
  where 
   g1 :: CncGraph = run_ G.empty $ 
        -- First add all the nodes to the graph
        do mapM_ declare parsed 
 	  mapM_ (insMapNodeM . CGSteps) builtinSteps 
-  g2 = --trace ("Done collecting declares.. all nodes: " ++ show g1) $ 
-       run_ g1 $ forM_ parsed collect -- Then add the edges.
+  (_,(nm,g2)) = --trace ("Done collecting declares.. all nodes: " ++ show g1) $ 
+       run g1 $ forM_ parsed collect -- Then add the edges.
 
   declare stmt = 
    case stmt of 
@@ -257,12 +254,36 @@ seedWorld =
 	  ,  tags=  AM.empty
 	  ,  items= AM.empty
 	  ,  graph  = error "CncSpec: graph uninitialized"
+	  ,  nodemap= error "CncSpec: nodemap uninitialized"
 	  ,  appname= error "CncSpec: appname uninitialized"
 	  }
 
+example =   
+  coalesceGraph "foo" $
+  Prelude.map (mapDecor (\_ -> UnhelpfulSpan "")) $
+  [  DeclareTags () (toAtom "T") (Just (TSym (toAtom "int")))
+  ,  DeclareSteps () (toAtom "S")
+  ,  Chain [InstName "T"] [PrescribeLink () [InstName "S"]]
+  ]
+
+-- T should be the prescriber to S:
+-- FIXME TODO: Set up HUnit here...
+testGetStepPrescriber = getStepPrescriber example (toAtom "S") 
+
+----------------------------------------------------------------------------------------------------
+
 -- Get the name of the tag collection that prescribes a given step.
-getStepPrescriber atom (CncSpec{..}) = graph
-  where 
-    --(r,gr) = run graph
-    --mon = do return (CGSteps atom)
+getStepPrescriber :: CncSpec -> ColName -> ColName
+getStepPrescriber (CncSpec{..}) atom = 
+  case Prelude.filter isTags labs of 
+    [CGTags t] -> t
+    ls -> error$ "getStepPrescriber step "++ (fromAtom atom) ++ 
+	         " should have exactly one prescribing tag collection, not "++ show (length ls)
+ where 
+    (nd,_) = mkNode_ nodemap (CGSteps atom)
+    (pred,_,l,succ) = context graph nd
+    preds = pre graph nd
+    labs  = catMaybes$ Prelude.map (lab graph) preds
+    isTags (CGTags _) = True
+    isTags _ = False
 
