@@ -16,7 +16,7 @@ import Data.List
 
 import System.Environment
 import System.Console.GetOpt
-
+import System.FilePath.Posix
 import System.IO
 --import GHC.IO.Handle
 --import GHC.IO.Handle.FD
@@ -79,13 +79,15 @@ main = do
   putStrLn "================================================================================"
   putStrLn$ renderStyle style $ hcat $ map pPrint parsed
 
+
   putStrLn "\nCoalesced CnC Graph:"
   putStrLn "================================================================================"
-  let graph = coalesceGraph parsed
+  -- The name of the module is derived from the file name:	   
+  let appname = takeBaseName file
+      graph = coalesceGraph appname parsed
 
   putStrLn "\n \n"
   print $ pp graph
-
 
   putStrLn "\nFinally, generating header:"
   putStrLn "================================================================================"

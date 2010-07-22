@@ -1,4 +1,4 @@
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes, RecordWildCards #-}
 
 ----------------------------------------------------------------------------------------------------
 -- This is the code generator for the original (CnC/C++ 0.1-0.5) "context"-based C++ API.
@@ -24,23 +24,30 @@ import Text.InterpolatedString.QQ
 
 indent = 4
 
+
+--------------------------------------------------------------------------------
+
+
 emitCppOld :: StringBuilder m => CncSpec -> m ()
-emitCppOld graph = do 
- let name = "mymod" 
- -- First we produce the header (a quasiquoted multiline string):
- putS$ [$istr|    
-#ifndef #{name}_H_ALREADY_INCLUDED
-#define #{name}_H_ALREADY_INCLUDED
+emitCppOld (CncSpec{..}) = do 
+
+   -- First we produce the header (a quasiquoted multiline string):
+   putS$ [$istr|    
+#ifndef #{appname}_H_ALREADY_INCLUDED
+#define #{appname}_H_ALREADY_INCLUDED
 
 #include <cnc/cnc.h>
 #include <cnc/debug.h>
 
 // Forward declaration of the context class (also known as graph)
-struct #{name}_context;
+struct #{appname}_context;
 
 |] 
- emitStep  "foo" TInt
- return ()
+   emitStep  "foo" TInt
+   return ()
+
+
+--------------------------------------------------------------------------------
 
 emitStep name ty = putD$ 
   hangbraces (text "struct " <> text name) indent 

@@ -39,7 +39,8 @@ data CncSpec = CncSpec {
   steps :: AtomSet,
   tags  :: AtomMap (Maybe Type),
   items :: AtomMap (Maybe (Type,Type)),
-  graph :: CncGraph
+  graph :: CncGraph,
+  appname :: String
 }
 
 type CncGraph = (Gr CncGraphNode (Maybe TagFun))
@@ -129,8 +130,8 @@ checkConvertTF e =
 ----------------------------------------------------------------------------------------------------
 
 -- Transform the not-directly-useful list of parsed statements into a real graph datatype.
-coalesceGraph :: [PStatement SrcSpan] -> CncSpec
-coalesceGraph parsed = allnodes { graph = g2 }       
+coalesceGraph :: String -> [PStatement SrcSpan] -> CncSpec
+coalesceGraph name parsed = allnodes { graph = g2, appname = name }       
  where 
   g1 :: CncGraph = run_ G.empty $ 
        -- First add all the nodes to the graph
@@ -159,7 +160,67 @@ coalesceGraph parsed = allnodes { graph = g2 }
       DeclareItems _ _ _ -> return ()
       DeclareSteps _ _   -> return ()
 
+-- This is tedious, but here we simply go over the big list of statements that come out of
+-- the parser and collect the declarations for items, steps, and tags.
+collectNodes :: [PStatement dec] -> CncSpec
+collectNodes [] = seedWorld
+collectNodes (DeclareTags  s name ty : tl) = extendTags  s name ty $ collectNodes tl
+collectNodes (DeclareItems s name ty : tl) = extendItems s name ty $ collectNodes tl
+collectNodes (DeclareSteps s name    : tl) = extendSteps s name    $ collectNodes tl
+collectNodes                      (_ : tl) = collectNodes tl
 
+extendItems span name ty (a@(CncSpec{..})) = a { items= AM.insert (checkDup a name) ty items }
+extendTags  span name ty (a@(CncSpec{..})) = a { tags = AM.insert (checkDup a name) ty tags }
+extendSteps span name    (a@(CncSpec{..})) = a { steps= AS.insert (checkDup a name) steps }
+
+checkDup all atom = 
+    if cncSpecMember atom all
+    then error$ "Duplicate declaration of name: "++ (fromAtom atom) 
+    else atom
+cncSpecMember atom (CncSpec{..}) =
+    AM.member atom tags  ||
+    AS.member atom steps ||
+    AM.member atom items
+
+
+----------------------------------------------------------------------------------------------------
+    
+-- Continue extending a graph with nodes from a parsed chain.
+coalesceChain :: Show dec => CncSpec -> [CollectionInstance dec] -> [RelLink dec] 
+	      -> NodeMapM CncGraphNode (Maybe TagFun) Gr ()
+coalesceChain allnodes start ls = loop (process start) ls 
+ where 
+  process = Prelude.map (\x -> (instToNode allnodes x, instToExps x)) 
+  loop prevs [] = return ()
+  loop prevs (hd:tl) = 
+    -- FIXME: inefficent redundant classifications
+    let produce prevs insts next = 
+         forM_ insts $ \ (node,exps) -> 
+         forM_ prevs $ \ (pnode,pexps) -> 
+	   do case (pnode, node) of 
+	        -- Valid combinations for a producer relation:
+		-- This is tricky because depending on whether the left or the right
+		-- hand side is the step collection the tag expressions are interpreted
+		-- differently.
+	        (CGItems _, CGSteps _) -> insMapEdgeM (pnode, node, mkTagFun exps pexps)
+	        (CGSteps _, CGItems _) -> insMapEdgeM (pnode, node, mkTagFun pexps exps)
+	        (CGSteps _, CGTags _)  -> insMapEdgeM (pnode, node, mkTagFun pexps exps)
+	        _                      -> error$ "coalesceChain: FIXME "++ show (pnode,node)
+              loop next tl
+    in
+    case hd of 
+     -- Connect the previous node to this one using a forward edge:
+     ProduceLink _ insts    -> let pi = process insts in produce prevs pi pi
+     RevProduceLink s insts -> let pi = process insts in produce pi prevs pi
+     PrescribeLink _ insts -> 
+       let processed = process insts in
+       forM_ (process insts) $ \ (node,exps) -> 
+       forM_ prevs $ \ (pnode,pexps) -> 
+	   -- This is a bit simpler because there is only one valid prescribe:
+	   do case (pnode, node) of 
+	        (CGTags _, CGSteps _) -> insMapEdgeM (pnode, node, mkTagFun exps pexps)	  
+	        _                      -> error$ "coalesceChain: FIXME2 " ++ show (pnode,node)
+              loop processed tl
 
 -- Based on global sets of nodes/items/tags classify collection references.
 -- That is, turn "Instances" in the parse into real graph nodes.
@@ -189,125 +250,19 @@ instToExps (InstName        _)      = []
 instToExps (InstDataTags    _ exps) = exps
 instToExps (InstControlTags _ exps) = exps
     
+----------------------------------------------------------------------------------------------------
 
 seedWorld =
-  CncSpec { steps= AS.fromList builtinSteps,
-	    tags=  AM.empty, 
-	    items= AM.empty,
-	    graph= error "CncSpec: graph uninitialized" }
+  CncSpec {  steps= AS.fromList builtinSteps
+	  ,  tags=  AM.empty
+	  ,  items= AM.empty
+	  ,  graph  = error "CncSpec: graph uninitialized"
+	  ,  appname= error "CncSpec: appname uninitialized"
+	  }
 
--- This is tedious, but here we simply go over the big list of statements that come out of
--- the parser and collect the declarations for items, steps, and tags.
-collectNodes :: [PStatement dec] -> CncSpec
-collectNodes [] = seedWorld
-collectNodes (DeclareTags  s name ty : tl) = extendTags  s name ty $ collectNodes tl
-collectNodes (DeclareItems s name ty : tl) = extendItems s name ty $ collectNodes tl
-collectNodes (DeclareSteps s name    : tl) = extendSteps s name    $ collectNodes tl
-collectNodes                      (_ : tl) = collectNodes tl
+-- Get the name of the tag collection that prescribes a given step.
+getStepPrescriber atom (CncSpec{..}) = graph
+  where 
+    --(r,gr) = run graph
+    --mon = do return (CGSteps atom)
 
-extendItems span name ty (a@(CncSpec{..})) = a { items= AM.insert (checkDup a name) ty items }
-extendTags  span name ty (a@(CncSpec{..})) = a { tags = AM.insert (checkDup a name) ty tags }
-extendSteps span name    (a@(CncSpec{..})) = a { steps= AS.insert (checkDup a name) steps }
-
-checkDup all atom = 
-    if allNodesMember atom all
-    then error$ "Duplicate declaration of name: "++ (fromAtom atom) 
-    else atom
-
-allNodesMember atom (CncSpec{..}) =
-    AM.member atom tags  ||
-    AS.member atom steps ||
-    AM.member atom items
-    
--- allDeclaredNames :: [PStatement dec] -> [String]
--- allDeclaredNames [] = []
--- allDeclaredNames (DeclareTags _ name _  : tl) = name : allDeclaredNames tl
--- allDeclaredNames (DeclareItems _ name _ : tl) = name : allDeclaredNames tl
--- allDeclaredNames (DeclareSteps _ name   : tl) = name : allDeclaredNames tl
--- allDeclaredNames                      (_: tl) =        allDeclaredNames tl
-
-
-
--- Continue extending a graph with nodes from a parsed chain.
-coalesceChain :: Show dec => CncSpec -> [CollectionInstance dec] -> [RelLink dec] -> NodeMapM CncGraphNode (Maybe TagFun) Gr ()
-coalesceChain allnodes start ls = loop (process start) ls 
- where 
-  process = Prelude.map (\x -> (instToNode allnodes x, instToExps x)) 
-  loop prevs [] = return ()
-  loop prevs (hd:tl) = 
-    -- FIXME: inefficent redundant classifications
-    let produce prevs insts next = 
-         forM_ insts $ \ (node,exps) -> 
-         forM_ prevs $ \ (pnode,pexps) -> 
-	   do case (pnode, node) of 
-	        -- Valid combinations for a producer relation:
-	        (CGItems _, CGSteps _) -> insMapEdgeM (pnode, node, mkTagFun exps pexps)
-	        (CGSteps _, CGItems _) -> insMapEdgeM (pnode, node, mkTagFun pexps exps)
-	        (CGSteps _, CGTags _)  -> insMapEdgeM (pnode, node, mkTagFun pexps exps)
-	        _                      -> error$ "coalesceChain: FIXME "++ show (pnode,node)
-              loop next tl
-    in
-    case hd of 
-     -- Connect the previous node to this one using a forward edge:
-     ProduceLink _ insts    -> let pi = process insts in produce prevs pi pi
-     RevProduceLink s insts -> let pi = process insts in produce pi prevs pi
-     PrescribeLink _ insts -> 
-       let processed = process insts in
-       forM_ (process insts) $ \ (node,exps) -> 
-       forM_ prevs $ \ (pnode,pexps) -> 
-	   -- This is a bit simpler because there is only one valid prescribe:
-	   do case (pnode, node) of 
-	        (CGTags _, CGSteps _) -> insMapEdgeM (pnode, node, mkTagFun exps pexps)	  
-	        _                      -> error$ "coalesceChain: FIXME2 " ++ show (pnode,node)
-              loop processed tl
-
--- This is tricky because depending on whether the left or the right
--- hand side is the step collection the tag expressions are interpreted
--- differently.
-
-
-{-
-         case this of 
-           InstDataTags str exps ->
-	       -- This is an item collection:
-  	       do let node = instToNode allnodes this 
-	  	  insMapNodeM node
-		  -- This is tricky because depending on whether the left or the right
-		  -- hand side is the step collection the tag expressions are interpreted
-		  -- differently.
-		  case prev of 
-		    CGSteps _ -> insMapEdgeM (prev, node, mkTagFun prevTF exps)
-		    _ -> error$ "Only a step collection may produce output to item collection "++ show str
-		  return ()
--}
-
-----------------------------------------------------------------------------------------------------
-{-
-data StepEntry = 
-  StepEntry {
-    sePrescribingTagCol :: ColName,
-    -- The step collection doesn't store all the info for its connected tag/item
-    -- collections.  Rather, it stores the name of each, together with the tag function
-    -- that relates this particular step to each collection.
-    seOutTags :: Set (ColName, TagFun),
-    seInData  :: Set (ColName, TagFun),
-    seOutData :: Set (ColName, TagFun)
-  }
--- TagCol OutTags InData OutData
-
-data TagEntry = 
-  TagEntry {
-  }
-
-data ItemEntry = 
-  ItemEntry {
-  }
-
-
-data CncGraph = 
-  CncGraph { 
-    steps :: Map ColName StepEntry, 
-    tags  :: Map ColName  TagEntry, 
-    items :: Map ColName ItemEntry
-  }
--}
