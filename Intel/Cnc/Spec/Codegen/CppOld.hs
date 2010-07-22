@@ -22,6 +22,11 @@ import Text.PrettyPrint.HughesPJClass
 --import Text.InterpolatedString.Perl6
 import Text.InterpolatedString.QQ
 
+import Data.Maybe
+
+import qualified StringTable.AtomMap as AM
+import qualified StringTable.AtomSet as AS
+
 indent = 4
 
 
@@ -29,9 +34,10 @@ indent = 4
 
 
 emitCppOld :: StringBuilder m => CncSpec -> m ()
-emitCppOld (CncSpec{..}) = do 
+emitCppOld (spec @ CncSpec{..}) = do 
 
    -- First we produce the header (a quasiquoted multiline string):
+   --------------------------------------------------------------------------------
    putS$ [$istr|    
 #ifndef #{appname}_H_ALREADY_INCLUDED
 #define #{appname}_H_ALREADY_INCLUDED
@@ -42,8 +48,25 @@ emitCppOld (CncSpec{..}) = do
 // Forward declaration of the context class (also known as graph)
 struct #{appname}_context;
 
+// Next this generated file contains prototypes for each step implementation:
 |] 
-   emitStep  "foo" TInt
+   --------------------------------------------------------------------------------
+
+   -- Don't include builtins (e.g. "env")
+   let stepls = filter (\ x -> not$ x `elem` builtinSteps) $
+		AS.toList steps
+       tagtys = map (\ name -> fromJust $ tags AM.! name) $ 
+		map (getStepPrescriber spec) stepls
+   forM_ (zip stepls tagtys) $ \ (stp,ty) ->
+     emitStep (fromAtom stp) ty   
+
+   --------------------------------------------------------------------------------
+   putS$ [$istr|
+
+// Finally, here is the definition for the context class:
+|] 
+   -- This is the "footer" for the document.
+   putS$ "\n\n#endif // "++appname++"_H_ALREADY_INCLUDED\n"
    return ()
 
 
@@ -64,12 +87,9 @@ dType ty = case ty of
   TSym s -> text $ fromAtom s
 
   -- Here is the convention for representing tuples in C++.
-  TTuple [a,b] -> text "PAIR"
+  TTuple [a,b] -> text "PAIR_TODO"
   
 -- Simple pretty printing helpers:
 vbraces d = lbrace $+$ d $+$ rbrace
 hangbraces d1 n d2 = sep [d1, vbraces$ nest n d2]
   
-
---      putS$ "#ifndef "++name++"_H_ALREADY_INCLUDED"
---      putS$ "#define "++name++"_H_ALREADY_INCLUDED"
