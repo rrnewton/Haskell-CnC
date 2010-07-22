@@ -110,10 +110,9 @@ buildtrans:
 #	ghc --make CncGrammar.hs
 
 wctrans:
-	cd Intel/Cnc/Spec/
-	ln -f -s CncLexer.x   CncLexer.temp.hs
-	ln -f -s CncGrammar.y CncGrammar.temp.hs
-	cloc-1.08.pl --by-file CncLexer.temp.hs CncGrammar.temp.hs $(HSOURCE)
+	(cd Intel/Cnc/Spec/; ln -f -s CncLexer.x CncLexer.temp.hs)
+	(cd Intel/Cnc/Spec/; ln -f -s CncGrammar.y CncGrammar.temp.hs)
+	(cd Intel/Cnc/Spec/; cloc-1.08.pl --by-file CncLexer.temp.hs CncGrammar.temp.hs $(HSOURCE))
 
 cleantrans:
 	cd Intel/Cnc/Spec/

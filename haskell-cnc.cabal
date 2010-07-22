@@ -24,15 +24,6 @@ source-repository head
 --Data-Files: ntimes ntimes_minmedmax README.txt haskell_cnc.h Makefile install_environment_vars.sh 
 
 
-Executable cnctrans
-  Main-is:           Intel/Cnc/Spec/Main.hs
-  Build-Depends:     base >= 3 && < 5, directory, process
-  other-modules:  Intel.Cnc.Spec.AST    Intel.Cnc.Spec.CncLexer    Intel.Cnc.Spec.CncGrammar
-                  Intel.Cnc.Spec.SrcLoc Intel.Cnc.Spec.GatherGraph 
-  extensions: CPP
-  GHC-Options: -O2 -threaded 
-
-
 library
   build-depends:  base, mtl, containers, time, random, array, ghc-prim, extensible-exceptions, HUnit, MissingH, HSH, unix
   -- QuickCheck -- I haven't got quickcheck working under 6.13.xx right now.
@@ -78,3 +69,11 @@ Executable haskell-cnc-runTests
   GHC-Options: -O2 -threaded 
 --  cpp-options: -DUSE_GMAP
 
+
+Executable cnctrans
+  Main-is:           Intel/Cnc/Spec/Main.hs
+  Build-Depends:     base >= 3 && < 5, directory, process
+  other-modules:  Intel.Cnc.Spec.AST    Intel.Cnc.Spec.CncLexer    Intel.Cnc.Spec.CncGrammar
+                  Intel.Cnc.Spec.SrcLoc Intel.Cnc.Spec.GatherGraph Intel.Cnc.Spec.Codegen.CppOld
+  extensions: CPP
+  GHC-Options: -O2 -threaded 

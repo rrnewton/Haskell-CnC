@@ -3,9 +3,9 @@
 ----------------------------------------------------------------------------------------------------
 -- This module implements a pass over the parser output that coalesces
 -- all the relations in a .cnc file into a more manageable graph type.
+--
+-- The main entrypoint is "parsedToGraph".
 ----------------------------------------------------------------------------------------------------
-
--- 
 
 module Intel.Cnc.Spec.GatherGraph where
 import Intel.Cnc.Spec.AST
@@ -21,12 +21,15 @@ import Data.Graph.Inductive as G
 
 ----------------------------------------------------------------------------------------------------
 
-builtinSteps = [toAtom "env"]
+
+--data Cnc
 
 --data CncGraph = CncGraph (Gr CncGraphNode TagFun)
-type CncGraph =  (Gr CncGraphNode (Maybe TagFun))
+type CncGraph = (Gr CncGraphNode (Maybe TagFun))
 
 type ColName = Atom
+
+builtinSteps = [toAtom "env"]
 
 data CncGraphNode  = 
     CGSteps ColName 
@@ -197,12 +200,12 @@ allNodesMember atom (AllNodes{..}) =
     Set.member atom steps ||
     Set.member atom items
     
-allDeclaredNames :: [PStatement dec] -> [String]
-allDeclaredNames [] = []
-allDeclaredNames (DeclareTags _ name _  : tl) = name : allDeclaredNames tl
-allDeclaredNames (DeclareItems _ name _ : tl) = name : allDeclaredNames tl
-allDeclaredNames (DeclareSteps _ name   : tl) = name : allDeclaredNames tl
-allDeclaredNames                      (_: tl) =        allDeclaredNames tl
+-- allDeclaredNames :: [PStatement dec] -> [String]
+-- allDeclaredNames [] = []
+-- allDeclaredNames (DeclareTags _ name _  : tl) = name : allDeclaredNames tl
+-- allDeclaredNames (DeclareItems _ name _ : tl) = name : allDeclaredNames tl
+-- allDeclaredNames (DeclareSteps _ name   : tl) = name : allDeclaredNames tl
+-- allDeclaredNames                      (_: tl) =        allDeclaredNames tl
 
 
 

@@ -140,9 +140,9 @@ data PStatement dec =
    -- When we parse a file we allow statements to be arbitrarily long chains of relations:
    -- We represent this as a starting instance(s) followed by an arbitrary number of links.
    Chain [CollectionInstance dec] [RelLink dec]
- | DeclareTags  dec String (Maybe Type)
- | DeclareItems dec String (Maybe (Type, Type))
- | DeclareSteps dec String 
+ | DeclareTags  dec Atom (Maybe Type)
+ | DeclareItems dec Atom (Maybe (Type, Type))
+ | DeclareSteps dec Atom 
 
  | Function
  | DeclareExtern
@@ -154,14 +154,14 @@ instance Pretty (PStatement dec) where
  pPrint (Chain first rest) = 
      commacat first <+>
      hsep (map pPrint rest) <> text ";\n"
- pPrint (DeclareTags _ name Nothing)   = text "tags " <> text name <> text ";\n"
- pPrint (DeclareTags _ name (Just ty)) = text "tags<" <> pPrint ty <> text "> " <> text name <> text ";\n"
+ pPrint (DeclareTags _ name Nothing)   = text "tags " <> text (fromAtom name) <> text ";\n"
+ pPrint (DeclareTags _ name (Just ty)) = text "tags<" <> pPrint ty <> text "> " <> text (fromAtom name) <> text ";\n"
 
- pPrint (DeclareItems _ name Nothing) = text "items " <> text name <> text ";\n"
+ pPrint (DeclareItems _ name Nothing) = text "items " <> text (fromAtom name) <> text ";\n"
  pPrint (DeclareItems _ name (Just (ty1,ty2))) = 
-     text "items<" <> pPrint ty1 <> text ", " <> pPrint ty2 <> text "> " <> text name <> text ";\n"
+     text "items<" <> pPrint ty1 <> text ", " <> pPrint ty2 <> text "> " <> text (fromAtom name) <> text ";\n"
 
- pPrint (DeclareSteps _ name) =  text "steps " <> text name <> text ";\n"
+ pPrint (DeclareSteps _ name) =  text "steps " <> text (fromAtom name) <> text ";\n"
 
  pPrint (Function )     = text "FUNCTION NOT WORKING YET"
  pPrint (DeclareExtern) = text "DECLARE EXTERN NOT WORKING YET"

@@ -9,4 +9,13 @@
 
 module Intel.Cnc.Spec.Codegen.CppOld where
 
+import Intel.Cnc.Spec.AST
+import Intel.Cnc.Spec.GatherGraph
 import Text.PrettyPrint.HughesPJClass
+
+
+
+-- Could use bytestrings or handles.
+emitCppOld :: CncGraph -> String
+emitCppOld = undefined
+

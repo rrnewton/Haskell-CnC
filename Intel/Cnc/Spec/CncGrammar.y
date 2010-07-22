@@ -96,14 +96,14 @@ Terminated_Decl     : Decl     ';'         { $1 }
 
 Decl :: { [PStatement SrcSpan] } 
 Decl     
-  : Mods tags var                          { [DeclareTags (lexSpan $2) (lexStr $3) Nothing] }
+  : Mods tags var                          { [DeclareTags (lexSpan $2) (toAtom$ lexStr $3) Nothing] }
   -- [2010.07.20] I'm having a strange problem making Mods optional:
 --  | Mods tags '<' Type '>' var             { [DeclareTags (lexSpan $2) (lexStr $6) (Just $4)] }
-  | Mod Mods tags '<' Type '>' var         { [DeclareTags (lexSpan $3) (lexStr $7) (Just $5)] }
-  | tags '<' Type '>' var                  { [DeclareTags (lexSpan $1) (lexStr $5) (Just $3)] }
-  | Mods items var                         { [DeclareItems (lexSpan $2) (lexStr $3) Nothing] }
-  | Mods items '<' Type ',' Type '>' var   { [DeclareItems (lexSpan $2) (lexStr $8) (Just ($4, $6))] }
-  | steps VarLs                            { map (\x -> DeclareSteps (lexSpan $1) (lexStr x)) $2 }
+  | Mod Mods tags '<' Type '>' var         { [DeclareTags (lexSpan $3) (toAtom$ lexStr $7) (Just $5)] }
+  | tags '<' Type '>' var                  { [DeclareTags (lexSpan $1) (toAtom$ lexStr $5) (Just $3)] }
+  | Mods items var                         { [DeclareItems (lexSpan $2) (toAtom$ lexStr $3) Nothing] }
+  | Mods items '<' Type ',' Type '>' var   { [DeclareItems (lexSpan $2) (toAtom$ lexStr $8) (Just ($4, $6))] }
+  | steps VarLs                            { map (\x -> DeclareSteps (lexSpan $1) (toAtom$ lexStr x)) $2 }
 
   | constrain Instance ':' TagExps         { [Constraints (lexSpan $1) $2 $4] }
   -- One additional shift/reduce conflict if we do not use a separator:
