@@ -216,8 +216,12 @@ parseErrorSDoc span doc =
 
 runCncParser :: String -> String -> [PStatement SrcSpan]
 runCncParser file str = 
+   -- FIXME: 
    -- Here's a hack that's a bit ineffecient.  We POST-FACTO put the right filename in the
    -- sourceloc decorations.  It would be better to do it right the first time.
+   --
+   -- NOTE [2010.07.23] This has another problem.  Parse errors will say "unknown file".
+   -- I guess I need to thread through a reader monad.
    map (mapDecor (srcSpanSetFileName file)) $
    -- For now filter out comments before parsing:
    parse_cnc $ filter (not . is_comment) $ 

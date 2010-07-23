@@ -1,5 +1,4 @@
 
-
 // Here we test some tag functions
 
 tags <(int,int)>      T;
@@ -14,4 +13,3 @@ steps                 S;
 // TOTAL FUNCTIONS.  Otherwise, we could have situations where the step is restricted, say, to even numbers.
 // If the domain of the step is restricted, then we have a whole additional class of errors. 
 T :: S(i, j) -> I[6*j, i + j + 2];
-

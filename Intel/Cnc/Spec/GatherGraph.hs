@@ -97,11 +97,14 @@ mkTagFun exps1 exps2 =
  in if all isTEVar e1s
     then if length exps1 == length exps2 
          then Just (TF (Prelude.map unTEVar e1s) e2s)
+	 -- Otherwise there is a mismatch in the number of tag components:
 	 else if Prelude.null exps2 
 	      then Nothing -- It's ok to simply leave off a tag function (but to have some var names on the step).
-	      else error$ "It is not acceptable to use the following tag expressions without\n"++
-		          "the same number of corresponding tag components indexing the step: "
-		          ++ (show$ pp exps2)
+	      else error$ "ERROR:\n   It is not acceptable to use the following tag components without\n"++
+		          "   the same number of corresponding tag components indexing the step: "
+		          ++ (show$ pp exps2) ++ 
+			  "\nLocation:\n" ++ (show$ nest 4$ pp$ foldl1 combineSrcSpans $ Prelude.map getDecor exps2)
+
     else error$ "Presently the tag expressions indexing step collections must be simple variables, not: " 
 	        ++ (show$ pp exps1)
 
@@ -183,7 +186,7 @@ cncSpecMember atom (CncSpec{..}) =
 ----------------------------------------------------------------------------------------------------
     
 -- Continue extending a graph with nodes from a parsed chain.
-coalesceChain :: Show dec => CncSpec -> [CollectionInstance dec] -> [RelLink dec] 
+coalesceChain :: CncSpec -> [CollectionInstance SrcSpan] -> [RelLink SrcSpan] 
 	      -> NodeMapM CncGraphNode (Maybe TagFun) Gr ()
 coalesceChain allnodes start ls = loop (process start) ls 
  where 

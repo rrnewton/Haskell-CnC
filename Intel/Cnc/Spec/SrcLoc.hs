@@ -280,18 +280,19 @@ instance Pretty SrcLoc where
   pPrint (SrcLoc f l c) = pPrint f <+> text "line " <> int l <> text ", column " <> int c
 
 -- Eventually this should print a snippet of the file:
+-- NOTE: We convert 0-indexed lines to 1-indexed lines for emacs compatibility:
+-- Hmm... I'm not sure about columns.
 instance Pretty SrcSpan where
   pPrint span = 
-      let startL = srcLine$   srcSpanStart span
-	  startC = srcColumn$ srcSpanStart span
-	  endL   = srcLine$   srcSpanEnd span
-	  endC   = srcLine$   srcSpanEnd span
+      let startL = (0+)$ srcLine$   srcSpanStart span
+	  startC =       srcColumn$ srcSpanStart span
+	  endL   = (0+)$ srcLine$   srcSpanEnd span
+	  endC   =       srcColumn$ srcSpanEnd span
       in
       sep [text ("file " ++ (srcFilename $ srcSpanStart span)),
-	   --if (startL,startC) == (endL,endC)
-	   --then text "FOOBAR"
-	   --else 
-	        text $ "between line:column " ++ (show startL) ++ ":" ++ (show startC)
+	   if (startL,startC) == (endL,endC)
+	   then text $ "at line:column "       ++ (show startL) ++ ":" ++ (show startC)
+	   else text $ "between line:column " ++ (show startL) ++ ":" ++ (show startC)
    	               ++ " and " ++ (show endL) ++ ":" ++ (show endC)]
 
 

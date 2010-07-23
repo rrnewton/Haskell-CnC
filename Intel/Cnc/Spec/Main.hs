@@ -67,6 +67,7 @@ main = do
        --filter (not . is_comment) $ scan_to_list str -- Even filtering the long lines still doesn't `sep` to do the right thing.
 
   let parsed = runCncParser file str
+
   when verbose$ putStrLn "\nParsed AST (detailed):"
   when verbose$ putStrLn "================================================================================"
   when verbose$ sequence_ $ map (print . stripDecor) parsed
@@ -79,6 +80,8 @@ main = do
   putStrLn "================================================================================"
   putStrLn$ renderStyle style $ hcat $ map pPrint parsed
 
+  -- [2010.07.23] Lazy parsing complicates this, it must happen after IO that touches the parse:
+  hClose handle -- Cleaner to do this than to wait for garbage collection.
 
   putStrLn "\nCoalesced CnC Graph:"
   putStrLn "================================================================================"
@@ -86,13 +89,15 @@ main = do
   let appname = takeBaseName file
       graph = coalesceGraph appname parsed
 
-  putStrLn "\n \n"
+  putStrLn ""
   print $ pp graph
 
-  putStrLn "\nFinally, generating header:"
-  putStrLn "================================================================================"
+  let outname = takeDirectory file ++ [pathSeparator] ++  appname ++ ".h"
+  outhand <- openFile outname WriteMode
+  putStrLn$ "\nGenerating header, output to: " ++ outname
 
-  writeSB stdout $ (emitCppOld graph :: SimpleBuilder ())
+  writeSB outhand $ (emitCppOld graph :: SimpleBuilder ())
+  hClose outhand
 
-  putStrLn "\n Done.."    
+  putStrLn "Done."
 
