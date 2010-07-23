@@ -237,7 +237,12 @@ lexLoc :: Lexeme -> SrcLoc
 lexLoc (L (AlexPn n l c) _ _) = (SrcLoc "unknownfile" l c)
 
 lexSpan :: Lexeme -> SrcSpan
-lexSpan (L (AlexPn n l c) _ _) = srcLocSpan (SrcLoc "unknownfile" l c)
+--lexSpan (L (AlexPn n l c) _ _) = srcLocSpan (SrcLoc "unknownfile" l c)
+-- [2010.07.23] We can do a little better by looking at the length of the string.
+lexSpan (L (AlexPn n l c) _ str) = 
+   let start = srcLocSpan (SrcLoc "unknownfile" l c) in
+   start `combineSrcSpans` start
+
 
 -- Combine the spans in two expressions.
 combExpSpans e1 e2 = combineSrcSpans (getDecor e1) (getDecor e2)

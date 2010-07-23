@@ -41,6 +41,8 @@
 module Intel.Cnc.Spec.SrcLoc where
 import Data.Data
 import Data.Bits
+import System.IO
+import System.IO.Unsafe
 import Text.PrettyPrint.HughesPJClass
 
  -- I don't actually see why we would need interned strings for
@@ -244,7 +246,16 @@ srcSpanFileName_maybe :: SrcSpan -> Maybe FileNameString
 srcSpanFileName_maybe (SrcSpanOneLine { srcSpanFile = nm })   = Just nm
 srcSpanFileName_maybe (SrcSpanMultiLine { srcSpanFile = nm }) = Just nm
 srcSpanFileName_maybe (SrcSpanPoint { srcSpanFile = nm})      = Just nm
+-- [2010.07.23] Hmm... why was this written to ignore the file that's there?
 srcSpanFileName_maybe _                                       = Nothing
+
+-- [2010.07.23] Should replace it with this:
+srcSpanFileName :: SrcSpan -> FileNameString
+srcSpanFileName (SrcSpanOneLine { srcSpanFile = nm })   = nm
+srcSpanFileName (SrcSpanMultiLine { srcSpanFile = nm }) = nm
+srcSpanFileName (SrcSpanPoint { srcSpanFile = nm})      = nm
+srcSpanFileName (UnhelpfulSpan file)                    = file
+
 
 srcSpanSetFileName :: FileNameString -> SrcSpan -> SrcSpan
 srcSpanSetFileName file (s@SrcSpanOneLine{..})   = s { srcSpanFile = file }
@@ -280,13 +291,13 @@ instance Pretty SrcLoc where
   pPrint (SrcLoc f l c) = pPrint f <+> text "line " <> int l <> text ", column " <> int c
 
 -- Eventually this should print a snippet of the file:
--- NOTE: We convert 0-indexed lines to 1-indexed lines for emacs compatibility:
 -- Hmm... I'm not sure about columns.
 instance Pretty SrcSpan where
   pPrint span = 
-      let startL = (0+)$ srcLine$   srcSpanStart span
+      -- NOTE: I thought this was zero-indexed but it seems to be one-indexed.  Good.
+      let startL =       srcLine$   srcSpanStart span
 	  startC =       srcColumn$ srcSpanStart span
-	  endL   = (0+)$ srcLine$   srcSpanEnd span
+	  endL   =       srcLine$   srcSpanEnd span
 	  endC   =       srcColumn$ srcSpanEnd span
       in
       sep [text ("file " ++ (srcFilename $ srcSpanStart span)),
@@ -294,6 +305,38 @@ instance Pretty SrcSpan where
 	   then text $ "at line:column "       ++ (show startL) ++ ":" ++ (show startC)
 	   else text $ "between line:column " ++ (show startL) ++ ":" ++ (show startC)
    	               ++ " and " ++ (show endL) ++ ":" ++ (show endC)]
+
+-- This gives a detailed (multiline) printout with a snippet of the original file.
+showSpanDetailed :: SrcSpan -> String
+showSpanDetailed span = 
+  "\nLocation:\n" ++ (show$ nest 4$ pPrint span) ++ 
+  "\n\nContext in original file:\n" ++ 
+  "----------------------------------------\n" 
+  ++ (indent_lines 4 $ unsafePerformIO (snippet span)) ++
+  "----------------------------------------\n"
+
+-- A constant, how many lines of context do we want:
+snippet_lines = 7
+
+-- If we wanted to get all fancy we could use ascii codes to bold or
+-- color the actual characters within this context:
+snippet :: SrcSpan -> IO String
+snippet span = 
+ do let file = srcSpanFileName span
+	line1 = srcLine$ srcSpanStart span
+	line2 = srcLine$ srcSpanEnd span
+	-- If the span is less than snippet_lines long we could provide context AROUND it... not currently though.
+	numlines = min snippet_lines (line2 - line1 + 1) 
+
+    handle <- openFile file ReadMode
+    contents <- hGetContents handle
+    let snip = take numlines $ drop (line1-1) $ lines contents
+    
+    return$ unlines snip
+
+indent_lines n str = 
+  unlines $
+  map ((take n $ repeat ' ')++) (lines str)
 
 
 --              pPrint (srcSpanStart span) <> text " : " <>

@@ -1,4 +1,5 @@
 {-# LANGUAGE QuasiQuotes, RecordWildCards #-}
+{-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
 ----------------------------------------------------------------------------------------------------
 -- This is the code generator for the original (CnC/C++ 0.1-0.5) "context"-based C++ API.
@@ -29,6 +30,8 @@ import qualified StringTable.AtomSet as AS
 
 indent = 4
 
+-- I am very lazy:
+t = text
 
 --------------------------------------------------------------------------------
 
@@ -60,31 +63,49 @@ struct #{appname}_context;
        tagtys = map (\ name -> fromJust $ tags AM.! name) prescribers  
 		
    forM_ (zip stepls tagtys) $ \ (stp,ty) ->
-     emitStep (fromAtom stp) ty   
+     do emitStep appname (fromAtom stp) ty 
+        putS "\n\n"
 
    ------------------------------------------------------------
    -- Do the context class
    ------------------------------------------------------------   
    putS$ "\n\n// Finally, here is the definition for the context class:\n" 
    
-   putD$ struct (text "context") $ vcat $ 
-     text "// Member fields for the tag and item collections: " : 
-     ((flip map) (AM.toList tags) $ \ (t,mty) -> 
+   let contextname = t$ appname++"_context"
+   putD$ struct (contextname <> t " : public CnC::context" <> angles (pad contextname)) $ 
+     vcat $ 
+     t "// Tag collections members:" : 
+     ((flip map) (AM.toList tags) $ \ (tg,mty) -> 
        case mty of 
-         Nothing -> error$ "CppOld Codegen: tag collection without type: "++ (fromAtom t)
-         Just ty -> text "CnC::tag_collection" <> angles (dType ty) <+> textAtom t <> semi
+         Nothing -> error$ "CppOld Codegen: tag collection without type: "++ (fromAtom tg)
+         Just ty -> text "CnC::tag_collection" <> angles (dType ty) <+> textAtom tg <> semi
      ) ++ 
-     ((flip map) (AM.toList items) $ \ (t,mty) -> 
+     [space, t "// Item collections members:" ] ++
+     ((flip map) (AM.toList items) $ \ (it,mty) -> 
        case mty of 
-         Nothing -> error$ "CppOld Codegen: item collection without type: "++ (fromAtom t)
-         Just (ty1,ty2) -> text "CnC::item_collection" <> 
-                           angles (dType ty1 <>commspc<> dType ty2) <+> textAtom t <> semi
+         Nothing -> error$ "CppOld Codegen: item collection without type: "++ (fromAtom it)
+         Just (ty1,ty2) -> t "CnC::item_collection" <> 
+                           angles (dType ty1 <>commspc<> dType ty2) <+> textAtom it <> semi
      ) ++ 
-     [space,text "// The context class constructor: "] ++
-     ((flip map) (zip stepls prescribers) $ \ (stp,tg) ->
-      text "prescribe" <> parens (pad$ textAtom tg <>commspc<> textAtom stp <> parens empty)
-         <> semi
-     )
+     [space, t "// The context class constructor: "] ++
+     [hangbraces 
+       (contextname <> parens empty <+> colon $$
+	-- Initializer list:
+	(nest 6 $ vcat $ 
+	 t "// Initialize tag collections:" :
+	 ((flip map) (AM.toList tags) $ \ (tg,Just ty) -> 
+	   textAtom tg <> parens (t "this, false") <> commspc 
+	 ) ++ 
+	 t "// Initialize item collections:" :
+	 (punctuate commspc $ 
+	  (flip map) (AM.toList items) $ \ (it,Just (ty1,ty2)) -> 
+  	   textAtom it <> parens (t "this")
+	 )))
+       indent 
+       (vcat $ (flip map) (zip stepls prescribers) $ \ (stp,tg) ->
+        t"prescribe" <> parens (pad$ textAtom tg <>commspc<> textAtom stp <> parens empty)
+        <> semi
+       )]
 
    ------------------------------------------------------------
    -- Finish up
@@ -96,22 +117,26 @@ struct #{appname}_context;
 
 --------------------------------------------------------------------------------
 -- Produce the prototype for a single step.
-emitStep name ty = putD$ 
-  struct (text name)
-	 (text "int execute(" <+> constRefType ty <+> text "tag," <+> 
-	  text name <> text "_context & c) const;")
+emitStep appname name ty = putD$ 
+  struct (t name)
+	 (t "int execute(" <+> constRefType ty <+> t "tag," <+> 
+	  t appname <> t "_context & c) const;")
   <> semi
 
 
-constRefType ty = text "const" <+> dType ty <+> text "&"
+constRefType ty = t "const" <+> dType ty <+> t "&"
 
 dType ty = case ty of 
-  TInt   -> text "int"
-  TFloat -> text "float"
-  TSym s -> text $ fromAtom s
-
+  TInt   -> t "int"
+  TFloat -> t "float"
+  TSym s -> textAtom s
+  TPtr ty -> dType ty <> t "*"
   -- Here is the convention for representing tuples in C++.
-  TTuple [a,b] -> text "Pair" <> angles (dType a <> commspc <> dType b)
+  TTuple [a,b]   -> t "Pair"   <> angles (hcat$ punctuate commspc (map dType [a,b]))
+  TTuple [a,b,c] -> t "Triple" <> angles (hcat$ punctuate commspc (map dType [a,b,c]))
+
+  TTuple ls -> error$ "CppOld codegen: Tuple types of length "++ show (length ls) ++" not standardized yet!"
+
 
 -- Simple pretty printing helpers:
 vbraces d = lbrace $+$ d $+$ rbrace
