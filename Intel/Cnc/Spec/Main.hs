@@ -92,7 +92,7 @@ main = do
   putStrLn ""
   print $ pp graph
 
-  let outname = takeDirectory file ++ [pathSeparator] ++  appname ++ ".h"
+  let outname = takeDirectory file </> appname ++ ".h"
   outhand <- openFile outname WriteMode
   putStrLn$ "\nGenerating header, output to: " ++ outname
 

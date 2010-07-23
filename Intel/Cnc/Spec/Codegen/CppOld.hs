@@ -95,6 +95,7 @@ struct #{appname}_context;
 	 t "// Initialize tag collections:" :
 	 ((flip map) (AM.toList tags) $ \ (tg,Just ty) -> 
 	   textAtom tg <> parens (t "this, false") <> commspc 
+
 	 ) ++ 
 	 t "// Initialize item collections:" :
 	 (punctuate commspc $ 
@@ -121,7 +122,6 @@ emitStep appname name ty = putD$
   struct (t name)
 	 (t "int execute(" <+> constRefType ty <+> t "tag," <+> 
 	  t appname <> t "_context & c) const;")
-  <> semi
 
 
 constRefType ty = t "const" <+> dType ty <+> t "&"
@@ -141,7 +141,7 @@ dType ty = case ty of
 -- Simple pretty printing helpers:
 vbraces d = lbrace $+$ d $+$ rbrace
 hangbraces d1 n d2 = sep [d1, vbraces$ nest n d2]
-struct title body = hangbraces (text "struct " <> title) indent body
+struct title body = (hangbraces (text "struct " <> title) indent body) <> semi
 textAtom = text . fromAtom
 angles t = text "<" <+> t <+> text ">"
 commspc = text ", "
