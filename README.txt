@@ -31,7 +31,37 @@ You can also rerun the primes executable directly after that
 Installing Haskell CnC 
 ------------------------------------------------------------
 
+You need a working installation of "ghc" and "cabal".  The easiest way
+to accomplish this is with the Haskell Platform.  With those
+prerequisites you should be able to install Haskell CnC directly from
+the web with:
+
   cabal install haskell-cnc
+
+Building from source, including installing all dependencies:
+
+  darcs clone http://code.haskell.org/haskell-cnc/
+OR (backup mirror)
+  darcs clone http://people.csail.mit.edu/newton/haskell-cnc/
+
+  cd haskell-cnc
+  cabal update
+  cabal install
+  
+That will cause cabal to install a number of packages from "Hackage"
+and then build Haskell CnC.  If any of these dependencies break (don't
+build with your version of GHC).
+
+If you are running as root you may have an easier time with:
+
+  cabal install --global
+
+Otherwise make sure that ~/.cabal/bin/ is in your path.
+
+
+  cabal install happy
+  cabal install 
+
 
 ------------------------------------------------------------a
 Running Haskell CnC, Method (1): Normal method.
