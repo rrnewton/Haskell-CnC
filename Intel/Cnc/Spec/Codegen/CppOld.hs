@@ -21,7 +21,7 @@ import StringTable.Atom
 import Text.PrettyPrint.HughesPJClass
 --import Intel.Cnc.Spec.QuasiString
 --import Text.InterpolatedString.Perl6
-import Text.InterpolatedString.QQ
+--import Text.InterpolatedString.QQ
 
 import Data.Maybe
 
@@ -41,6 +41,10 @@ emitCppOld (spec @ CncSpec{..}) = do
 
    -- First we produce the header (a quasiquoted multiline string):
    --------------------------------------------------------------------------------
+
+   -- I love quasiquoting but for now [2010.07.23] the dependencies are complicated and it
+   -- also makes the resulting binary 3X bigger (it shouldn't!?).
+{-
    putS$ [$istr|    
 #ifndef #{appname}_H_ALREADY_INCLUDED
 #define #{appname}_H_ALREADY_INCLUDED
@@ -53,6 +57,19 @@ struct #{appname}_context;
 
 // Next this generated file contains prototypes for each step implementation:
 |] 
+-}
+   -- This almost looks nicer in emacs anyway:
+   putS$ "#ifndef "++appname++"_H_ALREADY_INCLUDED\n"
+   putS$ "#define "++appname++"_H_ALREADY_INCLUDED\n\n"
+
+   putS  "#include <cnc/cnc.h>\n"
+   putS  "#include <cnc/debug.h>\n\n"
+
+   putS  "// Forward declaration of the context class (also known as graph)\n"
+   putS$ "struct "++appname++"_context;\n\n"
+
+   putS  "// Next this generated file contains prototypes for each step implementation:\n"
+
    ------------------------------------------------------------
    -- Do the step prototypes:
    ------------------------------------------------------------

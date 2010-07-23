@@ -7,22 +7,16 @@ import Intel.Cnc.Spec.AST
 import Intel.Cnc.Spec.GatherGraph
 import Intel.Cnc.Spec.Util
 import Intel.Cnc.Spec.Codegen.CppOld
-
-
 import Text.PrettyPrint.HughesPJClass
-import Data.Generics.Serialization.SExp
-import Data.Generics.Serialization.Streams
-import Data.List
-
+--import Data.Generics.Serialization.SExp
+--import Data.Generics.Serialization.Streams
+import Data.Maybe ( fromMaybe )
 import System.Environment
 import System.Console.GetOpt
 import System.FilePath.Posix
 import System.IO
---import GHC.IO.Handle
---import GHC.IO.Handle.FD
 
--- import System.Console.GetOpt
-import Data.Maybe ( fromMaybe )
+
     
 data Flag 
     = Verbose  | Version 
@@ -72,9 +66,9 @@ main = do
   when verbose$ putStrLn "================================================================================"
   when verbose$ sequence_ $ map (print . stripDecor) parsed
 
-  when verbose$ putStrLn "\nParsed AST rendered as a SExp:"
-  when verbose$ putStrLn "================================================================================"
-  when verbose$ sequence_ $ map (\stmt -> putStrLn $ buildList $ sexpSerialize stmt) parsed
+  -- when verbose$ putStrLn "\nParsed AST rendered as a SExp:"
+  -- when verbose$ putStrLn "================================================================================"
+  -- when verbose$ sequence_ $ map (\stmt -> putStrLn $ buildList $ sexpSerialize stmt) parsed
 
   putStrLn "\nPretty printed parsed AST:"
   putStrLn "================================================================================"

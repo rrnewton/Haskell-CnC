@@ -36,7 +36,7 @@ runtime:
 interact:
 	ghci -cpp -DCNC_SCHEDULER=2 Intel/CncPure.hs
 
-interactio:
+interactIO:
 	ghci -cpp -DCNC_SCHEDULER=5 Intel/Cnc.hs
 
 test: 
