@@ -10,8 +10,9 @@
 module Intel.Cnc.Spec.GatherGraph where
 import Intel.Cnc.Spec.AST
 import Intel.Cnc.Spec.SrcLoc
+import Intel.Cnc.Spec.Util
 
-import Data.List
+import Data.List as L
 import Data.Maybe
 import Data.Map        hiding (empty,map)
 import Data.Set as Set hiding (map)
@@ -58,23 +59,12 @@ instance Show CncSpec where
 instance Pretty CncSpec where
   pPrint (CncSpec{..}) = 
       text "  All Steps:\n========================================"    $$ 
-	   hcat (intersperse (text ", ") $ Prelude.map (text . fromAtom) $ AS.toList steps) $$
+	   hcat (intersperse (text ", ") $ L.map (text . fromAtom) $ AS.toList steps) $$
       text "\n  Tag Types:\n========================================" $$ 
-	   sep (Prelude.map (\(x,y) -> pp((fromAtom x)::String,y)) $ AM.toList tags) $$
+	   sep (L.map (\(x,y) -> pp((fromAtom x)::String,y)) $ AM.toList tags) $$
       text "\n  Item Types:\n========================================" $$ 
-	   sep (Prelude.map (\(x,y) -> pp((fromAtom x)::String,y)) $ AM.toList items) $$
+	   sep (L.map (\(x,y) -> pp((fromAtom x)::String,y)) $ AM.toList items) $$
       text (show graph)
-
-
-{-
-assembleSpec :: [PStatement SrcSpan] -> CncSpec
-assembleSpec ls = verifySpec $ 
-  CncSpec {
-    tagTypes  = foldl (\acc x -> case x of DeclareTags  _ name ty -> AM.insert name ty acc; _ -> acc) AM.empty ls,
-    itemTypes = foldl (\acc x -> case x of DeclareItems _ name ty -> AM.insert name ty acc; _ -> acc) AM.empty ls,
-    graph = coalesceGraph ls
-  }
--}
 
 ----------------------------------------------------------------------------------------------------
 
@@ -87,69 +77,37 @@ verifySpec spec =
    -- 
 
 ----------------------------------------------------------------------------------------------------
--- The left argument is the "formal parameter" and the right argument the "body".
--- But really it's just an equality.
--- Note, the reason these are Exp LISTS is because these are implicitly tuples.
--- The tag functions are multi-dimensional.
-mkTagFun exps1 exps2 = 
- let e1s = Prelude.map checkConvertTF exps1
-     e2s = Prelude.map checkConvertTF exps2
- in if all isTEVar e1s
-    then if not (Prelude.null exps1) && length exps1 == length exps2 
-         then Just (TF (Prelude.map unTEVar e1s) e2s)
-	 -- Otherwise there is a mismatch in the number of tag components:
-	 else if Prelude.null exps2 
-	      then Nothing -- It's ok to simply leave off a tag function (but to have some var names on the step).
-	      else error$ "ERROR:\n   It is not acceptable to use the following tag components without\n"++
-		          "   the same number of corresponding tag components indexing the step: "
-		          ++ (show$ pp exps2) ++ 
-			  showSpanDetailed (foldl1 combineSrcSpans $ Prelude.map getDecor exps2)
-
-    else error$ "Presently the tag expressions indexing step collections must be simple variables, not: " 
-	        ++ (show$ pp exps1)
-
-isTEVar (TEVar _) = True
-isTEVar _ = False
-
--- Avoid exhaustiveness warnings here:
-unTEVar = \ (TEVar name) -> name
-
--- This is where we convert arbitrary Exps into more restricted tag expressions that
--- support symbolic manipulation.
-checkConvertTF e = 
-  case e of 
-    Lit s l -> case l of 
-	         LitInt i -> TEInt i; 
-		 _ -> locErr s "Only integer literals supported in tag functions presently."
-    Var s name -> TEVar name 
-    App _ (Var _ name) rands -> TEApp name (Prelude.map checkConvertTF rands)
-    App s _ _  -> locErr s "Only very simple function applications allowed in tag functions presently."
-    If s _ _ _ -> locErr s "Conditionals disallowed in tag functions."
-
-----------------------------------------------------------------------------------------------------
 
 -- Transform the not-directly-useful list of parsed statements into a real graph datatype.
 coalesceGraph :: String -> [PStatement SrcSpan] -> CncSpec
 coalesceGraph name parsed = 
+   trace ("Got ALL nodes "++ show (L.map fst$ AM.toList$ tags allnodes) ++"\nsteps "++ 
+	  show (AS.toList$ steps allnodes) ++"\nitems "++ show (L.map fst$ AM.toList$ items allnodes)) $ 
    allnodes { graph=g2, appname=name, nodemap=nm }
  where 
   g1 :: CncGraph = run_ G.empty $ 
        -- First add all the nodes to the graph
-       do mapM_ declare parsed 
-	  mapM_ (insMapNodeM . CGSteps) builtinSteps 
+       do --mapM_ declare parsed 
+	  --mapM_ (insMapNodeM . CGSteps) builtinSteps 
+          mapM_ (insMapNodeM . CGSteps) (AS.toList$ steps allnodes)
+          mapM_ (insMapNodeM . CGTags)  (L.map fst$ AM.toList$ tags  allnodes)
+          mapM_ (insMapNodeM . CGItems) (L.map fst$ AM.toList$ items allnodes)
+
   (_,(nm,g2)) = --trace ("Done collecting declares.. all nodes: " ++ show g1) $ 
        run g1 $ forM_ parsed collect -- Then add the edges.
 
-  declare stmt = 
-   case stmt of 
-      Chain start links  -> return ()
-      Function           -> return ()
-      Constraints _ _ _  -> return ()
-      DeclareExtern      -> return ()
-      DeclareTags  _ n _ -> do insMapNodeM $ CGTags $toAtom n; return ()
-      DeclareItems _ n _ -> do insMapNodeM $ CGItems$toAtom n; return ()
-      DeclareSteps _ n   -> do insMapNodeM $ CGSteps$toAtom n; return ()
-  allnodes = collectNodes parsed
+  -- declare stmt = 
+  --  case stmt of 
+  --     Chain start links  -> return ()
+  --     Function           -> return ()
+  --     Constraints _ _ _  -> return ()
+  --     DeclareExtern      -> return ()
+  --     DeclareTags  _ n _ -> do insMapNodeM $ CGTags $toAtom n; return ()
+  --     DeclareItems _ n _ -> do insMapNodeM $ CGItems$toAtom n; return ()
+  --     DeclareSteps _ n   -> do insMapNodeM $ CGSteps$toAtom n; return ()
+
+  allnodes = trace "Collecting allnodes" $
+	     collectInsts parsed $ collectDecls parsed
   collect stmt = 
    case stmt of 
       Chain start links -> coalesceChain allnodes start links
@@ -162,26 +120,58 @@ coalesceGraph name parsed =
 
 -- This is tedious, but here we simply go over the big list of statements that come out of
 -- the parser and collect the declarations for items, steps, and tags.
-collectNodes :: [PStatement dec] -> CncSpec
-collectNodes [] = seedWorld
-collectNodes (DeclareTags  s name ty : tl) = extendTags  s name ty $ collectNodes tl
-collectNodes (DeclareItems s name ty : tl) = extendItems s name ty $ collectNodes tl
-collectNodes (DeclareSteps s name    : tl) = extendSteps s name    $ collectNodes tl
-collectNodes                      (_ : tl) = collectNodes tl
+collectDecls :: [PStatement dec] -> CncSpec
+collectDecls [] = seedWorld
+collectDecls (DeclareTags  s name ty : tl) = extendTags  name ty $ (checkDup name$ collectDecls tl)
+collectDecls (DeclareItems s name ty : tl) = extendItems name ty $ (checkDup name$ collectDecls tl)
+collectDecls (DeclareSteps s name    : tl) = extendSteps name    $ (checkDup name$ collectDecls tl)
+collectDecls (_ : tl) = collectDecls tl
 
-extendItems span name ty (a@(CncSpec{..})) = a { items= AM.insert (checkDup a name) ty items }
-extendTags  span name ty (a@(CncSpec{..})) = a { tags = AM.insert (checkDup a name) ty tags }
-extendSteps span name    (a@(CncSpec{..})) = a { steps= AS.insert (checkDup a name) steps }
+-- A lot of other miscellaneous contortion here to the end of supporting legacy syntax:
+--extendItems name ty (a@(CncSpec{..})) = a { items= AM.insert name (mergeTy name ty a) items }
+extendItems name ty (a@(CncSpec{..})) = a { items= AM.insert name (mergeTy name ty items) items }
+extendTags  name ty (a@(CncSpec{..})) = a { tags = AM.insert name (mergeTy name ty tags)  tags }
+extendSteps name    (a@(CncSpec{..})) = a { steps= AS.insert name steps }
 
-checkDup all atom = 
+checkDup atom all = 
     if cncSpecMember atom all
     then error$ "Duplicate declaration of name: "++ (fromAtom atom) 
-    else atom
+    else all
 cncSpecMember atom (CncSpec{..}) =
     AM.member atom tags  ||
     AS.member atom steps ||
     AM.member atom items
 
+------------------------------------------------------------
+-- TEMP: For the benefit of the legacy syntax we harvest from instances as well as decls:
+collectInsts (Chain hds links : tl) root = 
+    let acc = foldl extendWithInstance (collectInsts tl root) hds in
+    foldl extendWithLink acc links
+collectInsts (_ : tl) root = collectInsts tl root
+collectInsts [] root = root
+
+extendWithInstance acc inst =
+  case inst of 
+    InstStepCol name ls -> extendSteps (toAtom name) acc
+    InstItemCol name ls -> extendItems (toAtom name) Nothing acc
+    InstTagCol  name ls -> extendTags  (toAtom name) Nothing acc
+    _                   -> acc
+
+extendWithLink acc link = 
+  case link of 
+     ProduceLink    _ insts -> foldl extendWithInstance acc insts
+     RevProduceLink _ insts -> foldl extendWithInstance acc insts
+     PrescribeLink  _ insts -> foldl extendWithInstance acc insts
+
+-- Merge type info if there's already an entry:
+mergeTy name ty amap = 
+   case (maybeToList ty ++ 
+	 maybeToList (collapseMaybe (AM.lookup name amap))) of 
+     []        -> Nothing
+     [ty2]     -> Just ty2
+     [ty1,ty2] -> if ty1 == ty2  -- Types are nominal at the moment, no unification:
+     		  then Just ty1
+     		  else error$ "mergeTy: different types for "++fromAtom name++" "++ show(pp ty1) ++" and "++ show(pp ty2)
 
 ----------------------------------------------------------------------------------------------------
     
@@ -190,7 +180,7 @@ coalesceChain :: CncSpec -> [CollectionInstance SrcSpan] -> [RelLink SrcSpan]
 	      -> NodeMapM CncGraphNode (Maybe TagFun) Gr ()
 coalesceChain allnodes start ls = loop (process start) ls 
  where 
-  process = Prelude.map (\x -> (instToNode allnodes x, instToExps x)) 
+  process = L.map (\x -> (instToNode allnodes x, instToExps x)) 
   loop prevs [] = return ()
   loop prevs (hd:tl) = 
     -- FIXME: inefficent redundant classifications
@@ -222,6 +212,9 @@ coalesceChain allnodes start ls = loop (process start) ls
 	        _                      -> error$ "coalesceChain: FIXME2 " ++ show (pnode,node)
               loop processed tl
 
+
+-- FIXME: classification should happen as a previous pass that pays more attention to context:
+--
 -- Based on global sets of nodes/items/tags classify collection references.
 -- That is, turn "Instances" in the parse into real graph nodes.
 instToNode :: CncSpec -> CollectionInstance t -> CncGraphNode 
@@ -238,6 +231,10 @@ instToNode (CncSpec { .. }) inst =
 	      x@(CGItems _) -> x
 	      _ -> error$ "instToNode: collection indexed with [] but was not an item collection: "++ show name
 
+-- FIXME: these are currently only for the LEGACY syntax:
+	InstStepCol name _  -> CGSteps$ toAtom name
+	InstTagCol  name _  -> CGTags$  toAtom name
+
 	InstStepOrTags name _  -> 
 	    case classify $ toAtom name of 
 	      x@(CGTags  _) -> x
@@ -246,9 +243,13 @@ instToNode (CncSpec { .. }) inst =
 
 
 instToExps :: CollectionInstance t -> [Exp t]
-instToExps (InstName        _)      = []
-instToExps (InstItemCol    _ exps) = exps
-instToExps (InstStepOrTags _ exps) = exps
+instToExps inst =
+  case inst of 
+   InstName       _      ->  []
+   InstStepOrTags _ exps -> exps
+   InstStepCol    _ exps -> exps
+   InstItemCol    _ exps -> exps
+   InstTagCol     _ exps -> exps
     
 ----------------------------------------------------------------------------------------------------
 
@@ -263,7 +264,7 @@ seedWorld =
 
 example =   
   coalesceGraph "foo" $
-  Prelude.map (mapDecor (\_ -> UnhelpfulSpan "")) $
+  L.map (mapDecor (\_ -> UnhelpfulSpan "")) $
   [  DeclareTags () (toAtom "T") (Just (TSym (toAtom "int")))
   ,  DeclareSteps () (toAtom "S")
   ,  Chain [InstName "T"] [PrescribeLink () [InstName "S"]]
@@ -278,7 +279,7 @@ testGetStepPrescriber = getStepPrescriber example (toAtom "S")
 -- Get the name of the tag collection that prescribes a given step.
 getStepPrescriber :: CncSpec -> ColName -> ColName
 getStepPrescriber (CncSpec{..}) atom = 
-  case Prelude.filter isTags labs of 
+  case L.filter isTags labs of 
     [CGTags t] -> t
     ls -> error$ "getStepPrescriber step "++ (fromAtom atom) ++ 
 	         " should have exactly one prescribing tag collection, not "++ show (length ls)
@@ -286,7 +287,7 @@ getStepPrescriber (CncSpec{..}) atom =
     (nd,_) = mkNode_ nodemap (CGSteps atom)
     (pred,_,l,succ) = context graph nd
     preds = pre graph nd
-    labs  = catMaybes$ Prelude.map (lab graph) preds
+    labs  = catMaybes$ L.map (lab graph) preds
     isTags (CGTags _) = True
     isTags _ = False
 

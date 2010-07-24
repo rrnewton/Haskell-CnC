@@ -10,7 +10,10 @@ module Intel.Cnc.Spec.Util where
 import Text.PrettyPrint.HughesPJClass
 import Control.Monad.State
 import System.IO
+import StringTable.Atom
 
+-- Constant: indentation used across all code generators.
+indent = 4
 
 -- String Builder
 ----------------------------------------------------------------------------------------------------
@@ -44,3 +47,26 @@ instance StringBuilder (State [String]) where
   runSB m = let (res,ls) = runState m [] 
 	    in (concat$ reverse ls, res)
 ----------------------------------------------------------------------------------------------------
+
+-- Simple pretty printing helpers:
+vbraces d = lbrace $+$ d $+$ rbrace
+textAtom = text . fromAtom
+angles t = text "<" <+> t <+> text ">"
+commspc = text ", "
+pad t = space <> t <> space
+hangbraces d1 n d2 = sep [d1, vbraces$ nest n d2]
+
+struct title body = (hangbraces (text "struct " <> title) indent body) <> semi
+
+-- I am very lazy:
+t = text
+
+-- This seems useful:
+collapseMaybe :: Maybe (Maybe t) -> Maybe t
+collapseMaybe Nothing         = Nothing
+collapseMaybe (Just Nothing)  = Nothing
+collapseMaybe (Just (Just x)) = Just x
+
+
+instance Pretty Atom where
+  pPrint atom = text (show atom)

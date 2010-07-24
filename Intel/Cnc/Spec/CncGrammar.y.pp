@@ -13,6 +13,15 @@ import Text.PrettyPrint.HughesPJClass
 
 }
 
+-- These are similar macros to those used by the GHC parser:
+-- define L0   L noSrcSpan
+-- define L1   sL (getLoc $1)
+#define LL   (combineSrcSpans (lexSpan $1) (lexSpan $>))
+
+-- For now we enable BOTH the new syntax and the legacy one:
+#define LEGACY_SYNTAX
+
+
 -- (Based on example from Simon Marlow.)
 
 -- First thing to declare is the name of your parser,
@@ -23,12 +32,6 @@ import Text.PrettyPrint.HughesPJClass
 
 -- The parser will be of type [Token] -> ?, where ? is determined by the
 -- production rules.  Now we declare all the possible tokens:
-
-
--- These are similar macros to those used by the GHC parser:
--- define L0   L noSrcSpan
--- define L1   sL (getLoc $1)
--- define LL   sL (comb2 $1 $>)
 
 %token 
 
@@ -109,7 +112,7 @@ Decl
 
 {- #if 0 -}
   | Mods tags var                          { [DeclareTags (lexSpan $2) (toAtom$ lexStr $3) Nothing] }
-  -- [2010.07.20] I'm having a strange problem making Mods optional:
+  -- [2010.07.20] I am having a strange problem making Mods optional:
 --  | Mods tags '<' Type '>' var             { [DeclareTags (lexSpan $2) (lexStr $6) (Just $4)] }
   | Mod Mods tags '<' Type '>' var         { [DeclareTags (lexSpan $3) (toAtom$ lexStr $7) (Just $5)] }
   | tags '<' Type '>' var                  { [DeclareTags (lexSpan $1) (toAtom$ lexStr $5) (Just $3)] }
@@ -117,7 +120,7 @@ Decl
   | Mods items var                         { [DeclareItems (lexSpan $2) (toAtom$ lexStr $3) Nothing] }
   | Mods items '<' Type ',' Type '>' var   { [DeclareItems (lexSpan $2) (toAtom$ lexStr $8) (Just ($4, $6))] }
 
-{- #if 1
+#ifdef LEGACY_SYNTAX
   | '<' Type var '>'                       { [DeclareTags (lexSpan $3) (toAtom$ lexStr $3) (Just $2)] }
   -- Inexplicable problem with this TagExps version, maybe because of '>' not being special...
   --| '<' Type var ':' TagExps '>'           { [DeclareTags (lexSpan $3) (toAtom$ lexStr $3) (Just $2)] }
@@ -125,7 +128,7 @@ Decl
 
   | '[' Type var '<' Type '>' ':' TagExps ']' { [DeclareItems (lexSpan $3) (toAtom$ lexStr $3) (Just ($5, $2))] }
   | '[' Type var '<' Type '>' ']'             { [DeclareItems (lexSpan $3) (toAtom$ lexStr $3) (Just ($5, $2))] }
--}
+#endif
 
 
 VarLs : var                                { [$1] }
@@ -158,11 +161,16 @@ Instance
   : var                                    { InstName        (lexStr $1) }
   | var '[' TagExps ']'                    { InstItemCol    (lexStr $1) $3 }
   | var '(' TagExps ')'                    { InstStepOrTags (lexStr $1) $3 }
--- #if 1 
-  | '<' var '>'                            { InstName (lexStr $2) }
-  | '(' var ')'                            { InstName (lexStr $2) }
+
+#ifdef LEGACY_SYNTAX
+  | '<' var '>'                            { InstTagCol  (lexStr $2) [] }
+  | '(' var ')'                            { InstStepCol (lexStr $2) [] }
   | '[' var ']'                            { InstItemCol (lexStr $2) [] }
+  -- TEMP FIXME: Again, problem here with full tag exps:
+  | '<' var ':' Vars '>'                   { InstTagCol  (lexStr $2) $4 }
+  | '(' var ':' TagExps ')'                { InstStepCol (lexStr $2) $4 }
   | '[' var ':' TagExps ']'                { InstItemCol (lexStr $2) $4 }
+#endif
 
   -- Sadly, this error checking should go EVERYWHERE:
   | tags                                   { parseErrorSDoc (lexSpan $1) $ text "Keyword 'tags' used incorrectly." }
@@ -174,8 +182,8 @@ TagExps :                                  { []   }
 
 -- TEMP, HACK:
 Vars :                                  { []   }
-     | var                              { [$1] }
-     | var ',' Vars                     { $1 : $3 }
+     | var                              { [Var (lexSpan $1) (toAtom$ lexStr $1)] }
+     | var ',' Vars                     {  Var (lexSpan $1) (toAtom$ lexStr $1) : $3 }
 
 
 

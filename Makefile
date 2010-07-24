@@ -101,6 +101,11 @@ cnctrans: Intel/Cnc/Spec/CncLexer.hs Intel/Cnc/Spec/CncGrammar.hs buildtrans
 Intel/Cnc/Spec/CncLexer.hs: Intel/Cnc/Spec/CncLexer.x
 	alex Intel/Cnc/Spec/CncLexer.x
 
+
+Intel/Cnc/Spec/CncGrammar.y: Intel/Cnc/Spec/CncGrammar.y.pp
+	cpp -P -CC $^ $@ 
+#	gcc -x c -E $^ -o $@ 
+
 Intel/Cnc/Spec/CncGrammar.hs: Intel/Cnc/Spec/CncGrammar.y
 	happy  Intel/Cnc/Spec/CncGrammar.y
 
@@ -111,7 +116,7 @@ buildtrans:
 
 wctrans:
 	(cd Intel/Cnc/Spec/; ln -f -s CncLexer.x CncLexer.temp.hs)
-	(cd Intel/Cnc/Spec/; ln -f -s CncGrammar.y CncGrammar.temp.hs)
+	(cd Intel/Cnc/Spec/; ln -f -s CncGrammar.y.pp CncGrammar.temp.hs)
 	(cd Intel/Cnc/Spec/; cloc-1.08.pl --by-file CncLexer.temp.hs CncGrammar.temp.hs $(HSOURCE))
 
 cleantrans:

@@ -2,7 +2,6 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
 module Intel.Cnc.Spec.AST where 
---module Intel.Cnc.Translator.AST where 
 
 import StringTable.Atom
 import Data.Data
@@ -11,7 +10,8 @@ import Data.Char
 import Text.PrettyPrint.HughesPJClass
 import Data.Generics.Serialization.SExp
 import Data.Generics.Serialization.Streams
---import SrcLoc
+import Intel.Cnc.Spec.Util
+import Intel.Cnc.Spec.SrcLoc
 
 -- Export this friendly shortcut:
 pp x = pPrint x -- Eta expand, monomorphism restriction.
@@ -208,32 +208,44 @@ data CollectionInstance dec =
    -- TEMP: until the syntax has been figured out we sometimes know
    -- that an instance is a Step OR a Tag collection, but not which.
  | InstStepOrTags String [Exp dec]
+
+ | InstTagCol     String [Exp dec]
  | InstItemCol    String [Exp dec]
- | InstTagCol    String [Exp dec]
- | InstStepCol   String [Exp dec]
+ | InstStepCol    String [Exp dec]
 
  deriving (Eq,Ord,Show,Data,Typeable)
 
 instance Pretty (CollectionInstance dec) where 
   pPrint (InstName s) = text s
 --  pPrint (InstItemCol    s exps) = text s <> pPrint exps -- WEIRD indent behaviour, commasep is ALSO weird
-  pPrint (InstItemCol    s exps) = text s <> brackets (commacat exps)
   pPrint (InstStepOrTags s exps) = text s <> parens   (commacat exps)
+  pPrint (InstItemCol    s exps) = text s <> brackets (commacat exps)
+  pPrint (InstStepCol    s exps) = text s <> parens   (commacat exps)
+  pPrint (InstTagCol     s exps) = text s <> angles   (commacat exps)
 
 
 instance Decorated CollectionInstance where 
   mapDecor f inst = 
     case inst of 
       InstName        n    -> InstName n 
-      InstItemCol    n ls -> InstItemCol    n (map (mapDecor f) ls)
       InstStepOrTags n ls -> InstStepOrTags n (map (mapDecor f) ls)
+      InstItemCol    n ls -> InstItemCol    n (map (mapDecor f) ls)
+      InstStepCol    n ls -> InstStepCol    n (map (mapDecor f) ls)
+      InstTagCol     n ls -> InstTagCol     n (map (mapDecor f) ls)
+  -- We follow a "left hand rule" for data structures that are not decorated but have decorated children.
+  -- That is, pick the left-most child that has a decoration.
   getDecor inst = 
     case inst of 
-      InstItemCol    _ (h:_) -> getDecor h
       InstStepOrTags _ (h:_) -> getDecor h
-      InstName        _    -> error "getDecor: collection references aren't currently themselves decorated"
-      InstItemCol    _ [] -> error "getDecor: empty item collection reference has no decorations"
+      InstItemCol    _ (h:_) -> getDecor h
+      InstStepCol    _ (h:_) -> getDecor h
+      InstTagCol     _ (h:_) -> getDecor h
+
+      InstName       _    -> error "getDecor: collection references aren't currently themselves decorated"
       InstStepOrTags _ [] -> error "getDecor: empty collection reference has no decorations"
+      InstItemCol    _ [] -> error "getDecor: empty item collection reference has no decorations"
+      InstStepCol    _ [] -> error "getDecor: empty step collection reference has no decorations"
+      InstTagCol     _ [] -> error "getDecor: empty tag collection reference has no decorations"
 
 
 ----------------------------------------------------------------------------------------------------
@@ -274,8 +286,50 @@ instance Show TagFun where
   show = show . pp
 
 
+-- The left argument is the "formal parameter" and the right argument the "body".
+-- But really it's just an equality.
+-- Note, the reason these are Exp LISTS is because these are implicitly tuples.
+-- The tag functions are multi-dimensional.
+mkTagFun exps1 exps2 = 
+ let e1s = Prelude.map checkConvertTF exps1
+     e2s = Prelude.map checkConvertTF exps2
+ in if all isTEVar e1s
+    then if not (Prelude.null exps1) && length exps1 == length exps2 
+         then Just (TF (Prelude.map unTEVar e1s) e2s)
+	 -- Otherwise there is a mismatch in the number of tag components:
+	 else if Prelude.null exps2 
+	      then Nothing -- It's ok to simply leave off a tag function (but to have some var names on the step).
+	      else error$ "ERROR:\n   It is not acceptable to use the following tag components without\n"++
+		          "   the same number of corresponding tag components indexing the step: "
+		          ++ (show$ pp exps2) ++ 
+			  showSpanDetailed (foldl1 combineSrcSpans $ Prelude.map getDecor exps2)
+
+    else error$ "Presently the tag expressions indexing step collections must be simple variables, not: " 
+	        ++ (show$ pp exps1)
+
+isTEVar (TEVar _) = True
+isTEVar _ = False
+
+-- Avoid exhaustiveness warnings here:
+unTEVar = \ (TEVar name) -> name
+
+-- This is where we convert arbitrary Exps into more restricted tag expressions that
+-- support symbolic manipulation.
+checkConvertTF e = 
+  case e of 
+    Lit s l -> case l of 
+	         LitInt i -> TEInt i; 
+		 _ -> locErr s "Only integer literals supported in tag functions presently."
+    Var s name -> TEVar name 
+    App _ (Var _ name) rands -> TEApp name (Prelude.map checkConvertTF rands)
+    App s _ _  -> locErr s "Only very simple function applications allowed in tag functions presently."
+    If s _ _ _ -> locErr s "Conditionals disallowed in tag functions."
+
+
+
 ----------------------------------------------------------------------------------------------------
 -- CnC Graph Representation:
 ----------------------------------------------------------------------------------------------------
 
 -- This is the final representation for a CnC Graph:
+

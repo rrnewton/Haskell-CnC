@@ -28,10 +28,6 @@ import Data.Maybe
 import qualified StringTable.AtomMap as AM
 import qualified StringTable.AtomSet as AS
 
-indent = 4
-
--- I am very lazy:
-t = text
 
 --------------------------------------------------------------------------------
 
@@ -157,11 +153,3 @@ dType ty = case ty of
   --TTuple ls -> error$ "CppOld codegen: Tuple types of length "++ show (length ls) ++" not standardized yet!"
 
 
--- Simple pretty printing helpers:
-vbraces d = lbrace $+$ d $+$ rbrace
-hangbraces d1 n d2 = sep [d1, vbraces$ nest n d2]
-struct title body = (hangbraces (text "struct " <> title) indent body) <> semi
-textAtom = text . fromAtom
-angles t = text "<" <+> t <+> text ">"
-commspc = text ", "
-pad t = space <> t <> space
