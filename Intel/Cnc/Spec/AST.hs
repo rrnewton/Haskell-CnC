@@ -8,8 +8,8 @@ import Data.Data
 import Data.List
 import Data.Char
 import Text.PrettyPrint.HughesPJClass
-import Data.Generics.Serialization.SExp
-import Data.Generics.Serialization.Streams
+--import Data.Generics.Serialization.SExp
+--import Data.Generics.Serialization.Streams
 import Intel.Cnc.Spec.Util
 import Intel.Cnc.Spec.SrcLoc
 

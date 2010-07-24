@@ -123,3 +123,4 @@ wctrans:
 cleantrans:
 	(cd Intel/Cnc/Spec/; rm -f CncGrammar.hs CncLexer.hs *.o *.hi)
 	(cd Intel/Cnc/Spec/Codegen; rm -f *.o *.hi)
+	(cd Intel/Cnc/Spec/tests/; rm -f *.h)
