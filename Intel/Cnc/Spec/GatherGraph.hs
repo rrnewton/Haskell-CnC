@@ -138,7 +138,7 @@ extendSteps name    (a@(CncSpec{..})) = a { steps= AS.insert name steps }
 
 checkDup atom all = 
     if cncSpecMember atom all
-    then error$ "Duplicate declaration of name: "++ (fromAtom atom) 
+    then error$ "Duplicate declaration of name: '"++ (fromAtom atom) ++"'"
     else all
 cncSpecMember atom (CncSpec{..}) =
     AM.member atom tags  ||

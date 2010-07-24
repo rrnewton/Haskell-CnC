@@ -11,8 +11,6 @@ import StringTable.Atom
 import Data.Data
 import Text.PrettyPrint.HughesPJClass
 
-}
-
 -- These are similar macros to those used by the GHC parser:
 -- define L0   L noSrcSpan
 -- define L1   sL (getLoc $1)
@@ -21,15 +19,26 @@ import Text.PrettyPrint.HughesPJClass
 #define LL   (combineSrcSpans (lexSpan $1) (lexSpan $>))
 -- One or both arguments can be Decorated instead:
 #define LD   (combineSrcSpans (lexSpan $1) (getDecor $>))
-#define LD   (combineSrcSpans (getDecor $1) (lexSpan $>))
+#define DL   (combineSrcSpans (getDecor $1) (lexSpan $>))
 #define DD   (combineSrcSpans (getDecor $1) (getDecor $>))
+
+
+-- Here's a praticularly painful special case where we have a possibly
+-- empty list on the right end.  We take any source info that's there
+-- and fall back to the second to last token otherwise.
+#define LLS(ARG)  (combineSrcSpans (lexSpan $1) $ combineSrcSpans ARG (getDecorLs $>))
+
+
+cLLS a b c = combineSrcSpans (lexSpan a) $ combineSrcSpans b (getDecorLs c)
+cLL a b = (lexSpan a) `combineSrcSpans` (lexSpan b)
 
 
 -- For now we enable BOTH the new syntax and the legacy one:
 #define LEGACY_SYNTAX
 
-
+}
 -- (Based on example from Simon Marlow.)
+
 
 -- First thing to declare is the name of your parser,
 -- and the type of the tokens the parser reads.
@@ -125,31 +134,32 @@ Decl :: { [PStatement SrcSpan] }
 Decl     
   : steps VarLs                            { map (\x -> DeclareSteps (lexSpan $1) (toAtom$ lexStr x)) $2 }
 
-  | constrain Instance ':' TagExps         { [Constraints (lexSpan $1) $2 $4] }
+                                           -- Here we try particularly hard to get good source location info:
+  | constrain Instance ':' TagExps         { [Constraints (cLLS $1 (lexSpan $3) $4)  $2 $4] } 
   -- One additional shift/reduce conflict if we do not use a separator:
-  | constrain Instance TagExps             { [Constraints (lexSpan $1) $2 $3] }
+  | constrain Instance TagExps             { [Constraints (cLLS $1 (getDecor $2) $3)  $2 $3] } 
   --| constrain TagExps                      { [Constraints (lexSpan $1) (InstName "foo") []] }
   --| constrain  Instance                      { [Constraints (lexSpan $1) (InstName "foo") []] }
   --| constrain  var                           { [Constraints (lexSpan $1) (InstName "foo") []] }
 
 {- #if 0 -}
-  | Mods tags var                          { [DeclareTags (lexSpan $2) (toAtom$ lexStr $3) Nothing] }
+  | Mods tags var                          { [DeclareTags (cLL $2 $3) (toAtom$ lexStr $3) Nothing] }
   -- [2010.07.20] I am having a strange problem making Mods optional:
 --  | Mods tags '<' Type '>' var             { [DeclareTags (lexSpan $2) (lexStr $6) (Just $4)] }
-  | Mod Mods tags '<' Type '>' var         { [DeclareTags (lexSpan $3) (toAtom$ lexStr $7) (Just $5)] }
-  | tags '<' Type '>' var                  { [DeclareTags (lexSpan $1) (toAtom$ lexStr $5) (Just $3)] }
+  | Mod Mods tags '<' Type '>' var         { [DeclareTags (cLL $3 $7) (toAtom$ lexStr $7) (Just $5)] }
+  | tags '<' Type '>' var                  { [DeclareTags LL (toAtom$ lexStr $5) (Just $3)] }
 
-  | Mods items var                         { [DeclareItems (lexSpan $2) (toAtom$ lexStr $3) Nothing] }
-  | Mods items '<' Type ',' Type '>' var   { [DeclareItems (lexSpan $2) (toAtom$ lexStr $8) (Just ($4, $6))] }
+  | Mods items var                         { [DeclareItems (cLL $2 $3) (toAtom$ lexStr $3) Nothing] }
+  | Mods items '<' Type ',' Type '>' var   { [DeclareItems (cLL $2 $8) (toAtom$ lexStr $8) (Just ($4, $6))] }
 
 #ifdef LEGACY_SYNTAX
-  | '<' Type var '>'                       { [DeclareTags (lexSpan $3) (toAtom$ lexStr $3) (Just $2)] }
+  | '<' Type var '>'                       { [DeclareTags LL (toAtom$ lexStr $3) (Just $2)] }
   -- Inexplicable problem with this TagExps version, maybe because of '>' not being special...
   --| '<' Type var ':' TagExps '>'           { [DeclareTags (lexSpan $3) (toAtom$ lexStr $3) (Just $2)] }
-  | '<' Type var ':' VarsOnlyHack '>'           { [DeclareTags (lexSpan $3) (toAtom$ lexStr $3) (Just $2)] }
+  | '<' Type var ':' VarsOnlyHack '>'      { [DeclareTags LL (toAtom$ lexStr $3) (Just $2)] }
 
-  | '[' Type var '<' Type '>' ':' TagExps ']' { [DeclareItems (lexSpan $3) (toAtom$ lexStr $3) (Just ($5, $2))] }
-  | '[' Type var '<' Type '>' ']'             { [DeclareItems (lexSpan $3) (toAtom$ lexStr $3) (Just ($5, $2))] }
+  | '[' Type var '<' Type '>' ':' TagExps ']' { [DeclareItems LL (toAtom$ lexStr $3) (Just ($5, $2))] }
+  | '[' Type var '<' Type '>' ']'             { [DeclareItems LL (toAtom$ lexStr $3) (Just ($5, $2))] }
 #endif
 
 
@@ -199,9 +209,9 @@ TagExps :                                  { []   }
 	| Exp ',' TagExps                  { $1 : $3 }
 
 -- TEMP, HACK:
-VarsOnlyHack :                                  { []   }
-     | var                              { [Var (lexSpan $1) (toAtom$ lexStr $1)] }
-     | var ',' VarsOnlyHack                     {  Var (lexSpan $1) (toAtom$ lexStr $1) : $3 }
+VarsOnlyHack :                             { []   }
+     | var                                 { [Var (lexSpan $1) (toAtom$ lexStr $1)] }
+     | var ',' VarsOnlyHack                {  Var (lexSpan $1) (toAtom$ lexStr $1) : $3 }
 
 
 -- This is just for catching errors:
@@ -224,16 +234,16 @@ Exp : var	             	{ Var (lexSpan $1) (toAtom$ lexStr $1) }
     | '(' Exp ')'               { $2 }
 
 -- Including explicit productions for arithmetic just to handle precedence/associativity:
-    | Exp '+' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) (toAtom "+")) [$1, $3] }
-    | Exp '-' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) (toAtom "-")) [$1, $3] }
-    | Exp '*' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) (toAtom "*")) [$1, $3] }
-    | Exp '/' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) (toAtom "/")) [$1, $3] }
+    | Exp '+' Exp	        { App (combExpSpans $1 $3) (Var DD (toAtom "+")) [$1, $3] }
+    | Exp '-' Exp	        { App (combExpSpans $1 $3) (Var DD (toAtom "-")) [$1, $3] }
+    | Exp '*' Exp	        { App (combExpSpans $1 $3) (Var DD (toAtom "*")) [$1, $3] }
+    | Exp '/' Exp	        { App (combExpSpans $1 $3) (Var DD (toAtom "/")) [$1, $3] }
 
     -- These need to be handled because they are lexed differently, being reserved characters:
-    | Exp '<' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) (toAtom "<")) [$1, $3] }
-    | Exp '>' Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) (toAtom ">")) [$1, $3] }
+    | Exp '<' Exp	        { App (combExpSpans $1 $3) (Var DD (toAtom "<")) [$1, $3] }
+    | Exp '>' Exp	        { App (combExpSpans $1 $3) (Var DD (toAtom ">")) [$1, $3] }
 
-    | Exp op Exp	        { App (combExpSpans $1 $3) (Var (lexSpan $2) (toAtom$ lexStr $2)) [$1, $3] } 
+    | Exp op Exp	        { App (combExpSpans $1 $3) (Var DD (toAtom$ lexStr $2)) [$1, $3] } 
 
 Type 
     : var                       { TSym (toAtom $ lexStr $1) } 
@@ -298,10 +308,17 @@ lexLoc (L (AlexPn n l c) _ _) = (SrcLoc "" l c)
 
 lexSpan :: Lexeme -> SrcSpan
 --lexSpan (L (AlexPn n l c) _ _) = srcLocSpan (SrcLoc "unknownfile" l c)
--- [2010.07.23] We can do a little better by looking at the length of the string.
+
+-- [2010.07.23] We can do a little better by looking at the length of
+-- the string and stretching the src location to include all of it.
+-- DANGER, we assume that Lexemes stay on one line!! (not true of multiline comments)
 lexSpan (L (AlexPn n l c) _ str) = 
-   let start = srcLocSpan (SrcLoc "" l c) in
-   start `combineSrcSpans` start
+   let start = mkSrcLoc "" l c
+       end   = mkSrcLoc "" l (c + length str)
+   in srcLocSpan start `combineSrcSpans` srcLocSpan end
+
+
+
 
 getDecorLs [] = srcLocSpan noSrcLoc
 getDecorLs (h:t) = getDecor h

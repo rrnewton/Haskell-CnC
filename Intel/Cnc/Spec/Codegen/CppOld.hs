@@ -75,7 +75,10 @@ struct #{appname}_context;
    let stepls = filter (\ x -> not$ x `elem` builtinSteps) $
 		AS.toList steps
        prescribers = map (getStepPrescriber spec) stepls
-       tagtys = map (\ name -> fromJust $ tags AM.! name) prescribers  
+       tagtys = map (\ name -> case tags AM.! name of 
+		                  Nothing -> error$ "Tag collection '"++ show name ++"' missing type, needed for C++ codegen!"
+		                  Just ty -> ty)
+		prescribers  
 		
    forM_ (zip stepls tagtys) $ \ (stp,ty) ->
      do emitStep appname (fromAtom stp) ty 

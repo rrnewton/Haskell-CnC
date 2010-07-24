@@ -96,11 +96,12 @@ trans:
 	@echo   Building Translator.
 	@echo ================================================================================
 	$(MAKE) cnctrans
-cnctrans: Intel/Cnc/Spec/CncLexer.hs Intel/Cnc/Spec/CncGrammar.hs buildtrans
+cnctrans: preproc buildtrans
+
+preproc: Intel/Cnc/Spec/CncLexer.hs Intel/Cnc/Spec/CncGrammar.hs
 
 Intel/Cnc/Spec/CncLexer.hs: Intel/Cnc/Spec/CncLexer.x
 	alex Intel/Cnc/Spec/CncLexer.x
-
 
 Intel/Cnc/Spec/CncGrammar.y: Intel/Cnc/Spec/CncGrammar.y.pp
 	cpp -P -CC $^ $@ 
@@ -120,6 +121,5 @@ wctrans:
 	(cd Intel/Cnc/Spec/; cloc-1.08.pl --by-file CncLexer.temp.hs CncGrammar.temp.hs $(HSOURCE))
 
 cleantrans:
-	cd Intel/Cnc/Spec/
-	rm CncGrammar.hs CncLexer.hs
-
+	(cd Intel/Cnc/Spec/; rm -f CncGrammar.hs CncLexer.hs *.o *.hi)
+	(cd Intel/Cnc/Spec/Codegen; rm -f *.o *.hi)

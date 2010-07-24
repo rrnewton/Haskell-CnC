@@ -242,17 +242,6 @@ instance Decorated CollectionInstance where
       InstStepCol    s _ _ -> s
       InstTagCol     s _ _ -> s
 
-      -- InstStepOrTags _ (h:_) -> getDecor h
-      -- InstItemCol    _ (h:_) -> getDecor h
-      -- InstStepCol    _ (h:_) -> getDecor h
-      -- InstTagCol     _ (h:_) -> getDecor h
-      -- InstName       _    -> error "getDecor: collection references aren't currently themselves decorated"
-      -- InstStepOrTags _ [] -> error "getDecor: empty collection reference has no decorations"
-      -- InstItemCol    _ [] -> error "getDecor: empty item collection reference has no decorations"
-      -- InstStepCol    _ [] -> error "getDecor: empty step collection reference has no decorations"
-      -- InstTagCol     _ [] -> error "getDecor: empty tag collection reference has no decorations"
-
-
 ----------------------------------------------------------------------------------------------------
 -- Math with Tags:
 ----------------------------------------------------------------------------------------------------
