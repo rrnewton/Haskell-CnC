@@ -63,7 +63,9 @@ struct #{appname}_context;
    putS$ "#define "++appname++"_H_ALREADY_INCLUDED\n\n"
 
    putS  "#include <cnc/cnc.h>\n"
-   putS  "#include <cnc/debug.h>\n\n"
+   putS  "#include <cnc/debug.h>\n"
+   -- Ideally this would only be included IF tuple types are used... complicated right now.
+   putS  "#include \"boost/tuple/tuple.hpp\"\n\n"
 
    putS  "// Forward declaration of the context class (also known as graph)\n"
    putS$ "struct "++appname++"_context;\n\n"
@@ -149,10 +151,10 @@ dType ty = case ty of
   TSym s -> textAtom s
   TPtr ty -> dType ty <> t "*"
   -- Here is the convention for representing tuples in C++.
-  TTuple [a,b]   -> t "Pair"   <> angles (hcat$ punctuate commspc (map dType [a,b]))
-  TTuple [a,b,c] -> t "Triple" <> angles (hcat$ punctuate commspc (map dType [a,b,c]))
-
-  TTuple ls -> error$ "CppOld codegen: Tuple types of length "++ show (length ls) ++" not standardized yet!"
+  --TTuple [a,b]   -> t "Pair"   <> angles (hcat$ punctuate commspc (map dType [a,b]))
+  --TTuple [a,b,c] -> t "Triple" <> angles (hcat$ punctuate commspc (map dType [a,b,c]))
+  TTuple ls -> t "boost::tuple" <> angles (hcat$ punctuate commspc$ map dType ls)
+  --TTuple ls -> error$ "CppOld codegen: Tuple types of length "++ show (length ls) ++" not standardized yet!"
 
 
 -- Simple pretty printing helpers:

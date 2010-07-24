@@ -40,7 +40,8 @@ import Text.PrettyPrint.HughesPJClass
 	"<-"		{ L _ LReservedOp "<-" }
 	"::"		{ L _ LReservedOp "::" }
 
-	':'		{ L _ LReservedOp ":" }
+--	':'		{ L _ LReservedOp ":" }
+	':'		{ L _ LSpecial ":" }
 
 	'('		{ L _ LSpecial "(" }
 	')'		{ L _ LSpecial ")" }
@@ -96,14 +97,7 @@ Terminated_Decl     : Decl     ';'         { $1 }
 
 Decl :: { [PStatement SrcSpan] } 
 Decl     
-  : Mods tags var                          { [DeclareTags (lexSpan $2) (toAtom$ lexStr $3) Nothing] }
-  -- [2010.07.20] I'm having a strange problem making Mods optional:
---  | Mods tags '<' Type '>' var             { [DeclareTags (lexSpan $2) (lexStr $6) (Just $4)] }
-  | Mod Mods tags '<' Type '>' var         { [DeclareTags (lexSpan $3) (toAtom$ lexStr $7) (Just $5)] }
-  | tags '<' Type '>' var                  { [DeclareTags (lexSpan $1) (toAtom$ lexStr $5) (Just $3)] }
-  | Mods items var                         { [DeclareItems (lexSpan $2) (toAtom$ lexStr $3) Nothing] }
-  | Mods items '<' Type ',' Type '>' var   { [DeclareItems (lexSpan $2) (toAtom$ lexStr $8) (Just ($4, $6))] }
-  | steps VarLs                            { map (\x -> DeclareSteps (lexSpan $1) (toAtom$ lexStr x)) $2 }
+  : steps VarLs                            { map (\x -> DeclareSteps (lexSpan $1) (toAtom$ lexStr x)) $2 }
 
   | constrain Instance ':' TagExps         { [Constraints (lexSpan $1) $2 $4] }
   -- One additional shift/reduce conflict if we do not use a separator:
@@ -113,15 +107,26 @@ Decl
   --| constrain  Instance                      { [Constraints (lexSpan $1) (InstName "foo") []] }
   --| constrain  var                           { [Constraints (lexSpan $1) (InstName "foo") []] }
 
+{- #if 0 -}
+  | Mods tags var                          { [DeclareTags (lexSpan $2) (toAtom$ lexStr $3) Nothing] }
+  -- [2010.07.20] I'm having a strange problem making Mods optional:
+--  | Mods tags '<' Type '>' var             { [DeclareTags (lexSpan $2) (lexStr $6) (Just $4)] }
+  | Mod Mods tags '<' Type '>' var         { [DeclareTags (lexSpan $3) (toAtom$ lexStr $7) (Just $5)] }
+  | tags '<' Type '>' var                  { [DeclareTags (lexSpan $1) (toAtom$ lexStr $5) (Just $3)] }
 
-  -- : tags var                               { [DeclareTags (lexSpan $1) (lexStr $2) Nothing] }
-  -- | tags '<' Type '>' var                  { [DeclareTags (lexSpan $1) (lexStr $5) (Just $3)] }
-  -- | items var                              { [DeclareItems (lexSpan $1) (lexStr $2) Nothing] }
-  -- | items '<' Type ',' Type '>' var        { [DeclareItems (lexSpan $1) (lexStr $7) (Just ($3, $5))] }
-  -- | steps VarLs                            { map (\x -> DeclareSteps (lexSpan $1) (lexStr x)) $2 }
+  | Mods items var                         { [DeclareItems (lexSpan $2) (toAtom$ lexStr $3) Nothing] }
+  | Mods items '<' Type ',' Type '>' var   { [DeclareItems (lexSpan $2) (toAtom$ lexStr $8) (Just ($4, $6))] }
 
+{- #if 1
+  | '<' Type var '>'                       { [DeclareTags (lexSpan $3) (toAtom$ lexStr $3) (Just $2)] }
+  -- Inexplicable problem with this TagExps version, maybe because of '>' not being special...
+  --| '<' Type var ':' TagExps '>'           { [DeclareTags (lexSpan $3) (toAtom$ lexStr $3) (Just $2)] }
+  | '<' Type var ':' Vars '>'           { [DeclareTags (lexSpan $3) (toAtom$ lexStr $3) (Just $2)] }
 
---  | bounded                                { }
+  | '[' Type var '<' Type '>' ':' TagExps ']' { [DeclareItems (lexSpan $3) (toAtom$ lexStr $3) (Just ($5, $2))] }
+  | '[' Type var '<' Type '>' ']'             { [DeclareItems (lexSpan $3) (toAtom$ lexStr $3) (Just ($5, $2))] }
+-}
+
 
 VarLs : var                                { [$1] }
       | var ',' VarLs                      { $1 : $3 }
@@ -151,19 +156,28 @@ Instances
 
 Instance 
   : var                                    { InstName        (lexStr $1) }
-  | var '[' TagExps ']'                    { InstDataTags    (lexStr $1) $3 }
-  | var '(' TagExps ')'                    { InstControlTags (lexStr $1) $3 }
---  | var '<' TagExps '>'                    { InstControlTags (lexStr $1) $3 }
+  | var '[' TagExps ']'                    { InstItemCol    (lexStr $1) $3 }
+  | var '(' TagExps ')'                    { InstStepOrTags (lexStr $1) $3 }
+-- #if 1 
+  | '<' var '>'                            { InstName (lexStr $2) }
+  | '(' var ')'                            { InstName (lexStr $2) }
+  | '[' var ']'                            { InstItemCol (lexStr $2) [] }
+  | '[' var ':' TagExps ']'                { InstItemCol (lexStr $2) $4 }
 
   -- Sadly, this error checking should go EVERYWHERE:
   | tags                                   { parseErrorSDoc (lexSpan $1) $ text "Keyword 'tags' used incorrectly." }
 
 TagExps :: { [Exp SrcSpan] }
-TagExps : Exp                              { [$1] }
-	|                                  { []   }
+TagExps :                                  { []   }
+        | Exp                              { [$1] }
 	| Exp ',' TagExps                  { $1 : $3 }
 
---Tag : var                                  { TEVar (lexStr $1) }
+-- TEMP, HACK:
+Vars :                                  { []   }
+     | var                              { [$1] }
+     | var ',' Vars                     { $1 : $3 }
+
+
 
 Exp :: { Exp SrcSpan } -- The haskell type of the result of parsing this syntax class.
 

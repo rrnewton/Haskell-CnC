@@ -233,12 +233,12 @@ instToNode (CncSpec { .. }) inst =
                       | True                      = error$ "Collection was not declared: " ++ show name
     in case inst of 
         InstName name        -> classify $ toAtom name
-	InstDataTags name _  -> 
+	InstItemCol name _  -> 
 	    case classify $ toAtom name of 
 	      x@(CGItems _) -> x
 	      _ -> error$ "instToNode: collection indexed with [] but was not an item collection: "++ show name
 
-	InstControlTags name _  -> 
+	InstStepOrTags name _  -> 
 	    case classify $ toAtom name of 
 	      x@(CGTags  _) -> x
 	      x@(CGSteps _) -> x
@@ -247,8 +247,8 @@ instToNode (CncSpec { .. }) inst =
 
 instToExps :: CollectionInstance t -> [Exp t]
 instToExps (InstName        _)      = []
-instToExps (InstDataTags    _ exps) = exps
-instToExps (InstControlTags _ exps) = exps
+instToExps (InstItemCol    _ exps) = exps
+instToExps (InstStepOrTags _ exps) = exps
     
 ----------------------------------------------------------------------------------------------------
 

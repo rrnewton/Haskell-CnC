@@ -12,7 +12,8 @@ module Intel.Cnc.Spec.CncLexer where
 $whitechar = [ \t\n\r\f\v]
 -- RRN [2010.07.19] Moving asterisk to special category:
 -- This may be a bad idea wrt extensibility.
-$special   = [\(\)\,\;\[\]\`\{\}\*]
+-- Moving colon to the special category too.
+$special   = [\(\)\,\;\[\]\`\{\}\*\:]
 
 $digit     = 0-9
 $large     = [A-Z \xc0-\xd6 \xd8-\xde]
@@ -26,7 +27,8 @@ $symbol    = [$ascsymbol] # [$special \_\:\"\']
 $graphic   = [$small $large $symbol $digit $special \:\"\']
 
 $idchar    = [$alpha $digit \']
-$symchar   = [$symbol \:]
+--$symchar   = [$symbol \:]
+$symchar   = [$symbol ]
 
 @reservedid = 
 	module|step|fun|tags|items|steps|dense|constrain|prescribes

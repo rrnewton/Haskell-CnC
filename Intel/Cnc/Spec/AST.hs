@@ -205,30 +205,35 @@ instance Decorated RelLink where
 ------------------------------------------------------------
 data CollectionInstance dec = 
    InstName String
- | InstDataTags    String [Exp dec]
- | InstControlTags String [Exp dec]
+   -- TEMP: until the syntax has been figured out we sometimes know
+   -- that an instance is a Step OR a Tag collection, but not which.
+ | InstStepOrTags String [Exp dec]
+ | InstItemCol    String [Exp dec]
+ | InstTagCol    String [Exp dec]
+ | InstStepCol   String [Exp dec]
+
  deriving (Eq,Ord,Show,Data,Typeable)
 
 instance Pretty (CollectionInstance dec) where 
   pPrint (InstName s) = text s
---  pPrint (InstDataTags    s exps) = text s <> pPrint exps -- WEIRD indent behaviour, commasep is ALSO weird
-  pPrint (InstDataTags    s exps) = text s <> brackets (commacat exps)
-  pPrint (InstControlTags s exps) = text s <> parens   (commacat exps)
+--  pPrint (InstItemCol    s exps) = text s <> pPrint exps -- WEIRD indent behaviour, commasep is ALSO weird
+  pPrint (InstItemCol    s exps) = text s <> brackets (commacat exps)
+  pPrint (InstStepOrTags s exps) = text s <> parens   (commacat exps)
 
 
 instance Decorated CollectionInstance where 
   mapDecor f inst = 
     case inst of 
       InstName        n    -> InstName n 
-      InstDataTags    n ls -> InstDataTags    n (map (mapDecor f) ls)
-      InstControlTags n ls -> InstControlTags n (map (mapDecor f) ls)
+      InstItemCol    n ls -> InstItemCol    n (map (mapDecor f) ls)
+      InstStepOrTags n ls -> InstStepOrTags n (map (mapDecor f) ls)
   getDecor inst = 
     case inst of 
-      InstDataTags    _ (h:_) -> getDecor h
-      InstControlTags _ (h:_) -> getDecor h
+      InstItemCol    _ (h:_) -> getDecor h
+      InstStepOrTags _ (h:_) -> getDecor h
       InstName        _    -> error "getDecor: collection references aren't currently themselves decorated"
-      InstDataTags    _ [] -> error "getDecor: empty item collection reference has no decorations"
-      InstControlTags _ [] -> error "getDecor: empty collection reference has no decorations"
+      InstItemCol    _ [] -> error "getDecor: empty item collection reference has no decorations"
+      InstStepOrTags _ [] -> error "getDecor: empty collection reference has no decorations"
 
 
 ----------------------------------------------------------------------------------------------------
