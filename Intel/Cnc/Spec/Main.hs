@@ -54,31 +54,31 @@ main = do
   handle <- openFile file ReadMode
   str <- hGetContents handle
 
-  when verbose$ putStrLn "\nAll Lexed Tokens: "
   when verbose$ putStrLn "================================================================================"
+  when verbose$ putStrLn "\nAll Lexed Tokens: "
   --when verbose$ print $ hcat $ intersperse (text ", ") $ map (\ (L _ cl str) -> text (show cl) <+> pp str) $ scan_to_list str
   when verbose$ print $ sep $ map (\ (L _ cl str) -> text (show cl) <+> pp str) $ scan_to_list str
        --filter (not . is_comment) $ scan_to_list str -- Even filtering the long lines still doesn't `sep` to do the right thing.
 
   let parsed = runCncParser file str
 
-  when verbose$ putStrLn "\nParsed AST (detailed):"
   when verbose$ putStrLn "================================================================================"
+  when verbose$ putStrLn "\nParsed AST (detailed):"
   when verbose$ sequence_ $ map (print . stripDecor) parsed
 
   -- when verbose$ putStrLn "\nParsed AST rendered as a SExp:"
   -- when verbose$ putStrLn "================================================================================"
   -- when verbose$ sequence_ $ map (\stmt -> putStrLn $ buildList $ sexpSerialize stmt) parsed
 
-  putStrLn "\nPretty printed parsed AST:"
   putStrLn "================================================================================"
+  putStrLn "\nPretty printed parsed AST:"
   putStrLn$ renderStyle style $ hcat $ map pPrint parsed
 
   -- [2010.07.23] Lazy parsing complicates this, it must happen after IO that touches the parse:
   hClose handle -- Cleaner to do this than to wait for garbage collection.
 
-  putStrLn "\nCoalesced CnC Graph:"
   putStrLn "================================================================================"
+  putStrLn "\nCoalesced CnC Graph:"
   -- The name of the module is derived from the file name:	   
   let appname = takeBaseName file
       graph = coalesceGraph appname parsed
@@ -88,6 +88,7 @@ main = do
 
   let outname = takeDirectory file </> appname ++ ".h"
   outhand <- openFile outname WriteMode
+  putStrLn "================================================================================"
   putStrLn$ "\nGenerating header, output to: " ++ outname
 
   writeSB outhand $ (emitCppOld graph :: SimpleBuilder ())

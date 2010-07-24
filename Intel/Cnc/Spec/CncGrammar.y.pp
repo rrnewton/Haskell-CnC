@@ -62,6 +62,9 @@ import Text.PrettyPrint.HughesPJClass
 	'/'		{ L _ LVarOp "/" }
 	op		{ L _ LVarOp _ }
 
+--	step		{ L _ LReservedId "step" }
+	mod		{ L _ LReservedId "module" }
+
 	tags		{ L _ LReservedId "tags" }
 	items		{ L _ LReservedId "items" }
 	steps		{ L _ LReservedId "steps" }
@@ -158,22 +161,18 @@ Instances
   | Instance ',' Instances                 { $1 : $3 }
 
 Instance 
-  : var                                    { InstName        (lexStr $1) }
-  | var '[' TagExps ']'                    { InstItemCol    (lexStr $1) $3 }
-  | var '(' TagExps ')'                    { InstStepOrTags (lexStr $1) $3 }
-
+  : Var                                    { InstName        (lexStr $1) }
+  | Var '[' TagExps ']'                    { InstItemCol    (lexStr $1) $3 }
+  | Var '(' TagExps ')'                    { InstStepOrTags (lexStr $1) $3 }
 #ifdef LEGACY_SYNTAX
-  | '<' var '>'                            { InstTagCol  (lexStr $2) [] }
-  | '(' var ')'                            { InstStepCol (lexStr $2) [] }
-  | '[' var ']'                            { InstItemCol (lexStr $2) [] }
+  | '<' Var '>'                            { InstTagCol  (lexStr $2) [] }
+  | '(' Var ')'                            { InstStepCol (lexStr $2) [] }
+  | '[' Var ']'                            { InstItemCol (lexStr $2) [] }
   -- TEMP FIXME: Again, problem here with full tag exps:
-  | '<' var ':' Vars '>'                   { InstTagCol  (lexStr $2) $4 }
-  | '(' var ':' TagExps ')'                { InstStepCol (lexStr $2) $4 }
-  | '[' var ':' TagExps ']'                { InstItemCol (lexStr $2) $4 }
+  | '<' Var ':' Vars '>'                   { InstTagCol  (lexStr $2) $4 }
+  | '(' Var ':' TagExps ')'                { InstStepCol (lexStr $2) $4 }
+  | '[' Var ':' TagExps ']'                { InstItemCol (lexStr $2) $4 }
 #endif
-
-  -- Sadly, this error checking should go EVERYWHERE:
-  | tags                                   { parseErrorSDoc (lexSpan $1) $ text "Keyword 'tags' used incorrectly." }
 
 TagExps :: { [Exp SrcSpan] }
 TagExps :                                  { []   }
@@ -186,6 +185,17 @@ Vars :                                  { []   }
      | var ',' Vars                     {  Var (lexSpan $1) (toAtom$ lexStr $1) : $3 }
 
 
+-- This is just for catching errors:
+Var : var                               { $1 }
+    -- Sadly, this error checking should go EVERYWHERE:
+    | tags                              { parseErrorSDoc (lexSpan $1) $ text "Keyword 'tags' used incorrectly." }
+    | items                             { parseErrorSDoc (lexSpan $1) $ text "Keyword 'items' used incorrectly." }
+    | steps                             { parseErrorSDoc (lexSpan $1) $ text "Keyword 'steps' used incorrectly." }
+    | dense                             { parseErrorSDoc (lexSpan $1) $ text "Keyword 'dense' used incorrectly." }
+    | prescribes                        { parseErrorSDoc (lexSpan $1) $ text "Keyword 'prescribes' used incorrectly." }
+    | constrain                         { parseErrorSDoc (lexSpan $1) $ text "Keyword 'constrain' used incorrectly." }
+    | mod                               { parseErrorSDoc (lexSpan $1) $ text "Keyword 'module' used incorrectly." }
+--    | step                              { parseErrorSDoc (lexSpan $1) $ text "Keyword 'step' used incorrectly." }
 
 Exp :: { Exp SrcSpan } -- The haskell type of the result of parsing this syntax class.
 
@@ -238,6 +248,8 @@ parseErrorSDoc span doc =
 
 runCncParser :: String -> String -> [PStatement SrcSpan]
 runCncParser file str = 
+   let notcomment = filter (not . is_comment) $  scan_to_list str in
+
    -- FIXME: 
    -- Here's a hack that's a bit ineffecient.  We POST-FACTO put the right filename in the
    -- sourceloc decorations.  It would be better to do it right the first time.
@@ -246,8 +258,9 @@ runCncParser file str =
    -- I guess I need to thread through a reader monad.
    map (mapDecor (srcSpanSetFileName file)) $
    -- For now filter out comments before parsing:
-   parse_cnc $ filter (not . is_comment) $ 
-   scan_to_list str
+   if null notcomment
+   then error "ERROR: Specification file contains no CnC statements!" 
+   else parse_cnc $ notcomment
 
 is_comment ( L _ LComment _ ) = True 
 is_comment _ = False 
@@ -256,13 +269,13 @@ lexStr :: Lexeme -> String
 lexStr (L _ _ str) = str
 
 lexLoc :: Lexeme -> SrcLoc
-lexLoc (L (AlexPn n l c) _ _) = (SrcLoc "unknownfile" l c)
+lexLoc (L (AlexPn n l c) _ _) = (SrcLoc "" l c)
 
 lexSpan :: Lexeme -> SrcSpan
 --lexSpan (L (AlexPn n l c) _ _) = srcLocSpan (SrcLoc "unknownfile" l c)
 -- [2010.07.23] We can do a little better by looking at the length of the string.
 lexSpan (L (AlexPn n l c) _ str) = 
-   let start = srcLocSpan (SrcLoc "unknownfile" l c) in
+   let start = srcLocSpan (SrcLoc "" l c) in
    start `combineSrcSpans` start
 
 

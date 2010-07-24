@@ -288,7 +288,9 @@ isSubspanOf src parent
 
 instance Pretty SrcLoc where
   pPrint (UnhelpfulLoc s) = pPrint s
-  pPrint (SrcLoc f l c) = pPrint f <+> text "line " <> int l <> text ", column " <> int c
+  pPrint (SrcLoc f l c) = 
+      (if null f then empty else pPrint f) <+>
+      text "line " <> int l <> text ", column " <> int c
 
 -- Eventually this should print a snippet of the file:
 -- Hmm... I'm not sure about columns.

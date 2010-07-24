@@ -1,6 +1,7 @@
 
 {
 module Intel.Cnc.Spec.CncLexer where
+import Debug.Trace
 }
 
 %wrapper "monad"
@@ -31,7 +32,8 @@ $idchar    = [$alpha $digit \']
 $symchar   = [$symbol ]
 
 @reservedid = 
-	module|step|fun|tags|items|steps|dense|constrain|prescribes
+	module|fun|tags|items|steps|dense|constrain|prescribes
+--step
 
 @reservedop =
         "::" | "|" | "<-" | "->" | "{" | "}"  | "<" | ">" 
@@ -67,7 +69,7 @@ haskell :-
 <0> $white+			{ skip }
 
 -- <0> "//"\-*[^$symbol].*		{ mkL LComment }
-<0> "//".*		{ mkL LComment }
+<0> "//".*		        { mkL LComment }
 "/*"				{ nested_comment }
 
 <0> $special			{ mkL LSpecial }
@@ -138,24 +140,25 @@ nested_comment (apos, chr, str) int = do
   where go 0 input acc = do alexSetInput input; (mkL LComment (apos,chr, reverse acc) (length acc))
 	go n input acc = do
 	  -- The 'n' parameter here keepstrack of the nesting.
+          let prev = alexInputPrevChar input 
 	  case alexGetChar input of
 	    Nothing  -> err input
 	    Just (c,input) -> do
 	      case c of
 
-                -- We've got a comment ENDING:
-	    	'*' -> do
-		  case alexGetChar input of
-		    Nothing  -> err input
-		    Just ('/',input) -> go (n-1) input ('/':'*':acc)
-		    Just (c,input)   -> go n input (c:'*':acc)
+                -- We've got a potential comment ENDING:
+	    	'/' -> do
+		  case prev of
+		    ('*') -> go (n-1) input ('/':acc) -- CLOSE a level.
+		    (c)   -> go  n    input ('/':acc)
 					
                 -- Here we've got another comment BEGINNING:
-	     	'/' -> do
-		  case alexGetChar input of
-		    Nothing  -> err input
-		    Just ('*',input) -> go (n+1) input ('*':'/':acc)
-		    Just (c,input)   -> go n input (c:'/':acc)
+	     	'*' -> do
+		  case prev of
+		    ('/') -> go (n+1) input ('*':acc) -- OPEN a level
+		    (c)   -> go  n    input ('*':acc)
+
+		-- Other characters: add to the pile and keep going:
 	    	c -> go n input (c:acc)
 
         err input = do alexSetInput input; lexError "error in nested comment"  

@@ -52,6 +52,9 @@ data CncGraphNode  =
   | CGItems ColName 
  deriving (Eq, Ord, Show)
 
+graphNodeName (CGSteps n) = fromAtom n
+graphNodeName (CGTags  n) = fromAtom n
+graphNodeName (CGItems n) = fromAtom n
 
 instance Show CncSpec where
   show = show . pPrint
@@ -81,8 +84,8 @@ verifySpec spec =
 -- Transform the not-directly-useful list of parsed statements into a real graph datatype.
 coalesceGraph :: String -> [PStatement SrcSpan] -> CncSpec
 coalesceGraph name parsed = 
-   trace ("Got ALL nodes "++ show (L.map fst$ AM.toList$ tags allnodes) ++"\nsteps "++ 
-	  show (AS.toList$ steps allnodes) ++"\nitems "++ show (L.map fst$ AM.toList$ items allnodes)) $ 
+   -- trace ("Got ALL nodes "++ show (L.map fst$ AM.toList$ tags allnodes) ++"\nsteps "++ 
+   -- 	  show (AS.toList$ steps allnodes) ++"\nitems "++ show (L.map fst$ AM.toList$ items allnodes)) $ 
    allnodes { graph=g2, appname=name, nodemap=nm }
  where 
   g1 :: CncGraph = run_ G.empty $ 
@@ -106,7 +109,7 @@ coalesceGraph name parsed =
   --     DeclareItems _ n _ -> do insMapNodeM $ CGItems$toAtom n; return ()
   --     DeclareSteps _ n   -> do insMapNodeM $ CGSteps$toAtom n; return ()
 
-  allnodes = trace "Collecting allnodes" $
+  allnodes = --trace "Collecting allnodes" $
 	     collectInsts parsed $ collectDecls parsed
   collect stmt = 
    case stmt of 
@@ -195,7 +198,7 @@ coalesceChain allnodes start ls = loop (process start) ls
 	        (CGItems _, CGSteps _) -> insMapEdgeM (pnode, node, mkTagFun exps pexps)
 	        (CGSteps _, CGItems _) -> insMapEdgeM (pnode, node, mkTagFun pexps exps)
 	        (CGSteps _, CGTags _)  -> insMapEdgeM (pnode, node, mkTagFun pexps exps)
-	        _                      -> error$ "coalesceChain: FIXME "++ show (pnode,node)
+	        (l,r) -> error$ "coalesceChain: invalid put/get relation from '"++graphNodeName l++"' to '"++graphNodeName r++"'"
               loop next tl
     in
     case hd of 
@@ -209,7 +212,7 @@ coalesceChain allnodes start ls = loop (process start) ls
 	   -- This is a bit simpler because there is only one valid prescribe:
 	   do case (pnode, node) of 
 	        (CGTags _, CGSteps _) -> insMapEdgeM (pnode, node, mkTagFun exps pexps)	  
-	        _                      -> error$ "coalesceChain: FIXME2 " ++ show (pnode,node)
+	        (l,r) -> error$ "coalesceChain: invalid prescribe relation from '"++graphNodeName l++"' to '"++graphNodeName r++"'"
               loop processed tl
 
 
