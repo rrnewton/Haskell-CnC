@@ -204,48 +204,53 @@ instance Decorated RelLink where
 
 ------------------------------------------------------------
 data CollectionInstance dec = 
-   InstName String
+   InstName dec String
    -- TEMP: until the syntax has been figured out we sometimes know
    -- that an instance is a Step OR a Tag collection, but not which.
- | InstStepOrTags String [Exp dec]
+ | InstStepOrTags dec String [Exp dec]
 
- | InstTagCol     String [Exp dec]
- | InstItemCol    String [Exp dec]
- | InstStepCol    String [Exp dec]
+ | InstTagCol     dec String [Exp dec]
+ | InstItemCol    dec String [Exp dec]
+ | InstStepCol    dec String [Exp dec]
 
  deriving (Eq,Ord,Show,Data,Typeable)
 
 instance Pretty (CollectionInstance dec) where 
-  pPrint (InstName s) = text s
+  pPrint (InstName _ s) = text s
 --  pPrint (InstItemCol    s exps) = text s <> pPrint exps -- WEIRD indent behaviour, commasep is ALSO weird
-  pPrint (InstStepOrTags s exps) = text s <> parens   (commacat exps)
-  pPrint (InstItemCol    s exps) = text s <> brackets (commacat exps)
-  pPrint (InstStepCol    s exps) = text s <> parens   (commacat exps)
-  pPrint (InstTagCol     s exps) = text s <> angles   (commacat exps)
+  pPrint (InstStepOrTags _ s exps) = text s <> parens   (commacat exps)
+  pPrint (InstItemCol    _ s exps) = text s <> brackets (commacat exps)
+  pPrint (InstStepCol    _ s exps) = text s <> parens   (commacat exps)
+  pPrint (InstTagCol     _ s exps) = text s <> angles   (commacat exps)
 
 
 instance Decorated CollectionInstance where 
   mapDecor f inst = 
     case inst of 
-      InstName        n    -> InstName n 
-      InstStepOrTags n ls -> InstStepOrTags n (map (mapDecor f) ls)
-      InstItemCol    n ls -> InstItemCol    n (map (mapDecor f) ls)
-      InstStepCol    n ls -> InstStepCol    n (map (mapDecor f) ls)
-      InstTagCol     n ls -> InstTagCol     n (map (mapDecor f) ls)
+      InstName       s n    -> InstName       (f s) n 
+      InstStepOrTags s n ls -> InstStepOrTags (f s) n (map (mapDecor f) ls)
+      InstItemCol    s n ls -> InstItemCol    (f s) n (map (mapDecor f) ls)
+      InstStepCol    s n ls -> InstStepCol    (f s) n (map (mapDecor f) ls)
+      InstTagCol     s n ls -> InstTagCol     (f s) n (map (mapDecor f) ls)
   -- We follow a "left hand rule" for data structures that are not decorated but have decorated children.
   -- That is, pick the left-most child that has a decoration.
   getDecor inst = 
     case inst of 
-      InstStepOrTags _ (h:_) -> getDecor h
-      InstItemCol    _ (h:_) -> getDecor h
-      InstStepCol    _ (h:_) -> getDecor h
-      InstTagCol     _ (h:_) -> getDecor h
+      InstName       s _   -> s
+      InstStepOrTags s _ _ -> s
+      InstItemCol    s _ _ -> s
+      InstStepCol    s _ _ -> s
+      InstTagCol     s _ _ -> s
 
-      InstName       _    -> error "getDecor: collection references aren't currently themselves decorated"
-      InstStepOrTags _ [] -> error "getDecor: empty collection reference has no decorations"
-      InstItemCol    _ [] -> error "getDecor: empty item collection reference has no decorations"
-      InstStepCol    _ [] -> error "getDecor: empty step collection reference has no decorations"
-      InstTagCol     _ [] -> error "getDecor: empty tag collection reference has no decorations"
+      -- InstStepOrTags _ (h:_) -> getDecor h
+      -- InstItemCol    _ (h:_) -> getDecor h
+      -- InstStepCol    _ (h:_) -> getDecor h
+      -- InstTagCol     _ (h:_) -> getDecor h
+      -- InstName       _    -> error "getDecor: collection references aren't currently themselves decorated"
+      -- InstStepOrTags _ [] -> error "getDecor: empty collection reference has no decorations"
+      -- InstItemCol    _ [] -> error "getDecor: empty item collection reference has no decorations"
+      -- InstStepCol    _ [] -> error "getDecor: empty step collection reference has no decorations"
+      -- InstTagCol     _ [] -> error "getDecor: empty tag collection reference has no decorations"
 
 
 ----------------------------------------------------------------------------------------------------

@@ -187,13 +187,15 @@ scan_to_list str =
 -- Maybe we can hack the monad here by replacing bind with our own version.
      let loop i = do tok@(L _ cl _) <- alexMonadScan; 
 		     if cl == LEOF
-		        then return []
+		        then return [tok]
 			else do ls <- loop $! (i+1)
 				return (tok:ls)
      loop 0
 
 
-alexEOF = return (L undefined LEOF "")
+--alexEOF = return (L (error "EOF has no position") LEOF "")
+alexEOF = return (L (AlexPn (-1) (-1) (-1)) LEOF "")
+--alexEOF = return (L (noSrcLoc) LEOF "")
 
 showPosn (AlexPn _ line col) = "line " ++ show line ++ ", col " ++ show col
 

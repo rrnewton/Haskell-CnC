@@ -33,8 +33,11 @@ options =
 when b action = if b then action else return ()
   
 -- Here we test our parser.
-main = do 
-  argv <- getArgs
+main = 
+ do argv <- getArgs
+    main2 argv
+
+main2 argv = do  
   let header = "\nUsage: cnctrans [OPTION...] files..."
       --defaultErr errs = ioError (userError (concat errs ++ usageInfo header options))
       defaultErr errs = error $ "ERROR!\n" ++ (concat errs ++ usageInfo header options)

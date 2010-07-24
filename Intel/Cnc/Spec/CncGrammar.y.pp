@@ -16,7 +16,14 @@ import Text.PrettyPrint.HughesPJClass
 -- These are similar macros to those used by the GHC parser:
 -- define L0   L noSrcSpan
 -- define L1   sL (getLoc $1)
+
+-- Both arguments are Lexemes:
 #define LL   (combineSrcSpans (lexSpan $1) (lexSpan $>))
+-- One or both arguments can be Decorated instead:
+#define LD   (combineSrcSpans (lexSpan $1) (getDecor $>))
+#define LD   (combineSrcSpans (getDecor $1) (lexSpan $>))
+#define DD   (combineSrcSpans (getDecor $1) (getDecor $>))
+
 
 -- For now we enable BOTH the new syntax and the legacy one:
 #define LEGACY_SYNTAX
@@ -73,6 +80,8 @@ import Text.PrettyPrint.HughesPJClass
 
 	constrain       { L _ LReservedId "constrain" }
 
+        eof             { L _ LEOF _ }
+
 --	comment		{ L _ LComment _ }
 
 
@@ -95,11 +104,22 @@ File : Statements                          { $1 }
 
 Statements : Statement Statements          { $1 ++ $2 }
            | Statement                     { $1 }
-Statement  : Terminated_Relation           { [$1] }
-           | Terminated_Decl               { $1 }
+           | eof                           { [] }
 
-Terminated_Relation : Relation ';'         { $1 }
-Terminated_Decl     : Decl     ';'         { $1 }
+-- Statement  : Terminated_Relation           { [$1] }
+--            | Terminated_Decl               { $1 }
+-- Terminated_Relation : Relation ';'         { $1 }
+-- Terminated_Decl     : Decl     ';'         { $1 }
+
+Statement  : Relation ';'                  { [$1] }
+           | Decl ';'                      { $1 }
+
+           | Relation eof                  { parseErrorSDoc (getDecor $1) $ text "Premature end of file, possible missing semi-colon." }
+           | Decl     eof                  { parseErrorSDoc (getDecorLs $1) $ text "Premature end of file, possible missing semi-colon." }
+
+-- reduce/reduce conflict
+--           | Relation Instance             { parseErrorSDoc (getDecor $2) $ text "Possible missing semi-colon." }
+
 
 Decl :: { [PStatement SrcSpan] } 
 Decl     
@@ -108,7 +128,6 @@ Decl
   | constrain Instance ':' TagExps         { [Constraints (lexSpan $1) $2 $4] }
   -- One additional shift/reduce conflict if we do not use a separator:
   | constrain Instance TagExps             { [Constraints (lexSpan $1) $2 $3] }
-
   --| constrain TagExps                      { [Constraints (lexSpan $1) (InstName "foo") []] }
   --| constrain  Instance                      { [Constraints (lexSpan $1) (InstName "foo") []] }
   --| constrain  var                           { [Constraints (lexSpan $1) (InstName "foo") []] }
@@ -127,7 +146,7 @@ Decl
   | '<' Type var '>'                       { [DeclareTags (lexSpan $3) (toAtom$ lexStr $3) (Just $2)] }
   -- Inexplicable problem with this TagExps version, maybe because of '>' not being special...
   --| '<' Type var ':' TagExps '>'           { [DeclareTags (lexSpan $3) (toAtom$ lexStr $3) (Just $2)] }
-  | '<' Type var ':' Vars '>'           { [DeclareTags (lexSpan $3) (toAtom$ lexStr $3) (Just $2)] }
+  | '<' Type var ':' VarsOnlyHack '>'           { [DeclareTags (lexSpan $3) (toAtom$ lexStr $3) (Just $2)] }
 
   | '[' Type var '<' Type '>' ':' TagExps ']' { [DeclareItems (lexSpan $3) (toAtom$ lexStr $3) (Just ($5, $2))] }
   | '[' Type var '<' Type '>' ']'             { [DeclareItems (lexSpan $3) (toAtom$ lexStr $3) (Just ($5, $2))] }
@@ -152,7 +171,7 @@ Chain :                                    { []   }
 Link  :  "->" Instances                    { ProduceLink    (lexSpan $1) $2 }
       |  "<-" Instances                    { RevProduceLink (lexSpan $1) $2 }
       |  "::" Instances                    { PrescribeLink  (lexSpan $1) $2 }
-      |  prescribes Instances            { PrescribeLink  (lexSpan $1) $2 }
+      |  prescribes Instances              { PrescribeLink  (lexSpan $1) $2 }
 
 Instances :: { [CollectionInstance SrcSpan] }
 Instances
@@ -161,17 +180,17 @@ Instances
   | Instance ',' Instances                 { $1 : $3 }
 
 Instance 
-  : Var                                    { InstName        (lexStr $1) }
-  | Var '[' TagExps ']'                    { InstItemCol    (lexStr $1) $3 }
-  | Var '(' TagExps ')'                    { InstStepOrTags (lexStr $1) $3 }
+  : Var                                    { InstName       (lexSpan $1) (lexStr $1) }
+  | Var '[' TagExps ']'                    { InstItemCol    LL (lexStr $1) $3 }
+  | Var '(' TagExps ')'                    { InstStepOrTags LL (lexStr $1) $3 }
 #ifdef LEGACY_SYNTAX
-  | '<' Var '>'                            { InstTagCol  (lexStr $2) [] }
-  | '(' Var ')'                            { InstStepCol (lexStr $2) [] }
-  | '[' Var ']'                            { InstItemCol (lexStr $2) [] }
+  | '<' Var '>'                            { InstTagCol  LL (lexStr $2) [] }
+  | '(' Var ')'                            { InstStepCol LL (lexStr $2) [] }
+  | '[' Var ']'                            { InstItemCol LL (lexStr $2) [] }
   -- TEMP FIXME: Again, problem here with full tag exps:
-  | '<' Var ':' Vars '>'                   { InstTagCol  (lexStr $2) $4 }
-  | '(' Var ':' TagExps ')'                { InstStepCol (lexStr $2) $4 }
-  | '[' Var ':' TagExps ']'                { InstItemCol (lexStr $2) $4 }
+  | '<' Var ':' VarsOnlyHack '>'           { InstTagCol  LL (lexStr $2) $4 }
+  | '(' Var ':' TagExps ')'                { InstStepCol LL (lexStr $2) $4 }
+  | '[' Var ':' TagExps ']'                { InstItemCol LL (lexStr $2) $4 }
 #endif
 
 TagExps :: { [Exp SrcSpan] }
@@ -180,9 +199,9 @@ TagExps :                                  { []   }
 	| Exp ',' TagExps                  { $1 : $3 }
 
 -- TEMP, HACK:
-Vars :                                  { []   }
+VarsOnlyHack :                                  { []   }
      | var                              { [Var (lexSpan $1) (toAtom$ lexStr $1)] }
-     | var ',' Vars                     {  Var (lexSpan $1) (toAtom$ lexStr $1) : $3 }
+     | var ',' VarsOnlyHack                     {  Var (lexSpan $1) (toAtom$ lexStr $1) : $3 }
 
 
 -- This is just for catching errors:
@@ -236,9 +255,15 @@ Types :                         { [] }
 -- is detected.  Note that currently we do no error recovery.
 
 happyError :: [Lexeme] -> a
+
+happyError [] = error "Parse error.  Strange - it's not before any token that I know of..."
 happyError ls =
- error ("Parse error before token at location : \n   " ++
-        show (pPrint (lexLoc $ head ls)))
+ let loc = lexLoc $ head ls in 
+ error$ "Parse error before token at location : \n   " ++
+        show (pPrint loc) ++
+	(if srcColumn loc <= 1 
+	 then "\n(An error at the beginning of the line like this could be a missing semi-colon on the previous line.)\n"
+	 else "")
 
 parseErrorSDoc span doc =
    error $ show $ text "\n\nPARSE ERROR!\n  " <> doc $$ 
@@ -278,6 +303,8 @@ lexSpan (L (AlexPn n l c) _ str) =
    let start = srcLocSpan (SrcLoc "" l c) in
    start `combineSrcSpans` start
 
+getDecorLs [] = srcLocSpan noSrcLoc
+getDecorLs (h:t) = getDecor h
 
 -- Combine the spans in two expressions.
 combExpSpans e1 e2 = combineSrcSpans (getDecor e1) (getDecor e2)
@@ -285,3 +312,4 @@ combExpSpans e1 e2 = combineSrcSpans (getDecor e1) (getDecor e2)
 quit = print "runCnc failed\n"
     
 }
+

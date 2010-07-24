@@ -155,9 +155,9 @@ collectInsts [] root = root
 
 extendWithInstance acc inst =
   case inst of 
-    InstStepCol name ls -> extendSteps (toAtom name) acc
-    InstItemCol name ls -> extendItems (toAtom name) Nothing acc
-    InstTagCol  name ls -> extendTags  (toAtom name) Nothing acc
+    InstStepCol _ name ls -> extendSteps (toAtom name) acc
+    InstItemCol _ name ls -> extendItems (toAtom name) Nothing acc
+    InstTagCol  _ name ls -> extendTags  (toAtom name) Nothing acc
     _                   -> acc
 
 extendWithLink acc link = 
@@ -228,17 +228,17 @@ instToNode (CncSpec { .. }) inst =
 --		      | isBuiltin (fromAtom name) = CGSteps name
                       | True                      = error$ "Collection was not declared: " ++ show name
     in case inst of 
-        InstName name        -> classify $ toAtom name
-	InstItemCol name _  -> 
+        InstName    _ name    -> classify $ toAtom name
+	InstItemCol _ name _  -> 
 	    case classify $ toAtom name of 
 	      x@(CGItems _) -> x
 	      _ -> error$ "instToNode: collection indexed with [] but was not an item collection: "++ show name
 
 -- FIXME: these are currently only for the LEGACY syntax:
-	InstStepCol name _  -> CGSteps$ toAtom name
-	InstTagCol  name _  -> CGTags$  toAtom name
+	InstStepCol _ name _  -> CGSteps$ toAtom name
+	InstTagCol  _ name _  -> CGTags$  toAtom name
 
-	InstStepOrTags name _  -> 
+	InstStepOrTags _ name _  -> 
 	    case classify $ toAtom name of 
 	      x@(CGTags  _) -> x
 	      x@(CGSteps _) -> x
@@ -248,11 +248,11 @@ instToNode (CncSpec { .. }) inst =
 instToExps :: CollectionInstance t -> [Exp t]
 instToExps inst =
   case inst of 
-   InstName       _      ->  []
-   InstStepOrTags _ exps -> exps
-   InstStepCol    _ exps -> exps
-   InstItemCol    _ exps -> exps
-   InstTagCol     _ exps -> exps
+   InstName       _ _      ->  []
+   InstStepOrTags _ _ exps -> exps
+   InstStepCol    _ _ exps -> exps
+   InstItemCol    _ _ exps -> exps
+   InstTagCol     _ _ exps -> exps
     
 ----------------------------------------------------------------------------------------------------
 
@@ -270,7 +270,7 @@ example =
   L.map (mapDecor (\_ -> UnhelpfulSpan "")) $
   [  DeclareTags () (toAtom "T") (Just (TSym (toAtom "int")))
   ,  DeclareSteps () (toAtom "S")
-  ,  Chain [InstName "T"] [PrescribeLink () [InstName "S"]]
+  ,  Chain [InstName () "T"] [PrescribeLink () [InstName () "S"]]
   ]
 
 -- T should be the prescriber to S:
