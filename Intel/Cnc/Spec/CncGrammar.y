@@ -13,6 +13,9 @@ import StringTable.Atom
 import Data.Data
 import Text.PrettyPrint.HughesPJClass
 
+}
+-- (Based on example from Simon Marlow.)
+
 -- These are similar macros to those used by the GHC parser:
 -- define L0   L noSrcSpan
 -- define L1   sL (getLoc $1)
@@ -24,22 +27,12 @@ import Text.PrettyPrint.HughesPJClass
 
 
 
-
 -- Here's a praticularly painful special case where we have a possibly
 -- empty list on the right end.  We take any source info that's there
 -- and fall back to the second to last token otherwise.
 
 
-
-cLLS a b c = combineSrcSpans (lexSpan a) $ combineSrcSpans b (getDecorLs c)
-cLL a b = (lexSpan a) `combineSrcSpans` (lexSpan b)
-
-
 -- For now we enable BOTH the new syntax and the legacy one:
-
-
-}
--- (Based on example from Simon Marlow.)
 
 
 -- First thing to declare is the name of your parser,
@@ -263,9 +256,11 @@ Types :                         { [] }
 ----------------------------------------------------------------------------------------------------
 {
 
+cLLS a b c = combineSrcSpans (lexSpan a) $ combineSrcSpans b (getDecorLs c)
+cLL a b = (lexSpan a) `combineSrcSpans` (lexSpan b)
+
 -- All parsers must declair this function, which is called when an error
 -- is detected.  Note that currently we do no error recovery.
-
 happyError :: [Lexeme] -> a
 
 happyError [] = error "Parse error.  Strange - it's not before any token that I know of..."

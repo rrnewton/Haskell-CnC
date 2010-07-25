@@ -11,6 +11,9 @@ import StringTable.Atom
 import Data.Data
 import Text.PrettyPrint.HughesPJClass
 
+}
+-- (Based on example from Simon Marlow.)
+
 -- These are similar macros to those used by the GHC parser:
 -- define L0   L noSrcSpan
 -- define L1   sL (getLoc $1)
@@ -22,23 +25,13 @@ import Text.PrettyPrint.HughesPJClass
 #define DL   (combineSrcSpans (getDecor $1) (lexSpan $>))
 #define DD   (combineSrcSpans (getDecor $1) (getDecor $>))
 
-
 -- Here's a praticularly painful special case where we have a possibly
 -- empty list on the right end.  We take any source info that's there
 -- and fall back to the second to last token otherwise.
 #define LLS(ARG)  (combineSrcSpans (lexSpan $1) $ combineSrcSpans ARG (getDecorLs $>))
 
-
-cLLS a b c = combineSrcSpans (lexSpan a) $ combineSrcSpans b (getDecorLs c)
-cLL a b = (lexSpan a) `combineSrcSpans` (lexSpan b)
-
-
 -- For now we enable BOTH the new syntax and the legacy one:
 #define LEGACY_SYNTAX
-
-}
--- (Based on example from Simon Marlow.)
-
 
 -- First thing to declare is the name of your parser,
 -- and the type of the tokens the parser reads.
@@ -261,9 +254,11 @@ Types :                         { [] }
 ----------------------------------------------------------------------------------------------------
 {
 
+cLLS a b c = combineSrcSpans (lexSpan a) $ combineSrcSpans b (getDecorLs c)
+cLL a b = (lexSpan a) `combineSrcSpans` (lexSpan b)
+
 -- All parsers must declair this function, which is called when an error
 -- is detected.  Note that currently we do no error recovery.
-
 happyError :: [Lexeme] -> a
 
 happyError [] = error "Parse error.  Strange - it's not before any token that I know of..."
