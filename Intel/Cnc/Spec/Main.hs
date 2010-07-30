@@ -7,6 +7,12 @@ import Intel.Cnc.Spec.AST
 import Intel.Cnc.Spec.GatherGraph
 import Intel.Cnc.Spec.Util
 import Intel.Cnc.Spec.Codegen.CppOld
+import Intel.Cnc.Spec.Codegen.Haskell
+
+--import Intel.Cnc.Spec.Codegen.Cpp
+
+import Intel.Cnc.Spec.ReadHarch
+
 import Text.PrettyPrint.HughesPJClass
 --import Data.Generics.Serialization.SExp
 --import Data.Generics.Serialization.Streams
@@ -15,20 +21,33 @@ import System.Environment
 import System.Console.GetOpt
 import System.FilePath.Posix
 import System.IO
+import System.IO.Unsafe
+import System.Exit
 
 
+-- TODO: It would be nice to get this from the .cabal file.
+version = "0.1.3.99"
     
 data Flag 
     = Verbose  | Version 
-    | Input String | Output String | LibDir String
+    | Cpp | CppOld | Haskell
+ -- | Input String | Output String | LibDir String
   deriving (Show, Eq)
     
 options :: [OptDescr Flag]
 options =
      [ Option ['v']     ["verbose"] (NoArg Verbose)       "verbose translator output to stdout"
      , Option ['V']     ["version"] (NoArg Version)       "show version number"
+     , Option ['h']     ["haskell"] (NoArg Haskell)      "translate spec to Haskell code"
+     , Option []        ["cpp"]     (NoArg Cpp)          "translate spec to C++ code"
+     , Option ['c']     ["cppold"]  (NoArg CppOld)       "translate spec to C++ code (legacy C++ API) [default]"
      ]
   
+mode_option o = o `elem` [Cpp, CppOld, Haskell]
+
+printHeader = do
+  putStrLn$ "Intel(R) Concurrent Collections Spec Translator, Haskell CnC Edition version "++ version
+  putStrLn$ "Copyright 2010 Intel Corporation."
 
 when b action = if b then action else return ()
   
@@ -38,14 +57,31 @@ main =
     main2 argv
 
 main2 argv = do  
-  let header = "\nUsage: cnctrans [OPTION...] files..."
-      --defaultErr errs = ioError (userError (concat errs ++ usageInfo header options))
-      defaultErr errs = error $ "ERROR!\n" ++ (concat errs ++ usageInfo header options)
+  let usage = "\nUsage: cnctrans [OPTION...] files..."
+      defaultErr errs = unsafePerformIO$ 
+			do --printHeader
+			   error $ "ERROR!\n" ++ (concat errs ++ usageInfo usage options)
 
   (opts,files) <- 
      case getOpt Permute options argv of
        (o,n,[]  ) -> return (o,n)
        (_,_,errs) -> defaultErr errs
+
+  if Version `elem` opts 
+   then do printHeader
+	   --putStrLn$ version
+	   exitSuccess
+   else return ()
+
+  let mode = 
+       case filter mode_option opts of
+        [] -> CppOld
+        [o] -> o 
+        ls -> defaultErr ["\nAsked to generate output in more than one format!  Not allowed presently. "++show ls++"\n"]
+  -- Force evaluation:
+  case mode of 
+     Cpp -> return ()
+     _   -> return ()
 
   let file = 
        case files of 
@@ -53,6 +89,7 @@ main2 argv = do
         []     -> defaultErr ["\nNo files provided!\n"]
         ls     -> defaultErr ["\nCurrently the translator expects exactly one input file.\n"]
       verbose = Verbose `elem` opts
+
 
   handle <- openFile file ReadMode
   str <- hGetContents handle
@@ -89,13 +126,28 @@ main2 argv = do
   putStrLn ""
   print $ pp graph
 
-  let outname = takeDirectory file </> appname ++ ".h"
-  outhand <- openFile outname WriteMode
   putStrLn "================================================================================"
-  putStrLn$ "\nGenerating header, output to: " ++ outname
-
-  writeSB outhand $ (emitCppOld graph :: SimpleBuilder ())
-  hClose outhand
+  case mode of
+    CppOld -> 
+       do let outname = takeDirectory file </> appname ++ ".h"
+	  outhand <- openFile outname WriteMode
+	  putStrLn$ "\nGenerating header, output to: " ++ outname
+	  writeSB outhand $ (emitCppOld graph :: SimpleBuilder ())
+	  hClose outhand
+    Cpp ->        
+       do let outname = takeDirectory file </> appname ++ ".h"
+	  outhand <- openFile outname WriteMode
+	  putStrLn$ "\nGenerating header, output to: " ++ outname
+	  writeSB outhand $ (emitCppOld graph :: SimpleBuilder ())
+	  hClose outhand
+--error "New C++ API Not implemented yet!"
+    Haskell -> 
+       do let outname = takeDirectory file </> appname ++ "_header.hs"
+	  outhand <- openFile outname WriteMode
+	  putStrLn$ "\nGenerating header, output to: " ++ outname
+	  writeSB outhand $ (emitHaskell graph :: SimpleBuilder ())
+	  hClose outhand
+   
 
   putStrLn "Done."
 

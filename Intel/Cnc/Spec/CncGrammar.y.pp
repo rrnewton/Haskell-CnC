@@ -183,9 +183,9 @@ Instances
   | Instance ',' Instances                 { $1 : $3 }
 
 Instance 
-  : Var                                    { InstName       (lexSpan $1) (lexStr $1) }
-  | Var '[' TagExps ']'                    { InstItemCol    LL (lexStr $1) $3 }
-  | Var '(' TagExps ')'                    { InstStepOrTags LL (lexStr $1) $3 }
+  : var                                    { InstName       (lexSpan $1) (lexStr $1) }
+  | var '[' TagExps ']'                    { InstItemCol    LL (lexStr $1) $3 }
+  | var '(' TagExps ')'                    { InstStepOrTags LL (lexStr $1) $3 }
 #ifdef LEGACY_SYNTAX
   | '<' Var '>'                            { InstTagCol  LL (lexStr $2) [] }
   | '(' Var ')'                            { InstStepCol LL (lexStr $2) [] }
@@ -209,6 +209,8 @@ VarsOnlyHack :                             { []   }
 
 -- This is just for catching errors:
 Var : var                               { $1 }
+   -- This error checking must be introduced CAREFULLY or it can yield errors.  Not every position can be checked.
+#if 1
     -- Sadly, this error checking should go EVERYWHERE:
     | tags                              { parseErrorSDoc (lexSpan $1) $ text "Keyword 'tags' used incorrectly." }
     | items                             { parseErrorSDoc (lexSpan $1) $ text "Keyword 'items' used incorrectly." }
@@ -218,6 +220,7 @@ Var : var                               { $1 }
     | constrain                         { parseErrorSDoc (lexSpan $1) $ text "Keyword 'constrain' used incorrectly." }
     | mod                               { parseErrorSDoc (lexSpan $1) $ text "Keyword 'module' used incorrectly." }
 --    | step                              { parseErrorSDoc (lexSpan $1) $ text "Keyword 'step' used incorrectly." }
+#endif
 
 Exp :: { Exp SrcSpan } -- The haskell type of the result of parsing this syntax class.
 

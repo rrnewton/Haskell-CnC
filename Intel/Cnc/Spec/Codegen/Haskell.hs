@@ -1,3 +1,5 @@
+{-# LANGUAGE RecordWildCards #-}
+{-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
 ----------------------------------------------------------------------------------------------------
 -- This is the code generator for Haskell CnC itself.
@@ -17,7 +19,10 @@ import Text.PrettyPrint.HughesPJClass
 import qualified StringTable.AtomMap as AM
 import qualified StringTable.AtomSet as AS
 
-
+emitHaskell :: StringBuilder m => CncSpec -> m ()
+emitHaskell (spec @ CncSpec{..}) = do
+  putS$ "\n-- This code was GENERATED from a CnC specification, do not modify.\n\n"
+  
 
 {-
 
@@ -87,6 +92,10 @@ main = do args <- getArgs
 -}
 
 
+
+{-
+-- Here's how it might look refactored:
+
 module Mandel 
 
 import MandelBase
@@ -145,7 +154,7 @@ main = do args <- getArgs
 
 
 
-
+----------------------------------------------------------------------------------------------------
 
 type Pair = (Int16, Int16)
 
@@ -166,3 +175,4 @@ mandelGraph max_row max_col max_depth =
 
 
 
+-}

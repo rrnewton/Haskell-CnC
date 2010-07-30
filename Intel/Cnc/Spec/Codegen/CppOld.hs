@@ -1,5 +1,6 @@
-{-# LANGUAGE QuasiQuotes, RecordWildCards #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
+-- QuasiQuotes
 
 ----------------------------------------------------------------------------------------------------
 -- This is the code generator for the original (CnC/C++ 0.1-0.5) "context"-based C++ API.
@@ -31,7 +32,6 @@ import qualified StringTable.AtomSet as AS
 
 --------------------------------------------------------------------------------
 
-
 emitCppOld :: StringBuilder m => CncSpec -> m ()
 emitCppOld (spec @ CncSpec{..}) = do 
 
@@ -55,6 +55,7 @@ struct #{appname}_context;
 |] 
 -}
    -- This almost looks nicer in emacs anyway:
+   putS$ "\n// This code was GENERATED from a CnC specification, do not modify.\n\n"
    putS$ "#ifndef "++appname++"_H_ALREADY_INCLUDED\n"
    putS$ "#define "++appname++"_H_ALREADY_INCLUDED\n\n"
 
