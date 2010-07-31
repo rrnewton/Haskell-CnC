@@ -1,6 +1,5 @@
 
 
-
 ----------------------------------------------------------------------------------------------------
 -- Read .harch profiled/partitioned graph files.
 --
@@ -8,7 +7,6 @@
 ----------------------------------------------------------------------------------------------------
 
 module Intel.Cnc.Spec.ReadHarch where
-
 import Text.Parsec
 import Text.Parsec.Char
 import Text.Parsec.Combinator
@@ -17,66 +15,31 @@ import Data.List
 import System.IO
 import Control.Monad
 
-simple :: Parser Char
-simple  = letter
-
-nesting :: Parser Int
-nesting = do{ char '('
-            ; n <- nesting
-            ; char ')'
-            ; m <- nesting
-            ; return (max (n+1) m)
-            }
-        <|> return 0        
-
--- word    :: Parser String
--- word    = do{  c  <- letter
---             ;  do{  cs <- word
---                  ;  return (c:cs)
---                  }
---                <|> return [c]
---             }
---  word    
-
-word = many1 letter
-
-wordls :: Parser [String]
-wordls = do w <- word; 
-	    (do space; spaces; ws <- wordls; return$ w:ws) <|> return [w]
-	  <|> return []
-
---	     ((do ws <- wordls; return$ w:ws)
---	      <|> return [w])
-
-t0 = run nesting "(())()"
-
-run :: Show a => Parser a -> String -> IO ()
-run p input
-        = case (parse p "" input) of
-            Left err -> do{ putStr "parse error at "
-                          ; print err
-                          }
-            Right x  -> print x
-
--- Require at least one:
---props = prop `sepBy1` (many1 space)
---props = prop `sepBy` (many1 space)
---props = prop `sepBy` spaces
---props = many1 (do spaces; prop;)
-
-
--- numbers = do spaces 
--- 	     strs <- sepBy1 (many1 digit) (many1 space)
--- 	     return$ map read strs
-
 ----------------------------------------------------------------------------------------------------
 
+-- A simple datatype for parsed Harch Nodes:
 data HarchNode = HarchNode {
     name       :: String,             -- A mandatory field.
     properties :: [(String, String)], -- 
+    num        :: Int,                -- Using numeric idenifiers for now
     out_edges  :: [Int]
-  } 
+  }
  deriving Show
+
+harchfile :: Parser [HarchNode]
+harchfile = 
+  do numbers; newline -- Skip the first line
+     nodes <- many harchnode
+     return$ map (\ (n,rec) -> rec { num= n })
+	         (zip [1..] nodes)
+
+harchnode :: Parser HarchNode
+harchnode = 
+  do whitespc; char '%'; whitespc; string "HARCHNODE"; whitespc
+     ps   <- props;    whitespc; newline; 
+     nums <- numbers;  whitespc; newline;
+     let ([("name",nm)], rest) = partition ((== "name") . fst) ps 
+     return HarchNode { name= nm, properties= rest, out_edges= nums, num=0 }
 
 spc = oneOf " \t"
 whitespc = many spc
@@ -90,96 +53,56 @@ prop = do w <- many1 letter
 
 -- Having problems with sepBy:
 props :: Parser [(String,String)]
-props  = do p <- prop; 
-	    (do many1 spc; ps <- props; return$ p:ps) <|> return [p]
-	  <|> return []
+props = prop `sepBy` (many1 spc)
 
 numbers :: Parser [Int]
-numbers = do n <- many1 digit; 
-	     (do many1 spc; ns <- numbers; return$ (read n):ns) <|> return [read n]
-	   <|> return []
+numbers = do whitespc
+	     strs <- (many1 digit) `sepEndBy` (many1 spc)
+	     return$ map read strs
 
---commentline :: Parser String
-harchnode :: Parser HarchNode
--- harchnode = 
---   do whitespc; char '%'; whitespc; string "HARCHNODE"; whitespc
---      ps <- props
---      whitespc; newline; whitespc
---      nums <- numbers
---      whitespc; newline
---      let ([("name",nm)], rest) = partition ((== "name") . fst) ps 
---      return HarchNode { name= nm, properties= ps, out_edges= nums }
+----------------------------------------------------------------------------------------------------
+-- Generic harness for running a parser:
+run :: Show a => Parser a -> String -> a
+run p input
+        = case (parse p "" input) of
+            Left err -> error ("parse error at "++ show err)
+            Right x  -> x
 
-harchnode = 
-  do ps   <- nodeHeader
-     nums <- edgeline
-     let ([("name",nm)], rest) = partition ((== "name") . fst) ps 
-     return HarchNode { name= nm, properties= ps, out_edges= nums }
-
-nodeHeader = 
-  do whitespc; char '%'; whitespc; string "HARCHNODE"; whitespc
-     ps <- props; 
-     --newline
-     char '\n'
-     --whitespc; newline
-     return ps 
-
-edgeline = 
-  do whitespc
-     nums <- numbers
-     whitespc; newline
-     return nums
-
-
-
-harchfile :: Parser [HarchNode]
-harchfile = 
-  do numbers; newline -- Skip the first line
-     many harchnode
-
-debug = 
-  do whitespc; char '%'; whitespc; string "HARCHNODE"; whitespc
-     props
-     -- prop
-     -- spcs
-     -- prop
---     ps <- props
---     spcs; newline
---     return "yay"
+testread = 
+ do file <- openFile "/Users/newton/cnc/experimental/graphPartitioner/test.harch" ReadMode 
+    txt <- hGetContents file
+    let ls = run harchfile txt
+    sequence_$ map print ls
 
 ----------------------------------------------------------------------------------------------------
 -- Testing 
 
+runPr prs str = print (run prs str)
+
 foo = do whitespc; newline
 bar = do char '\n'
 
-t1 = run prop$ "name=foo;"
+t1 = runPr prop$ "name=foo;"
 
-t2 = run props$ "name=foo; direction=01;" -- No spcs at start end
-t3 = run props$ "name=foo;" 
-
-t4 = run debug$ "% HARCHNODE name=blah; \n"
+t2 = runPr props$ "name=foo; direction=01;" -- No spcs at start end
+t3 = runPr props$ "name=foo;" 
 
 l1 = "% HARCHNODE name=blah; direction=01;\n"
---t5 = run debug$ l1
-t5 = run nodeHeader l1
+--t5 = runPr debug$ l1
+--t5 = runPr nodeHeader l1
 
-l2 = "0 1 2 \n"
---t6 = run numbers$ l2
-t6 = run edgeline  l2 
+l2 = " 0 1 2 "
+t6 = runPr numbers$ l2
+--t6 = runPr edgeline  l2 
 
-t7 = run foo "   \n"
-t8 = run foo "\n"
-t9 = run bar "\n"
-
-
---t11 = run harchnode$ "% HARCHNODE name=blah; direction=01;\nw% HARCHNODE name=blah; direction=01; 0 1 2"
-t11 = run harchnode$ l1 ++ "\n" ++ l2
-
-tests = sequence_ [t1,t2,t3,t4,t5,t6, t11]
-
-test = do file <- openFile "/Users/newton/cnc/experimental/graphPartitioner/test.harch" ReadMode 
-	  txt <- hGetContents file
-	  run harchfile txt
+t7 = runPr foo "   \n"
+t8 = runPr foo "\n"
+t9 = runPr bar "\n"
 
 
+--t11 = runPr harchnode$ "% HARCHNODE name=blah; direction=01;\nw% HARCHNODE name=blah; direction=01; 0 1 2"
+t11 = runPr harchnode$ l1 ++ l2 ++ "\n"
+
+tests = sequence_ [t1,t2,t3, t7,t8,t9, t11]
+
+----------------------------------------------------------------------------------------------------
