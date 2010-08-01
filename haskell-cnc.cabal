@@ -73,7 +73,7 @@ Executable haskell-cnc-runTests
 Executable cnctrans
   Main-is:           Intel/Cnc/Spec/Main.hs
   Build-Depends:     base >= 3 && < 5, directory, process, prettyclass, fgl,
-                     stringtable-atom, filepath
+                     stringtable-atom, filepath, split
 -- interpolatedstring-qq, genericserialize, -- [2010.07.23] Removing for now
 -- happy, alex 
 
