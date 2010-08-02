@@ -227,7 +227,8 @@ convertHarchGraph parsednodes =
 -- A simple 
 simple_graph :: (nd1 -> String) -> G.Gr nd1 edge -> IO RunResult
 simple_graph lablNode gr = 
-  runGraphvizCanvas Dot dot Gtk
+--  runGraphvizCanvas Dot dot Gtk
+  runGraphvizCanvas Dot dot Xlib
  where 
   dot = graphToDot params gr
   --params ::  GraphvizParams String Int () String

@@ -14,7 +14,8 @@
 module Intel.Cnc.Spec.Codegen.CppOld where
 
 import Intel.Cnc.Spec.AST
-import Intel.Cnc.Spec.GatherGraph
+import Intel.Cnc.Spec.CncGraph
+--import Intel.Cnc.Spec.GatherGraph
 import Intel.Cnc.Spec.Util 
 import Control.Monad.State
 import StringTable.Atom

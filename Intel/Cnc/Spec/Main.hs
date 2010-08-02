@@ -4,6 +4,7 @@ module Main where
 import Intel.Cnc.Spec.CncLexer hiding (main)
 import Intel.Cnc.Spec.CncGrammar
 import Intel.Cnc.Spec.AST
+import Intel.Cnc.Spec.CncGraph
 import Intel.Cnc.Spec.GatherGraph
 import Intel.Cnc.Spec.Util
 import Intel.Cnc.Spec.Codegen.CppOld
@@ -86,7 +87,12 @@ main2 argv = do
 
   case filter (\ x -> case x of HarchViz _ -> True; _ -> False) opts of
     [] -> return ()
-    ls -> do mapM_ (\ (HarchViz file) -> do g <- readHarchFile file; simple_graph name g) ls
+    ls -> do mapM_ (\ (HarchViz file) -> 
+		     do putStrLn$ "Reading (and visualizing) harch file from: "++ file
+		        g <- readHarchFile file
+		        simple_graph name g)
+	           ls
+	     putStrLn$ "Done with visualization, exiting without performing any .cnc spec translation."
 	     exitSuccess
 
   case filter (\ x -> case x of HarchPart _ -> True; _ -> False) opts of
