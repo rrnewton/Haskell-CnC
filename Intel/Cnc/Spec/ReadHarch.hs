@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, TupleSections #-}
 
 ----------------------------------------------------------------------------------------------------
 -- Read .harch profiled/partitioned graph files.
@@ -14,26 +14,45 @@ import Text.Parsec.String
 import System.IO
 import Control.Monad
 import Data.List
-import Data.Set as S hiding (map, filter, partition)
+--import Data.Set as S hiding (map, filter, partition)
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.List.Split (splitOn)
 import Data.Graph
+import Debug.Trace
+
+import Data.Function
+
+import qualified  Data.Graph.Inductive as G
+import Data.Graph.Inductive.Query.Monad (mapFst, mapSnd)
+
+import Data.GraphViz
 
 ----------------------------------------------------------------------------------------------------
+
+-- A graph from a Harch file is currently not quite the same datatype as a CncGraph.
+-- The HarchGraph has only step collections currently.  It has no edge labels.
+type HarchGraph = G.Gr HarchNode ()
 
 -- A simple datatype for parsed Harch Nodes:
 data HarchNode = HarchNode {
     name       :: String,             -- A mandatory field.
     properties :: [(String, String)], -- 
-    num        :: Int,                -- Using numeric idenifiers for now
+    num        :: Int                 -- Using numeric idenifiers for now
+  }
+ deriving Show
+
+data HarchNodeParse = HNP {
+    hnode      :: HarchNode,
     in_edges   :: [Int],
     out_edges  :: [Int]
   }
  deriving Show
 
-
 -- A datatype for Harch trees:
 -- Parameterized by the type of the partitions themselves.
 data HarchTree a = HT a [HarchTree a]
+ deriving (Show, Eq, Ord)
 
 -- A simple representation to start with is a set of Ints for each partition:
 type HarchTreeUnordered = HarchTree (Set Int)
@@ -44,11 +63,12 @@ type HarchTreeOrdered = HarchTree [Int]
 ----------------------------------------------------------------------------------------------------
 -- Parsec parser for .harch syntax:
 
-harchfile :: Parser [HarchNode]
+harchfile :: Parser [HarchNodeParse]
 harchfile = 
   do numbers; newline -- Skip the first line
      nodes <- many harchnode
-     return$ map (\ (n,rec) -> rec { num= n })
+     return$ map (\ (n, rec) -> 
+		   let h = hnode rec in  rec { hnode= h{ num= n } })
 	         (zip [1..] nodes)
 
 -- Remove one property from a property list.
@@ -58,7 +78,11 @@ popProp name pls =
       (ls,_) -> error$ "Currently, exactly one '"++ show name ++"' property is required for each graph node, not "
 		        ++ show (length ls)++ ": "++ show ls
 
-harchnode :: Parser HarchNode
+-- Remove a property that may occur multiple times:
+popMultiProp name pls = 
+  error "TODO, popMultiProp: implement me"
+
+harchnode :: Parser HarchNodeParse
 harchnode = 
   do whitespc; char '%'; whitespc; string "HARCHNODE"; whitespc
      ps   <- props;    newline; 
@@ -71,14 +95,15 @@ harchnode =
      let (dirs,rest2) = popProp "directions" rest
      let (ins,outs) = 
 	  if not (length dirs == length edges) 
-	  then error$ "Number of 'directions' incorrect, "++ show (length dirs) ++" "++
+	  then error$ "\nNumber of 'directions' incorrect, "++ show (length dirs) ++" "++
 		      show dirs ++ " expected "++ show (length edges) ++ " for edges " ++ show edges
 	  else (map snd $ filter ((== '0') . fst) $ zip dirs edges,
 		map snd $ filter ((== '1') . fst) $ zip dirs edges)
 
-     return HarchNode { name= nm, properties= rest2, 
-			in_edges= ins, out_edges= outs, 
-			num=0 }
+     return HNP {
+	      hnode = HarchNode { name= nm, properties= rest2, num=0 },
+	      in_edges= ins, out_edges= outs 
+	    }
 
 spc = oneOf " \t"
 whitespc = many spc
@@ -107,27 +132,124 @@ run p input
             Left err -> error ("parse error at "++ show err)
             Right x  -> x
 
-main = testread
+--main = testread
 testread = 
 -- do file <- openFile "/Users/newton/cnc/experimental/graphPartitioner/test.harch" ReadMode 
--- do file <- openFile "/Users/newton/cnc/experimental/graphPartitioner/test2.harch" ReadMode 
- do file <- openFile "/Users/newton/cnc/experimental/graphPartitioner/outputs/pipes.harch.partitioned" ReadMode 
+ do file <- openFile "/Users/newton/cnc/experimental/graphPartitioner/test2.harch" ReadMode 
+-- do file <- openFile "/Users/newton/cnc/experimental/graphPartitioner/outputs/pipes.harch.partitioned" ReadMode 
     txt <- hGetContents file
     let ls = run harchfile txt
-    sequence_$ map print ls
+    --sequence_$ map print ls
+
+    putStrLn "\n Now partitions: \n"
+    let part = extractPartitions ls
+    --print part
+	  
+    let gr = convertHarchGraph ls
+
+    print gr
+    simple_graph name gr
+
+    --sequence_$ map print ppaths
+    return part
+
+
+readHarchFile :: String -> IO HarchGraph
+readHarchFile path = 
+ do file <- openFile path ReadMode 
+    txt  <- hGetContents file
+    let ls = run harchfile txt
+    let part = extractPartitions ls
+    let gr = convertHarchGraph ls
+    return gr
+
 
 
 ----------------------------------------------------------------------------------------------------
 -- Conversion to partitioned format:
 
-extractPartitions :: [HarchNode] -> HarchTreeUnordered
-extractPartitions nodes = undefined
+extractPartitions :: [HarchNodeParse] -> HarchTreeUnordered
+extractPartitions parsednodes = 
+  --trace ("Allnums: "++ show allnums)$ 
+  build (allnums, sorted)
  where
-  foo = map (\ HarchNode{..} -> properties ) nodes
+  nodes = map hnode parsednodes
+  allnums :: Set Int
+  allnums = Set.fromList$ map num nodes
+
+  sorted :: [([Int], HarchNode)]
+  sorted = sortBy (\ a b -> fst a `compare` fst b) $
+	          map extract nodes
+  
+  extract :: HarchNode -> ([Int], HarchNode) 
+  extract (nd@HarchNode{..}) = 
+     let (partstr, rest) = popProp "partitions" properties in
+     (map read $ splitOn ":" partstr :: [Int],
+      nd { properties= rest})
+
+  -- Build a tree recursively:
+  build :: (Set Int, [([Int], HarchNode)]) -> HarchTreeUnordered
+--  build (set, paths) | Set.null set = 
+  build (set, paths) = 
+     -- Each group is a child partition
+     let grouped = map (map (mapFst tail)) $ 
+		   groupBy ((==) `on` (head . fst)) $ 
+		   filter (not . null . fst) paths 
+	 -- For each sub-partition cut down the node set.
+         restricted = map (Set.intersection set) $ 
+		       map (Set.fromList . map (num . snd)) grouped
+
+     in 
+     --trace ("grouped "++ show (map (map fst) grouped) ++ " \t\tset "++ show set) $
+     HT set (map build $ zip restricted grouped)
+     
+
+convertHarchGraph  :: [HarchNodeParse] -> HarchGraph
+convertHarchGraph parsednodes = 
+   -- Quick sanity check, catch things before the HORRIBLE fgl errors do.
+   if Set.null diff 
+   then G.mkGraph vertices edges
+   --trace (" Vertices "++ show (map fst vertices) ++"\n Edges "++ show edges) $
+   else error$ "Edges to connect to nonexistent nodes! " ++ show (Set.toList diff)
+   
+ where
+  nodes = map hnode parsednodes
+  vertices = zip nums nodes
+  edges = concat (map (\ nd -> map (num (hnode nd), , ()) $ out_edges nd)
+		      parsednodes)
+  nums      = map num nodes
+  all_edges = Set.fromList$ concat$ map (\ (a,b,_) -> [a,b]) edges
+  diff = Set.difference all_edges (Set.fromList nums)
+
+----------------------------------------------------------------------------------------------------
+-- Graphing and visualization:
+
+-- A simple 
+simple_graph :: (nd1 -> String) -> G.Gr nd1 edge -> IO RunResult
+simple_graph lablNode gr = 
+  runGraphvizCanvas Dot dot Gtk
+ where 
+  dot = graphToDot params gr
+  --params ::  GraphvizParams String Int () String
+  --params ::  GraphvizParams String unknown () String
+  --params ::  GraphvizParams nd1 edge () nd1
+  --params = defaultParams { fmtNode= nodeAttrs }
+  params = nonClusteredParams { fmtNode= nodeAttrs }
+  nodeAttrs (node, x) =
+    [ Label $ StrLabel $ lablNode x
+    , Shape Circle
+  --  , Color [colors !! a]
+  --  , FillColor $ colors !! a
+    , Style [SItem Filled []]
+    ]
 
 
 ----------------------------------------------------------------------------------------------------
 -- Testing 
+
+--map (map (\ (a,b) -> (tail a, b))) $ 
+--groupBy (\ a b -> head (fst a) == head (fst b)) $ 
+
 
 runPr prs str = print (run prs str)
 

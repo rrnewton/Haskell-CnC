@@ -9,8 +9,6 @@ import Intel.Cnc.Spec.Util
 import Intel.Cnc.Spec.Codegen.CppOld
 import Intel.Cnc.Spec.Codegen.Haskell
 
---import Intel.Cnc.Spec.Codegen.Cpp
-
 import Intel.Cnc.Spec.ReadHarch
 
 import Text.PrettyPrint.HughesPJClass
@@ -31,7 +29,10 @@ version = "0.1.3.99"
 data Flag 
     = Verbose  | Version 
     | Cpp | CppOld | Haskell
- -- | Input String | Output String | LibDir String
+ -- | Input String  | LibDir String
+    | Output String
+    | HarchPart String
+    | HarchViz String
   deriving (Show, Eq)
     
 options :: [OptDescr Flag]
@@ -41,8 +42,14 @@ options =
      , Option ['h']     ["haskell"] (NoArg Haskell)      "translate spec to Haskell code"
      , Option []        ["cpp"]     (NoArg Cpp)          "translate spec to C++ code"
      , Option ['c']     ["cppold"]  (NoArg CppOld)       "translate spec to C++ code (legacy C++ API) [default]"
+
+     , Option ['o']     ["output"]  (ReqArg Output "FILE") "direct output to FILE"
+
+     , Option []        ["harch"]   (ReqArg HarchPart "FILE")   "read Harch graph metadata from FILE (used for translation)"
+     , Option []        ["harchpart"] (ReqArg HarchPart "FILE") "perform graph partitioning on FILE (set output with -o)"
+     , Option []        ["harchviz"]  (ReqArg HarchViz "FILE")  "visualize the graph stored in FILE with Harch clustering"
      ]
-  
+
 mode_option o = o `elem` [Cpp, CppOld, Haskell]
 
 printHeader = do
@@ -62,6 +69,10 @@ main2 argv = do
 			do --printHeader
 			   error $ "ERROR!\n" ++ (concat errs ++ usageInfo usage options)
 
+  ----------------------------------------------------------------------------------------------------
+  -- Read and process option flags:
+  ----------------------------------------------------------------------------------------------------
+
   (opts,files) <- 
      case getOpt Permute options argv of
        (o,n,[]  ) -> return (o,n)
@@ -73,12 +84,21 @@ main2 argv = do
 	   exitSuccess
    else return ()
 
+  case filter (\ x -> case x of HarchViz _ -> True; _ -> False) opts of
+    [] -> return ()
+    ls -> do mapM_ (\ (HarchViz file) -> do g <- readHarchFile file; simple_graph name g) ls
+	     exitSuccess
+
+  case filter (\ x -> case x of HarchPart _ -> True; _ -> False) opts of
+    [] -> return ()
+    ls -> error "--harchpart not implemented yet"
+
   let mode = 
        case filter mode_option opts of
         [] -> CppOld
         [o] -> o 
         ls -> defaultErr ["\nAsked to generate output in more than one format!  Not allowed presently. "++show ls++"\n"]
-  -- Force evaluation:
+  -- Force evaluation to make sure we hit the error:
   case mode of 
      Cpp -> return ()
      _   -> return ()
@@ -90,6 +110,9 @@ main2 argv = do
         ls     -> defaultErr ["\nCurrently the translator expects exactly one input file.\n"]
       verbose = Verbose `elem` opts
 
+  ----------------------------------------------------------------------------------------------------
+  -- Now do the actual translation (if we get to here):
+  ----------------------------------------------------------------------------------------------------
 
   handle <- openFile file ReadMode
   str <- hGetContents handle
