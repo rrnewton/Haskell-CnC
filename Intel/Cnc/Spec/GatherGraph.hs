@@ -15,17 +15,13 @@ import Intel.Cnc.Spec.Util
 
 import Data.List as L
 import Data.Maybe
-import Data.Map        hiding (empty,map)
-import Data.Set as Set hiding (map)
 import StringTable.Atom 
 import StringTable.AtomMap as AM
 import StringTable.AtomSet as AS
 import Control.Monad
-import Debug.Trace
-
-import Text.PrettyPrint.HughesPJClass
 import Data.Graph.Inductive as G
 --import Data.Graph.Inductive.NodeMap as NM
+import Debug.Trace
 
 ----------------------------------------------------------------------------------------------------
 
@@ -47,16 +43,6 @@ coalesceGraph name parsed =
   (_,(nm,g2)) = --trace ("Done collecting declares.. all nodes: " ++ show g1) $ 
        run g1 $ forM_ parsed collect -- Then add the edges.
 
-  -- declare stmt = 
-  --  case stmt of 
-  --     Chain start links  -> return ()
-  --     Function           -> return ()
-  --     Constraints _ _ _  -> return ()
-  --     DeclareExtern      -> return ()
-  --     DeclareTags  _ n _ -> do insMapNodeM $ CGTags $toAtom n; return ()
-  --     DeclareItems _ n _ -> do insMapNodeM $ CGItems$toAtom n; return ()
-  --     DeclareSteps _ n   -> do insMapNodeM $ CGSteps$toAtom n; return ()
-
   allnodes = --trace "Collecting allnodes" $
 	     collectInsts parsed $ collectDecls parsed
   collect stmt = 
@@ -68,6 +54,7 @@ coalesceGraph name parsed =
       DeclareTags  _ _ _ -> return ()
       DeclareItems _ _ _ -> return ()
       DeclareSteps _ _   -> return ()
+
 
 -- This is tedious, but here we simply go over the big list of statements that come out of
 -- the parser and collect the declarations for items, steps, and tags.

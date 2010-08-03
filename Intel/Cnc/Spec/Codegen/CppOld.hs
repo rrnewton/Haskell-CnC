@@ -20,12 +20,14 @@ import Intel.Cnc.Spec.Util
 import Control.Monad.State
 import StringTable.Atom
 
-import Text.PrettyPrint.HughesPJClass
+import Text.PrettyPrint.HughesPJClass 
 --import Intel.Cnc.Spec.QuasiString
 --import Text.InterpolatedString.Perl6
 --import Text.InterpolatedString.QQ
 
 import Data.Maybe
+import Data.Graph.Inductive hiding (empty)
+import Debug.Trace
 
 import qualified StringTable.AtomMap as AM
 import qualified StringTable.AtomSet as AS
@@ -123,10 +125,32 @@ struct #{appname}_context;
   	   textAtom it <> parens (t "this")
 	 )))
        indent 
-       (vcat $ (flip map) (zip stepls prescribers) $ \ (stp,tg) ->
-        t"prescribe" <> parens (pad$ textAtom tg <>commspc<> textAtom stp <> parens empty)
-        <> semi
-       )]
+       -- Body of the constructor
+       (vcat $ 
+         [-- Create objects for all step collections:
+	  (vcat$ (flip map) stepls $ \ stp -> 
+	   t "// " <> textAtom stp <> space <> t (step_obj$ fromAtom stp) <> t" = new " <> textAtom stp <> parens empty <> semi
+	  ),
+          -- Generate prescribe relations first [mandatory]:
+	  (vcat $ (flip map) (zip stepls prescribers) $ \ (stp,tg) ->
+          t"prescribe" <> parens (pad$ textAtom tg <>commspc<> textAtom stp <> parens empty)
+          <> semi),
+         -- Next, consume relations
+	-- trace ("labEdges graph: "++ show (labEdges graph)) $
+	(let egs = concat $ 
+	           map (\ (a,b,_) -> 
+			      case (lab graph a, lab graph b) of 
+				 (Just (CGItems i), Just (CGSteps s)) -> [(i,s)]
+				 _ -> []) $ 
+		   labEdges graph in 
+	 vcat $ (flip map) egs $ \ (a,b) ->
+          t"// consume" <> parens (t (fromAtom b) <> commspc <> t (step_obj $ fromAtom a)) <> semi),
+
+         -- Finally, produce relations:
+	 t"// PRODUCE"
+	     
+        ])
+       ]
 
    ------------------------------------------------------------
    -- Finish up
@@ -134,6 +158,14 @@ struct #{appname}_context;
    -- This is the "footer" for the document.
    putS$ "\n\n#endif // "++appname++"_H_ALREADY_INCLUDED\n"
    return ()
+
+
+-- An annoying feature of our current API [2010.08.03] is that we
+-- don't have explicit step_collection objects.  We separate object
+-- creation from 
+
+step_obj str = "obj_" ++ str 
+
 
 
 --------------------------------------------------------------------------------

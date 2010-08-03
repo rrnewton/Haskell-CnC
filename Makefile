@@ -96,7 +96,21 @@ trans:
 	@echo   Building Translator.
 	@echo ================================================================================
 	$(MAKE) cnctrans
-cnctrans: preproc buildtrans
+
+
+cnctrans: cnctrans.bloated
+	@echo Stripping executable to reduce size.
+	strip cnctrans.bloated -o cnctrans
+
+cnctrans.bloated: preproc buildtrans
+
+
+buildtrans: 
+	ghc -c Intel/Cnc/Spec/CncLexer.hs 
+	ghc -O --make Intel/Cnc/Spec/Main.hs -o cnctrans.bloated
+#	ghc --make CncLexer.hs
+#	ghc --make CncGrammar.hs
+
 
 preproc: Intel/Cnc/Spec/CncLexer.hs Intel/Cnc/Spec/CncGrammar.hs
 
@@ -110,10 +124,6 @@ Intel/Cnc/Spec/CncGrammar.y: Intel/Cnc/Spec/CncGrammar.y.pp
 Intel/Cnc/Spec/CncGrammar.hs: Intel/Cnc/Spec/CncGrammar.y
 	happy  Intel/Cnc/Spec/CncGrammar.y
 
-buildtrans: 
-	ghc --make Intel/Cnc/Spec/Main.hs -o cnctrans
-#	ghc --make CncLexer.hs
-#	ghc --make CncGrammar.hs
 
 wctrans:
 	(cd Intel/Cnc/Spec/; ln -f -s CncLexer.x CncLexer.temp.hs)
@@ -121,6 +131,8 @@ wctrans:
 	(cd Intel/Cnc/Spec/; cloc-1.08.pl --by-file CncLexer.temp.hs CncGrammar.temp.hs $(HSOURCE))
 
 cleantrans:
+	rm -f cnctrans cnctrans.bloated
 	(cd Intel/Cnc/Spec/; rm -f CncGrammar.hs CncLexer.hs *.o *.hi)
 	(cd Intel/Cnc/Spec/Codegen; rm -f *.o *.hi)
 	(cd Intel/Cnc/Spec/tests/; rm -f *.h)
+

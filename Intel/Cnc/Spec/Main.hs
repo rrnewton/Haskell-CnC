@@ -1,4 +1,4 @@
-
+{-# LANGUAGE CPP #-}
 module Main where
 
 import Intel.Cnc.Spec.CncLexer hiding (main)
@@ -13,8 +13,6 @@ import Intel.Cnc.Spec.Codegen.Haskell
 import Intel.Cnc.Spec.ReadHarch
 
 import Text.PrettyPrint.HughesPJClass
---import Data.Generics.Serialization.SExp
---import Data.Generics.Serialization.Streams
 import Data.Maybe ( fromMaybe )
 import System.Environment
 import System.Console.GetOpt
@@ -23,8 +21,14 @@ import System.IO
 import System.IO.Unsafe
 import System.Exit
 
+-- These expand the file size quite a bit.  Not committing to include right now:
+#define CNCVIZ
+#ifdef CNCVIZ 
+import Intel.Cnc.Spec.CncViz
+#endif
 
 -- TODO: It would be nice to get this from the .cabal file.
+-- That would require some quasiquoting/templating or the C preprocessor.
 version = "0.1.3.99"
     
 data Flag 
@@ -34,21 +38,40 @@ data Flag
     | Output String
     | HarchPart String
     | HarchViz String
+    | NullOpt
+    | DotOpt
+    | VizOpt
   deriving (Show, Eq)
     
 options :: [OptDescr Flag]
 options =
      [ Option ['v']     ["verbose"] (NoArg Verbose)       "verbose translator output to stdout"
      , Option ['V']     ["version"] (NoArg Version)       "show version number"
+
+     , Option []        []          (NoArg NullOpt)  ""
      , Option ['h']     ["haskell"] (NoArg Haskell)      "translate spec to Haskell code"
      , Option []        ["cpp"]     (NoArg Cpp)          "translate spec to C++ code"
      , Option ['c']     ["cppold"]  (NoArg CppOld)       "translate spec to C++ code (legacy C++ API) [default]"
-
      , Option ['o']     ["output"]  (ReqArg Output "FILE") "direct output to FILE"
 
-     , Option []        ["harch"]   (ReqArg HarchPart "FILE")   "read Harch graph metadata from FILE (used for translation)"
+     , Option []        []          (NoArg NullOpt)  ""
+     , Option []        []          (NoArg NullOpt)  ""
+     , Option []        []          (NoArg NullOpt)  "Options to control Harch (the hierarchical partitioner):"
+     , Option []        ["----------------"]  (NoArg$ error "internal problem")  "----------------------------------------------------------------------"
+     , Option []        ["harch"]     (ReqArg HarchPart "FILE")   "read Harch graph metadata from FILE (used for translation)"
      , Option []        ["harchpart"] (ReqArg HarchPart "FILE") "perform graph partitioning on FILE (set output with -o)"
+
+#ifdef CNCVIZ
+     , Option []        []          (NoArg NullOpt)  ""
+     , Option []        []          (NoArg NullOpt)  ""
+     , Option []        []          (NoArg NullOpt)  "Visualizing CnC and Harch graphs:"
+     , Option []        ["----------------"]  (NoArg$ error "internal problem")  "----------------------------------------------------------------------"
+     , Option []        ["dot"]     (NoArg DotOpt)   "output CnC graph in graphviz .dot format as well"
+     , Option []        ["viz"]     (NoArg VizOpt)   "similar to --dot, a shortcut to visualize CnC graph in a X11 window"
+     , Option []        ["ubigraph"] (NoArg VizOpt)   "like --viz, but visualize on a local Ubigraph server"
      , Option []        ["harchviz"]  (ReqArg HarchViz "FILE")  "visualize the graph stored in FILE with Harch clustering"
+#endif
+
      ]
 
 mode_option o = o `elem` [Cpp, CppOld, Haskell]
@@ -85,15 +108,17 @@ main2 argv = do
 	   exitSuccess
    else return ()
 
+#ifdef CNCVIZ
   case filter (\ x -> case x of HarchViz _ -> True; _ -> False) opts of
     [] -> return ()
     ls -> do mapM_ (\ (HarchViz file) -> 
 		     do putStrLn$ "Reading (and visualizing) harch file from: "++ file
 		        g <- readHarchFile file
-		        simple_graph name g)
+		        simple_graphviz name g)
 	           ls
 	     putStrLn$ "Done with visualization, exiting without performing any .cnc spec translation."
 	     exitSuccess
+#endif
 
   case filter (\ x -> case x of HarchPart _ -> True; _ -> False) opts of
     [] -> return ()
@@ -180,3 +205,32 @@ main2 argv = do
 
   putStrLn "Done."
 
+
+
+
+------------------------------------------------------------------------------------------------------------------------
+-- Testing 
+
+{-
+
+testread = 
+-- do file <- openFile "/Users/newton/cnc/experimental/graphPartitioner/test.harch" ReadMode 
+ do file <- openFile "/Users/newton/cnc/experimental/graphPartitioner/test2.harch" ReadMode 
+-- do file <- openFile "/Users/newton/cnc/experimental/graphPartitioner/outputs/pipes.harch.partitioned" ReadMode 
+    txt <- hGetContents file
+    let ls = run harchfile txt
+    --sequence_$ map print ls
+
+    putStrLn "\n Now partitions: \n"
+    let part = extractPartitions ls
+    --print part
+	  
+    let gr = convertHarchGraph ls
+
+    print gr
+    simple_graphviz name gr
+
+    --sequence_$ map print ppaths
+    return part
+
+-}

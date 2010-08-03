@@ -288,13 +288,15 @@ mkTagFun exps1 exps2 =
  let e1s = Prelude.map checkConvertTF exps1
      e2s = Prelude.map checkConvertTF exps2
  in if all isTEVar e1s
-    then if not (Prelude.null exps1) && length exps1 == length exps2 
+    then if not (Prelude.null exps1) && not (Prelude.null exps2)
+	     -- length exps1 == length exps2 
          then Just (TF (Prelude.map unTEVar e1s) e2s)
 	 -- Otherwise there is a mismatch in the number of tag components:
 	 else if Prelude.null exps2 
 	      then Nothing -- It's ok to simply leave off a tag function (but to have some var names on the step).
 	      else error$ "ERROR:\n   It is not acceptable to use the following tag components without\n"++
-		          "   the same number of corresponding tag components indexing the step: "
+		          "   tag components indexing the step: "
+--		          "   the same number of corresponding tag components indexing the step: "
 		          ++ (show$ pp exps2) ++ 
 			  showSpanDetailed (foldl1 combineSrcSpans $ Prelude.map getDecor exps2)
 

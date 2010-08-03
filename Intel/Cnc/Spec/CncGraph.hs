@@ -6,21 +6,12 @@
 module Intel.Cnc.Spec.CncGraph where
 
 import Intel.Cnc.Spec.AST
--- import Intel.Cnc.Spec.CncGraph
--- import Intel.Cnc.Spec.SrcLoc
--- import Intel.Cnc.Spec.Util
-
 import Data.List as L
 import Data.Maybe
--- import Data.Map        hiding (empty,map)
--- import Data.Set as Set hiding (map)
 import StringTable.Atom 
--- import Control.Monad
--- import Debug.Trace
-
 import StringTable.AtomMap as AM
 import StringTable.AtomSet as AS
-import Text.PrettyPrint.HughesPJClass
+import Text.PrettyPrint.HughesPJClass hiding (Style)
 import Data.Graph.Inductive as G
 
 
@@ -89,4 +80,5 @@ getStepPrescriber (CncSpec{..}) atom =
     labs  = catMaybes$ L.map (lab graph) preds
     isTags (CGTags _) = True
     isTags _ = False
+
 

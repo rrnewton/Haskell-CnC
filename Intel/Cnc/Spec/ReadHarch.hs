@@ -7,6 +7,8 @@
 ----------------------------------------------------------------------------------------------------
 
 module Intel.Cnc.Spec.ReadHarch where
+
+import Intel.Cnc.Spec.CncGraph
 import Text.Parsec
 import Text.Parsec.Char
 import Text.Parsec.Combinator
@@ -25,8 +27,6 @@ import Data.Function
 
 import qualified  Data.Graph.Inductive as G
 import Data.Graph.Inductive.Query.Monad (mapFst, mapSnd)
-
-import Data.GraphViz
 
 ----------------------------------------------------------------------------------------------------
 
@@ -133,26 +133,6 @@ run p input
             Right x  -> x
 
 --main = testread
-testread = 
--- do file <- openFile "/Users/newton/cnc/experimental/graphPartitioner/test.harch" ReadMode 
- do file <- openFile "/Users/newton/cnc/experimental/graphPartitioner/test2.harch" ReadMode 
--- do file <- openFile "/Users/newton/cnc/experimental/graphPartitioner/outputs/pipes.harch.partitioned" ReadMode 
-    txt <- hGetContents file
-    let ls = run harchfile txt
-    --sequence_$ map print ls
-
-    putStrLn "\n Now partitions: \n"
-    let part = extractPartitions ls
-    --print part
-	  
-    let gr = convertHarchGraph ls
-
-    print gr
-    simple_graph name gr
-
-    --sequence_$ map print ppaths
-    return part
-
 
 readHarchFile :: String -> IO HarchGraph
 readHarchFile path = 
@@ -221,28 +201,6 @@ convertHarchGraph parsednodes =
   all_edges = Set.fromList$ concat$ map (\ (a,b,_) -> [a,b]) edges
   diff = Set.difference all_edges (Set.fromList nums)
 
-----------------------------------------------------------------------------------------------------
--- Graphing and visualization:
-
--- A simple 
-simple_graph :: (nd1 -> String) -> G.Gr nd1 edge -> IO RunResult
-simple_graph lablNode gr = 
---  runGraphvizCanvas Dot dot Gtk
-  runGraphvizCanvas Dot dot Xlib
- where 
-  dot = graphToDot params gr
-  --params ::  GraphvizParams String Int () String
-  --params ::  GraphvizParams String unknown () String
-  --params ::  GraphvizParams nd1 edge () nd1
-  --params = defaultParams { fmtNode= nodeAttrs }
-  params = nonClusteredParams { fmtNode= nodeAttrs }
-  nodeAttrs (node, x) =
-    [ Label $ StrLabel $ lablNode x
-    , Shape Circle
-  --  , Color [colors !! a]
-  --  , FillColor $ colors !! a
-    , Style [SItem Filled []]
-    ]
 
 
 ----------------------------------------------------------------------------------------------------
