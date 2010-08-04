@@ -56,7 +56,8 @@ commspc = text ", "
 pad t = space <> t <> space
 hangbraces d1 n d2 = sep [d1, vbraces$ nest n d2]
 
-struct title body = (hangbraces (text "struct " <> title) indent body) <> semi
+struct   title body = (hangbraces (text "struct " <> title) indent body) <> semi
+cppclass title body = (hangbraces (text "class "  <> title) indent body) <> semi
 
 -- I am very lazy:
 t = text

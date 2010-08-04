@@ -97,20 +97,26 @@ trans:
 	@echo ================================================================================
 	$(MAKE) cnctrans
 
+release: cnctrans.release
 
-cnctrans: cnctrans.bloated
+cnctrans.release: cnctrans.stripped
+	@echo Packing executable with UPX:
+	upx cnctrans.stripped -o cnctrans.release
+
+cnctrans.stripped: cnctrans
 	@echo Stripping executable to reduce size.
-	strip cnctrans.bloated -o cnctrans
+	strip cnctrans -o cnctrans.stripped
 
-cnctrans.bloated: preproc buildtrans
-
-
+cnctrans: preproc buildtrans
 buildtrans: 
 	ghc -c Intel/Cnc/Spec/CncLexer.hs 
-	ghc -O --make Intel/Cnc/Spec/Main.hs -o cnctrans.bloated
-#	ghc --make CncLexer.hs
-#	ghc --make CncGrammar.hs
+	ghc --make Intel/Cnc/Spec/Main.hs -o cnctrans
+#	ghc -O --make Intel/Cnc/Spec/Main.hs -o cnctrans
 
+
+viz: preproc
+	ghc -c Intel/Cnc/Spec/CncLexer.hs 
+	ghc -DCNCVIZ --make Intel/Cnc/Spec/Main.hs -o cnctrans
 
 preproc: Intel/Cnc/Spec/CncLexer.hs Intel/Cnc/Spec/CncGrammar.hs
 
@@ -136,3 +142,7 @@ cleantrans:
 	(cd Intel/Cnc/Spec/Codegen; rm -f *.o *.hi)
 	(cd Intel/Cnc/Spec/tests/; rm -f *.h)
 
+
+#====================================================================================================
+
+# cd graphPartitioner; $(MAKE)

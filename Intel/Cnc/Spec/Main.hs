@@ -22,7 +22,7 @@ import System.IO.Unsafe
 import System.Exit
 
 -- These expand the file size quite a bit.  Not committing to include right now:
-#define CNCVIZ
+-- #define CNCVIZ
 #ifdef CNCVIZ 
 import Intel.Cnc.Spec.CncViz
 #endif

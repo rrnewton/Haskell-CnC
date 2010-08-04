@@ -1,7 +1,8 @@
 
 // Here we test some tag functions
 
-tags <(int,int)>      T;
+tags <(int,int)>      T1;
+tags <double>         T2;
 items<int, Foo>       I1;
 items<(int,int), Bar> I2;
 steps                 S;
@@ -13,6 +14,8 @@ steps                 S;
 // TEMP, for the current prototype we require that the STEP be indexed by simple variables.  This guarantees
 // TOTAL FUNCTIONS.  Otherwise, we could have situations where the step is restricted, say, to even numbers.
 // If the domain of the step is restricted, then we have a whole additional class of errors. 
-T :: S;
+T1 :: S;
 
-I1[i] -> S(i, j) -> I2[6*j, i + j + 2];
+S(i, j) <- I1[i];
+S(i, j) -> I2[6*j, i + j + 2]
+         , T2;
