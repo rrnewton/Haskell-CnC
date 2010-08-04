@@ -32,8 +32,16 @@ import Debug.Trace
 import qualified StringTable.AtomMap as AM
 import qualified StringTable.AtomSet as AS
 
+----------------------------------------------------------------------------------------------------
 
---------------------------------------------------------------------------------
+-- An annoying feature of our current API [2010.08.03] is that we
+-- don't have explicit step_collection objects.  We make sure to only
+-- allocate one copy of the user's temporary Step() object and then
+-- use its pointer as a key:
+step_obj str = "m_" ++ str 
+obj_ref a   = t"*" <> (t$ step_obj$ fromAtom a)
+
+----------------------------------------------------------------------------------------------------
 
 emitCppOld :: StringBuilder m => CncSpec -> m ()
 emitCppOld (spec @ CncSpec{..}) = do 
@@ -96,7 +104,13 @@ struct #{appname}_context;
 
    putD$ cppclass (maincontext <> t " : public CnC::context" <> angles (pad maincontext)) $ 
      vcat $ 
+    
+     t "\n  private:" : 
+     t "// Members to store instances of the users Step type:" : 
+     ((flip map) stepls $ \ stp -> 
+      textAtom stp <> t"* " <> (t$ step_obj$ fromAtom stp) <> semi) ++
 
+     t "\n  public:" : 
      t "// Tag collections members:" : 
      ((flip map) (AM.toList tags) $ \ (tg,mty) -> 
        case mty of 
@@ -131,7 +145,7 @@ struct #{appname}_context;
        (vcat $ 
          [-- Create objects for all step collections:
 	  (vcat$ (flip map) stepls $ \ stp -> 
-	   textAtom stp <> space <> (t$ step_obj$ fromAtom stp) <> t"* = new " <> textAtom stp <> parens empty <> semi
+	   (t$ step_obj$ fromAtom stp) <> t" = new " <> textAtom stp <> parens empty <> semi
 	  ),
           -- Generate prescribe relations first [mandatory]:
 	  (vcat $ (flip map) (zip stepls prescribers) $ \ (stp,tg) ->
@@ -187,20 +201,15 @@ struct #{appname}_context;
      do let privcontext = textAtom stp <> t"_context"
 	putD$ 
  	 cppclass privcontext
-	  (t "// A pointer to the main context for the application.  This context is a wrapper for that one:" $$ 
-	   maincontext <> t" & m_parent;"  $$ t"" $$	   
-	   t "// Tag collections are simply aliases to the parent's:" $$ 
+	  (--t "\n  private:" $$
+	   --t "// A pointer to the main context for the application.  This context is a wrapper for that one:" $$ 
+	   --maincontext <> t" & m_parent;"  $$ 
+
+           t "\n  public:" $$
+	   t "// Tag collections are simply aliases to the parents':" $$ 
 	   (vcat$ (flip map) (AM.toList tags) $ \ (tg, Just ty) -> 
 	    text "CnC::tag_collection" <> angles (dType ty) <> t" & " <> textAtom tg <> semi
 	   ) $$ 
-	   
-	   t""$$ t "// Constructor for the private context: " $$	   
-	   hangbraces (privcontext <> parens (maincontext <> t" & p") <+> colon $$ nest 6 
-		       ((vcat$  (flip map) (AM.toList tags) $ \ (tg,Just ty) -> 
-		 	 textAtom tg <> parens (t$ "m_parent."++fromAtom tg) <> commspc) $$
-		        t "m_parent(p)")
-		      )
-		      indent (empty) $$
 
 	   -- Wrap item collections:
 	   t""$$ 
@@ -208,14 +217,41 @@ struct #{appname}_context;
 	    (flip map) (AM.toList items) $ \ (it,Just (ty1,ty2)) -> 
   	    --textAtom it <> parens (t "this")
 	    let f x = hangbraces (t "inline void " <> t x <> parens (dType ty1 <> t" tag, " <> dType ty2 <> t" & ref")) 
-	                         indent (t "m_parent." <> t x <> t "(tag,ref);") in
-	    cppclass (textAtom it)
-	             (f "get" $$ 
-		      f "put")
-	   )
+	                         indent (t "m_"<> textAtom it <> t"." <> t x <> t "(tag,ref);") 
+	        wrapper = textAtom it <> t"_wrapper"
+	        member  = t"m_" <> textAtom it
+	    in
+	    t "// A 'NoOp' wrapper class that does nothing: "$$
+	    cppclass wrapper
+	             (t "public:" $$ 
+		      t"CnC::item_collection" <> angles (dType ty1 <>commspc<> dType ty2) <+> member <> semi $$ t"" $$
+                      t "// The constructor here needs to grab a reference from the main context:" $$
+		      (hangbraces (wrapper <> parens (maincontext <> t" & p") <+> colon <+>
+				   (member <> t "(p." <> textAtom it <> t ")"))
+		       indent empty) $$ 
+		      f "get" $$ 
+		      f "put") $$ 
+            t "") $$
+
+           -- Declare MEMBERS
+	   t ""$$ t "// Item collections are all wrapped for now:" $$ 
+	   (vcat $ 
+	    (flip map) (AM.toList items) $ \ (it,Just (ty1,ty2)) -> 
+	    textAtom it <> t"_wrapper" <+> textAtom it <> semi 
+	   ) $$
+	   
+	   t""$$ t "// Constructor for the private/custom context: " $$	   
+	   hangbraces (privcontext <> parens (maincontext <> t" & p") <+> colon $$ 
+		       (nest 6 $ vcat $ 
+			(flip map) (AM.toList items) $ \ (it,Just (ty1,ty2)) -> 
+			textAtom it <> parens (t"p") <> commspc ) $$
+		       (nest 6 $ vcat$ punctuate commspc $ (flip map) (AM.toList tags) $ \ (tg,Just ty) -> 
+		 	 textAtom tg <> parens (t$ "p."++fromAtom tg))
+		      )
+		      indent (empty) 
+
 	   -- Have to wrap tag collections as well just to redirect references to the main context:
 	  )
---   putD$ (vcat$ (flip map) stepls $ \ stp ->  
 
 
 
@@ -227,20 +263,14 @@ struct #{appname}_context;
    return ()
 
 
--- An annoying feature of our current API [2010.08.03] is that we
--- don't have explicit step_collection objects.  We make sure to only
--- allocate one copy of the user's temporary Step() object and then
--- use its pointer as a key:
-step_obj str = "obj_" ++ str 
-obj_ref a   = t"*" <> (t$ step_obj$ fromAtom a)
 
 
 --------------------------------------------------------------------------------
 -- Produce the prototype for a single step.
 emitStep appname name ty = putD$ 
-  t ("template < class ctxt > ") $$
   struct (t name)
-	 (t "int execute(" <+> constRefType ty <+> t "tag," <+> 
+	 (t ("template < class ctxt > ") $$
+	  t "int execute(" <+> constRefType ty <+> t "tag," <+> 
 	  t "ctxt & c) const;"
 	  --t appname <> t "_context & c) const;"
 	 )
