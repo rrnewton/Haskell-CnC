@@ -1,6 +1,6 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, QuasiQuotes #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
--- QuasiQuotes
+
 
 ----------------------------------------------------------------------------------------------------
 -- This is the code generator for the original (CnC/C++ 0.1-0.5) "context"-based C++ API.
@@ -21,9 +21,9 @@ import Control.Monad.State
 import StringTable.Atom
 
 import Text.PrettyPrint.HughesPJClass 
---import Intel.Cnc.Spec.QuasiString
---import Text.InterpolatedString.Perl6
---import Text.InterpolatedString.QQ
+
+-- QuasiQuoting is too expensive in final binary size:
+import Text.InterpolatedString.QQ
 
 import Data.Maybe
 import Data.Graph.Inductive hiding (empty)
@@ -48,37 +48,42 @@ emitCppOld (spec @ CncSpec{..}) = do
 
    -- First we produce the header (a quasiquoted multiline string):
    --------------------------------------------------------------------------------
-
    -- I love quasiquoting but for now [2010.07.23] the dependencies are complicated and it
    -- also makes the resulting binary 3X bigger (it shouldn't!?).
 {-
    putS$ [$istr|    
-#ifndef #{appname}_H_ALREADY_INCLUDED
-#define #{appname}_H_ALREADY_INCLUDED
+ #ifndef #{appname}_H_ALREADY_INCLUDED
+ #define #{appname}_H_ALREADY_INCLUDED
 
-#include <cnc/cnc.h>
-#include <cnc/debug.h>
+ #include <cnc/cnc.h>
+ #include <cnc/debug.h>
 
 // Forward declaration of the context class (also known as graph)
 struct #{appname}_context;
 
 // Next this generated file contains prototypes for each step implementation:
-|] 
--}
-   -- This almost looks nicer in emacs anyway:
+|]
+-} 
+
+   ------------- This almost looks nicer in emacs anyway: --------------
    putS$ "\n// This code was GENERATED from a CnC specification, do not modify.\n\n"
    putS$ "#ifndef "++appname++"_H_ALREADY_INCLUDED\n"
    putS$ "#define "++appname++"_H_ALREADY_INCLUDED\n\n"
 
+   -- Ideally this would only be included IF tuple types are used... complicated right now.
+   -- putS  "#include \"boost/tuple/tuple.hpp\"\n\n"
+   putS  "// For now using C++ TR1 to provide tuples:\n"
+   putS  "#include <tr1/tuple>\n"
+   putS "#define cnctup std::tr1\n\n"
+
    putS  "#include <cnc/cnc.h>\n"
    putS  "#include <cnc/debug.h>\n"
-   -- Ideally this would only be included IF tuple types are used... complicated right now.
-   putS  "#include \"boost/tuple/tuple.hpp\"\n\n"
 
    putS  "// Forward declaration of the context class (also known as graph)\n"
    putS$ "struct "++appname++"_context;\n\n"
 
    putS  "// Next this generated file contains prototypes for each step implementation:\n"
+
 
    ------------------------------------------------------------
    -- Emit the step prototypes:
@@ -224,7 +229,7 @@ struct #{appname}_context;
 	    t "// A 'NoOp' wrapper class that does nothing: "$$
 	    cppclass wrapper
 	             (t "public:" $$ 
-		      t"CnC::item_collection" <> angles (dType ty1 <>commspc<> dType ty2) <+> member <> semi $$ t"" $$
+		      t"CnC::item_collection" <> angles (dType ty1 <>commspc<> dType ty2) <> t" & " <> member <> semi $$ t"" $$
                       t "// The constructor here needs to grab a reference from the main context:" $$
 		      (hangbraces (wrapper <> parens (maincontext <> t" & p") <+> colon <+>
 				   (member <> t "(p." <> textAtom it <> t ")"))
@@ -286,7 +291,7 @@ dType ty = case ty of
   -- Here is the convention for representing tuples in C++.
   --TTuple [a,b]   -> t "Pair"   <> angles (hcat$ punctuate commspc (map dType [a,b]))
   --TTuple [a,b,c] -> t "Triple" <> angles (hcat$ punctuate commspc (map dType [a,b,c]))
-  TTuple ls -> t "boost::tuple" <> angles (hcat$ punctuate commspc$ map dType ls)
+  TTuple ls -> t "cnctup::tuple" <> angles (hcat$ punctuate commspc$ map dType ls)
   --TTuple ls -> error$ "CppOld codegen: Tuple types of length "++ show (length ls) ++" not standardized yet!"
 
 

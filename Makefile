@@ -101,16 +101,17 @@ release: cnctrans.release
 
 cnctrans.release: cnctrans.stripped
 	@echo Packing executable with UPX:
+	rm -f cnctrans.release
 	upx cnctrans.stripped -o cnctrans.release
 
-cnctrans.stripped: cnctrans
+cnctrans.stripped: viz
 	@echo Stripping executable to reduce size.
 	strip cnctrans -o cnctrans.stripped
 
 cnctrans: preproc buildtrans
 buildtrans: 
-	ghc -c Intel/Cnc/Spec/CncLexer.hs 
 	ghc --make Intel/Cnc/Spec/Main.hs -o cnctrans
+#	ghc -c Intel/Cnc/Spec/CncLexer.hs 
 #	ghc -O --make Intel/Cnc/Spec/Main.hs -o cnctrans
 
 
@@ -137,7 +138,7 @@ wctrans:
 	(cd Intel/Cnc/Spec/; cloc-1.08.pl --by-file CncLexer.temp.hs CncGrammar.temp.hs $(HSOURCE))
 
 cleantrans:
-	rm -f cnctrans cnctrans.bloated
+	rm -f cnctrans cnctrans.bloated cnctrans.stripped cnctrans.release
 	(cd Intel/Cnc/Spec/; rm -f CncGrammar.hs CncLexer.hs *.o *.hi)
 	(cd Intel/Cnc/Spec/Codegen; rm -f *.o *.hi)
 	(cd Intel/Cnc/Spec/tests/; rm -f *.h)
