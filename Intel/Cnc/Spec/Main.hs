@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP, NamedFieldPuns #-}
 module Main where
 
 import Intel.Cnc.Spec.CncLexer hiding (main)
@@ -14,6 +14,8 @@ import Intel.Cnc.Spec.ReadHarch
 
 import Text.PrettyPrint.HughesPJClass
 import Data.Maybe ( fromMaybe )
+import Data.IORef
+import Control.Monad hiding (when)
 import System.Environment
 import System.Console.GetOpt
 import System.FilePath.Posix
@@ -41,6 +43,7 @@ data Flag
     | NullOpt
     | DotOpt
     | VizOpt
+    | UbigraphOpt
   deriving (Show, Eq)
     
 options :: [OptDescr Flag]
@@ -66,85 +69,27 @@ options =
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []          (NoArg NullOpt)  "Visualizing CnC and Harch graphs:"
      , Option []        ["----------------"]  (NoArg$ error "internal problem")  "----------------------------------------------------------------------"
-     , Option []        ["dot"]     (NoArg DotOpt)   "output CnC graph in graphviz .dot format as well"
-     , Option []        ["viz"]     (NoArg VizOpt)   "similar to --dot, a shortcut to visualize CnC graph in a X11 window"
-     , Option []        ["ubigraph"] (NoArg VizOpt)   "like --viz, but visualize on a local Ubigraph server"
+     , Option []        ["dot"]      (NoArg DotOpt)   "output CnC graph in graphviz .dot format as well"
+     , Option []        ["viz"]      (NoArg VizOpt)   "similar to --dot, a shortcut to visualize CnC graph in a X11 window"
+     , Option []        ["ubigraph"] (NoArg UbigraphOpt)  "like --viz, but visualize on a local Ubigraph server"
      , Option []        ["harchviz"]  (ReqArg HarchViz "FILE")  "visualize the graph stored in FILE with Harch clustering"
 #endif
 
      ]
-
-mode_option o = o `elem` [Cpp, CppOld, Haskell]
 
 printHeader = do
   putStrLn$ "Intel(R) Concurrent Collections Spec Translator, Haskell CnC Edition version "++ version
   putStrLn$ "Copyright 2010 Intel Corporation."
 
 when b action = if b then action else return ()
-  
--- Here we test our parser.
-main = 
- do argv <- getArgs
-    main2 argv
 
-main2 argv = do  
-  let usage = "\nUsage: cnctrans [OPTION...] files..."
-      defaultErr errs = unsafePerformIO$ 
-			do --printHeader
-			   error $ "ERROR!\n" ++ (concat errs ++ usageInfo usage options)
 
-  ----------------------------------------------------------------------------------------------------
-  -- Read and process option flags:
-  ----------------------------------------------------------------------------------------------------
 
-  (opts,files) <- 
-     case getOpt Permute options argv of
-       (o,n,[]  ) -> return (o,n)
-       (_,_,errs) -> defaultErr errs
+------------------------------------------------------------------------------------------------------------------------
+-- The translator front-end: parse a file, convert to graph:
 
-  if Version `elem` opts 
-   then do printHeader
-	   --putStrLn$ version
-	   exitSuccess
-   else return ()
-
-#ifdef CNCVIZ
-  case filter (\ x -> case x of HarchViz _ -> True; _ -> False) opts of
-    [] -> return ()
-    ls -> do mapM_ (\ (HarchViz file) -> 
-		     do putStrLn$ "Reading (and visualizing) harch file from: "++ file
-		        g <- readHarchFile file
-		        simple_graphviz name g)
-	           ls
-	     putStrLn$ "Done with visualization, exiting without performing any .cnc spec translation."
-	     exitSuccess
-#endif
-
-  case filter (\ x -> case x of HarchPart _ -> True; _ -> False) opts of
-    [] -> return ()
-    ls -> error "--harchpart not implemented yet"
-
-  let mode = 
-       case filter mode_option opts of
-        [] -> CppOld
-        [o] -> o 
-        ls -> defaultErr ["\nAsked to generate output in more than one format!  Not allowed presently. "++show ls++"\n"]
-  -- Force evaluation to make sure we hit the error:
-  case mode of 
-     Cpp -> return ()
-     _   -> return ()
-
-  let file = 
-       case files of 
-        [file] -> file
-        []     -> defaultErr ["\nNo files provided!\n"]
-        ls     -> defaultErr ["\nCurrently the translator expects exactly one input file.\n"]
-      verbose = Verbose `elem` opts
-
-  ----------------------------------------------------------------------------------------------------
-  -- Now do the actual translation (if we get to here):
-  ----------------------------------------------------------------------------------------------------
-
+readCnCFile :: Bool -> String -> IO CncSpec
+readCnCFile verbose file = do 
   handle <- openFile file ReadMode
   str <- hGetContents handle
 
@@ -181,6 +126,82 @@ main2 argv = do
   print $ pp graph
 
   putStrLn "================================================================================"
+  return graph
+
+
+  
+------------------------------------------------------------------------------------------------------------------------
+main = 
+ do argv <- getArgs
+    main2 argv
+
+main2 argv = do  
+  let usage = "\nUsage: cnctrans [OPTION...] files..."
+      defaultErr errs = unsafePerformIO$ 
+			do --printHeader
+			   error $ "ERROR!\n" ++ (concat errs ++ usageInfo usage options)
+
+  ----------------------------------------------------------------------------------------------------
+  -- Read and process option flags:
+  ----------------------------------------------------------------------------------------------------
+
+  (opts,files) <- 
+     case getOpt Permute options argv of
+       (o,n,[]  ) -> return (o,n)
+       (_,_,errs) -> defaultErr errs
+
+  let mode_option o = o `elem` [Cpp, CppOld, Haskell] 
+      mode = case filter mode_option opts of
+               [] -> CppOld
+  	       [o] -> o 
+  	       ls -> defaultErr ["\nAsked to generate output in more than one format!  Not allowed presently. "++show ls++"\n"]
+      verbose = Verbose `elem` opts
+
+  let file = 
+       case files of 
+        [file] -> file
+        []     -> defaultErr ["\nNo files provided!\n"]
+        ls     -> defaultErr ["\nCurrently the translator expects exactly one input file.\n"]
+
+  ------------------------------------------------------------	       
+  forM_ opts $ \opt -> 
+   case opt of 
+     HarchPart file -> error "--harchpart not implemented yet"
+
+     Version -> do printHeader
+                   --putStrLn$ version
+                   exitSuccess
+
+#ifdef CNCVIZ
+     HarchViz file -> 
+	 do putStrLn$ "Reading (and visualizing) harch file from: "++ file
+	    g <- readHarchFile file
+	    simple_graphviz name g
+	    putStrLn$ "Done with visualization, exiting without performing any .cnc spec translation."
+	    exitSuccess
+     UbigraphOpt -> 
+	 do CncSpec{graph} <- readCnCFile verbose file
+	    cncUbigraph graph
+	    putStrLn$ "Done with visualization, exiting without performing any .cnc spec translation."
+	    exitSuccess
+#endif
+
+     m | mode_option m -> return ()
+     o -> defaultErr ["Internal error: Currently unhandled option: "++ show o ++"\n"]
+  ------------------------------------------------------------	       
+ 
+  -- Force evaluation to make sure we hit the error:
+  case mode of 
+     Cpp -> return ()
+     _   -> return ()
+
+  ----------------------------------------------------------------------------------------------------
+  -- Now do the actual translation (if we get to here):
+  ----------------------------------------------------------------------------------------------------
+  
+  graph <- readCnCFile verbose file 
+  let appname = takeBaseName file  
+
   case mode of
     CppOld -> 
        do let outname = takeDirectory file </> appname ++ ".h"

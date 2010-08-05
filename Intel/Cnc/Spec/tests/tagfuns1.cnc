@@ -16,6 +16,8 @@ steps                 S;
 // If the domain of the step is restricted, then we have a whole additional class of errors. 
 T1 :: S;
 
+env -> T1;
+
 S(i, j) <- I1[i];
 S(i, j) -> I2[6*j, i + j + 2]
          , T2;
