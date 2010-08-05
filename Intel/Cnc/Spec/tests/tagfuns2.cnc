@@ -29,12 +29,14 @@ constrain I[i,j]  i>=0,  i<N,  j>=0,  j<M;
 //constrain I;
 //constrain ;
 
+env -> T;
+env <- I;
 T prescribes S; 
 
 // Here is a wavefront style computation.
-S(i,j) <- I[i-1, j], 
-          I[i, j-1], 
-          I[i-1, j-1];
+I[i-1, j], 
+I[i, j-1], 
+I[i-1, j-1] -> S(i,j) -> I[i,j];
 
 // BUT that tag function is BOUNDED by the rectangular bounds of I[] above.
 
@@ -42,3 +44,4 @@ S(i,j) <- I[i-1, j],
 // And to compute it symbolically without specifying N and M?
 
 // And do we want to put the bounds on the item collection itself?  Or on that particular tag function?
+

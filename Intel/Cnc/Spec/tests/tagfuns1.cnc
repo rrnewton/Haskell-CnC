@@ -17,6 +17,7 @@ steps                 S;
 T1 :: S;
 
 env -> T1;
+env <- I2;
 
 S(i, j) <- I1[i];
 S(i, j) -> I2[6*j, i + j + 2]
