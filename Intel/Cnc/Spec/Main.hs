@@ -16,12 +16,15 @@ import Text.PrettyPrint.HughesPJClass
 import Data.Maybe ( fromMaybe )
 import Data.IORef
 import Control.Monad hiding (when)
+
 import System.Environment
 import System.Console.GetOpt
 import System.FilePath.Posix
 import System.IO
 import System.IO.Unsafe
 import System.Exit
+
+import Intel.Cnc.Spec.Vacuum
 
 -- These expand the file size quite a bit.  Not committing to include right now:
 -- #define CNCVIZ
@@ -44,6 +47,8 @@ data Flag
     | DotOpt
     | VizOpt
     | UbigraphOpt
+    | VacuumViz
+    | Vacuum
   deriving (Show, Eq)
     
 options :: [OptDescr Flag]
@@ -52,27 +57,43 @@ options =
      , Option ['V']     ["version"] (NoArg Version)       "show version number"
 
      , Option []        []          (NoArg NullOpt)  ""
+     , Option []        []          (NoArg NullOpt)  ""
+     , Option []        []          (NoArg NullOpt)  "Translating to and from .cnc specification files:"
+     , Option []        ["----------------"]  (NoArg$ error "internal problem")  "----------------------------------------------------------------------"
      , Option ['h']     ["haskell"] (NoArg Haskell)      "translate spec to Haskell code"
      , Option []        ["cpp"]     (NoArg Cpp)          "translate spec to C++ code"
      , Option ['c']     ["cppold"]  (NoArg CppOld)       "translate spec to C++ code (legacy C++ API) [default]"
-     , Option ['o']     ["output"]  (ReqArg Output "FILE") "direct output to FILE"
+     , Option ['o']     ["output"]  (ReqArg Output "FILE") "direct output to FILE instead of default"
 
+
+#ifdef CNCVIZ
+     , Option []        []          (NoArg NullOpt)  ""
+--     , Option []        ["dot"]      (NoArg DotOpt)   "output CnC graph in graphviz .dot format as well"
+     , Option []        ["dot"]      (NoArg DotOpt)   "output CnC graph in graphviz .dot format instead of translating"
+     , Option []        ["viz"]      (NoArg VizOpt)   "similar to --dot, a shortcut to visualize a CnC graph in a X11 window"
+     , Option []        ["ubigraph"] (NoArg UbigraphOpt)  "like --viz, but visualize on a local Ubigraph server"
+#endif
+
+     , Option []        []          (NoArg NullOpt)  ""
+     , Option []        ["vacuum"]  (NoArg Vacuum)  "suck up the output of CnC::debug::trace (on stdin) to create a .cnc spec"
+#ifdef CNCVIZ
+     , Option []        ["vacuumviz"] (NoArg VacuumViz) "use trace output to visualize graph execution in realtime using ubigraph"
+#endif
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []          (NoArg NullOpt)  "Options to control Harch (the hierarchical partitioner):"
      , Option []        ["----------------"]  (NoArg$ error "internal problem")  "----------------------------------------------------------------------"
      , Option []        ["harch"]     (ReqArg HarchPart "FILE")   "read Harch graph metadata from FILE (used for translation)"
      , Option []        ["harchpart"] (ReqArg HarchPart "FILE") "perform graph partitioning on FILE (set output with -o)"
+#ifdef CNCVIZ
+     , Option []        ["harchviz"]  (ReqArg HarchViz "FILE")  "visualize the graph stored in FILE with Harch clustering"
+#endif
 
 #ifdef CNCVIZ
-     , Option []        []          (NoArg NullOpt)  ""
-     , Option []        []          (NoArg NullOpt)  ""
-     , Option []        []          (NoArg NullOpt)  "Visualizing CnC and Harch graphs:"
-     , Option []        ["----------------"]  (NoArg$ error "internal problem")  "----------------------------------------------------------------------"
-     , Option []        ["dot"]      (NoArg DotOpt)   "output CnC graph in graphviz .dot format as well"
-     , Option []        ["viz"]      (NoArg VizOpt)   "similar to --dot, a shortcut to visualize CnC graph in a X11 window"
-     , Option []        ["ubigraph"] (NoArg UbigraphOpt)  "like --viz, but visualize on a local Ubigraph server"
-     , Option []        ["harchviz"]  (ReqArg HarchViz "FILE")  "visualize the graph stored in FILE with Harch clustering"
+     -- , Option []        []          (NoArg NullOpt)  ""
+     -- , Option []        []          (NoArg NullOpt)  ""
+     -- , Option []        []          (NoArg NullOpt)  "Visualizing CnC and Harch graphs:"
+     -- , Option []        ["----------------"]  (NoArg$ error "internal problem")  "----------------------------------------------------------------------"
 #endif
 
      ]
@@ -181,7 +202,7 @@ main2 argv = do
 	    exitSuccess
      UbigraphOpt -> 
 	 do CncSpec{graph} <- readCnCFile verbose file
-	    cncUbigraph graph
+	    cncUbigraph True graph
 	    putStrLn$ "Done with visualization, exiting without performing any .cnc spec translation."
 	    exitSuccess
 #endif

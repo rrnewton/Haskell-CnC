@@ -10,8 +10,9 @@ import Intel.Cnc.Spec.CncGraph
 import StringTable.Atom 
 import Data.Graph.Inductive as G
 import Data.Graph.Inductive.Query.DFS
-import Control.Monad
 import Data.Maybe
+import Control.Monad
+import qualified Control.Monad.Reader as R
 
 import Graphics.Ubigraph
 import Data.GraphViz
@@ -25,8 +26,9 @@ cncGraphviz =
   undefined
 
 
-cncUbigraph :: CncGraph -> IO ()
-cncUbigraph gr = 
+--------------------------------------------------------------------------------
+cncUbigraph :: Bool -> CncGraph -> IO ()
+cncUbigraph interactive gr = 
   do putStrLn$ "DRAWING UBIGRAPH, total nodes "++ show (length sorted)
      initHubigraph server_url >>= runHubigraph go
   --r $ mkRing 10
@@ -46,15 +48,20 @@ cncUbigraph gr =
    mapM_ (flip setVStyleAttr itemstyle) [VColor "#008800", VShape Cube,       VSize 0.75]
    mapM_ (flip setVStyleAttr tagstyle)  [VColor "#555555", VShape Octahedron, VSize 0.4]
 
-   producestyle  <- newEStyle 0
-   mapM_ (flip setEStyleAttr producestyle)  [EColor "#ff4444", EWidth 2.5, EOriented True]
+   --let eshared = [EOriented True, ESpline True, EStrength 0.001]
+   let eshared = [EOriented True]
+   -- EArrow True
 
-   consumestyle <- newEStyle 0
-   mapM_ (flip setEStyleAttr consumestyle)  [EColor "#44ff44", EWidth 2.5, EOriented True]
+   baseEstyle  <- newEStyle 0
+   mapM_ (flip setEStyleAttr baseEstyle) eshared
 
-   prescribestyle  <- newEStyle 0
-   mapM_ (flip setEStyleAttr prescribestyle)  [EColor "#666666", EOriented True]
+   producestyle   <- newEStyle baseEstyle
+   consumestyle   <- newEStyle baseEstyle
+   prescribestyle <- newEStyle baseEstyle
 
+   mapM_ (flip setEStyleAttr producestyle)$   [EColor "#ff4444", EWidth 2.5] 
+   mapM_ (flip setEStyleAttr consumestyle)$   [EColor "#44ff44", EWidth 2.5] 
+   mapM_ (flip setEStyleAttr prescribestyle)$ [EColor "#666666"] ++ eshared
 
    forM_ contexts $ \ (prev, id, label, _) -> 
         do newVertexWithID id 
@@ -93,7 +100,10 @@ cncUbigraph gr =
 		      (CGItems _)       -> consumestyle
 		      (CGTags  _)       -> prescribestyle)
 
-
+   -- ABSTRACTION VIOLATION? Is the hubigraph monad supposed to be opaque?
+   -- In interactive mode we bring up a prompt... should do this with ncurses:
+   R.lift$ putStrLn "Going into interactive CnC/Ubigraph visualization shell:"
+   
 
 
 simple_graphviz :: (nd1 -> String) -> G.Gr nd1 edge -> IO RunResult
@@ -117,3 +127,19 @@ simple_graphviz lablNode gr =
 
 
 
+--------------------------------------------------------------------------------
+-- Rewind/fast-forward support
+
+-- What's the best way to create a reversible transaction log?
+-- Should I create Data.Sequence of some kind of actions and interpret it?
+
+data GUIAction = AddStepNode | AddItemNode | AddTagNode
+
+-- type Log = Sequence GUIAction
+
+
+-- Another way to do it would be to construct a reverse-log as we go,
+-- for each attribute set, store a command which woud set it back to
+-- the old attribute.
+
+-- Attribute settings are difficult to reverse for this reason...

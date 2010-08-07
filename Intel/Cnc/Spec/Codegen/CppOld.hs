@@ -38,8 +38,11 @@ import qualified StringTable.AtomSet as AS
 -- don't have explicit step_collection objects.  We make sure to only
 -- allocate one copy of the user's temporary Step() object and then
 -- use its pointer as a key:
+step_obj "env" = "env()"
 step_obj str = "m_" ++ str 
-obj_ref a   = t"*" <> (t$ step_obj$ fromAtom a)
+
+--obj_ref a   = t"*" <> (t$ step_obj$ fromAtom a)
+obj_ref a   = (t$ step_obj$ fromAtom a)
 
 ----------------------------------------------------------------------------------------------------
 
@@ -66,13 +69,15 @@ struct #{appname}_context;
 -} 
 
    ------------- This almost looks nicer in emacs anyway: --------------
-   putS$ "\n// This code was GENERATED from a CnC specification, do not modify.\n\n"
+   putS$ "\n//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"
+   putS$ "// This code was GENERATED from a CnC specification, DO NOT MODIFY.\n"
+   putS$ "//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n"
    putS$ "#ifndef "++appname++"_H_ALREADY_INCLUDED\n"
    putS$ "#define "++appname++"_H_ALREADY_INCLUDED\n\n"
 
    -- Ideally this would only be included IF tuple types are used... complicated right now.
    -- putS  "#include \"boost/tuple/tuple.hpp\"\n\n"
-   putS  "// For now using C++ TR1 to provide tuples:\n"
+   putS  "// For now we use C++ TR1 to provide tuples:\n"
    putS  "#include <tr1/tuple>\n"
    putS "#define cnctup std::tr1\n\n"
 
@@ -82,12 +87,15 @@ struct #{appname}_context;
    putS  "// Forward declaration of the context class (also known as graph)\n"
    putS$ "struct "++appname++"_context;\n\n"
 
-   putS  "// Next this generated file contains prototypes for each step implementation:\n"
-
+   --putS  "// Next this generated file contains prototypes for each step implementation:\n"
+   putS  "// The user's step types should be defined SEPARATELY from this header, and must \n"
+   putS  "// be in scope before this header is included.\n"
+   putS  "// As a hint, the below are valid example definitions:\n"
 
    ------------------------------------------------------------
    -- Emit the step prototypes:
    ------------------------------------------------------------
+   putS  "/*\n"
    -- Don't include builtins (e.g. "env")
    let stepls = filter (\ x -> not$ x `elem` builtinSteps) $
 		AS.toList steps
@@ -100,6 +108,7 @@ struct #{appname}_context;
    forM_ (zip stepls tagtys) $ \ (stp,ty) ->
      do emitStep appname (fromAtom stp) ty 
         putS "\n\n"
+   putS  "*/\n"
 
    ------------------------------------------------------------
    -- Emit the main context class
@@ -109,14 +118,21 @@ struct #{appname}_context;
 
    putD$ cppclass (maincontext <> t " : public CnC::context" <> angles (pad maincontext)) $ 
      vcat $ 
-    
-     t "\n  private:" : 
-     t "// Members to store instances of the users Step type:" : 
-     ((flip map) stepls $ \ stp -> 
-      textAtom stp <> t"* " <> (t$ step_obj$ fromAtom stp) <> semi) ++
+
+     -- Discarded this API proposal already:
+     -- t "\n  private:" : 
+     -- t "// Members to store instances of the users Step type:" : 
+     -- ((flip map) stepls $ \ stp -> 
+     --  textAtom stp <> t"* " <> (t$ step_obj$ fromAtom stp) <> semi) ++
 
      t "\n  public:" : 
-     t "// Tag collections members:" : 
+
+     t "// Step collections members:" : 
+     ((flip map) stepls $ \ stp -> 
+      t "CnC::step_collection" <> angles (textAtom stp) <+> (t$ step_obj$ fromAtom stp) <> semi
+     ) ++      
+
+     t "": t "// Tag collections members:" : 
      ((flip map) (AM.toList tags) $ \ (tg,mty) -> 
        case mty of 
          Nothing -> error$ "CppOld Codegen: tag collection without type: "++ (fromAtom tg)
@@ -135,29 +151,43 @@ struct #{appname}_context;
      [hangbraces 
        (maincontext <> parens empty <+> colon $$
 	-- Initializer list:
-	(nest 6 $ vcat $ 
-	 t "// Initialize tag collections:" :
+	(nest 6 $ vcat $ punctuate commspc $ 
+	 t "// Initialize step collections" :
+         ((flip map) stepls $ \ stp -> 
+	   (t$ step_obj$ fromAtom stp) <> parens (t"this") 
+	 ) ++
+
+	 t "// Initialize tag collections" :
 	 ((flip map) (AM.toList tags) $ \ (tg,Just ty) -> 
-	   textAtom tg <> parens (t "this, false") <> commspc 
+	   textAtom tg <> parens (t "this, false") 
 	 ) ++ 
-	 t "// Initialize item collections:" :
-	 (punctuate commspc $ 
-	  (flip map) (AM.toList items) $ \ (it,Just (ty1,ty2)) -> 
+	 t "// Initialize item collections" :
+	 ((flip map) (AM.toList items) $ \ (it,Just (ty1,ty2)) -> 
   	   textAtom it <> parens (t "this")
 	 )))
        indent 
        -- Body of the constructor
        (vcat $ 
          [-- Create objects for all step collections:
-	  (vcat$ (flip map) stepls $ \ stp -> 
-	   (t$ step_obj$ fromAtom stp) <> t" = new " <> textAtom stp <> parens empty <> semi
-	  ),
+	  -- (vcat$ (flip map) stepls $ \ stp -> 
+	  --  (t$ step_obj$ fromAtom stp) <> t" = new " <> textAtom stp <> parens empty <> semi
+	  -- ),	  
+
           -- Generate prescribe relations first [mandatory]:
 	  (vcat $ (flip map) (zip stepls prescribers) $ \ (stp,tg) ->
-           t"prescribe" <> parens (pad$ textAtom tg <>commspc<>  obj_ref stp)
+           let privcontext = textAtom stp <> t"_context" in
+           t"//prescribe" <> parens (pad$ hcat $ punctuate commspc $ 
+				     [ textAtom tg, 
+				       obj_ref stp, 
+				       t"CnC::default_tuner< " <> textAtom tg <>commspc<> privcontext <> t" >",
+				       privcontext <> parens (t"this")
+				     ])
+
+
+
            <> semi),
 
-        t"\n#ifdef INVASIVE", 
+        --t"\n#ifdef INVASIVE", 
          -- Next, consume relations:
 	(let egs = concat $ 
 	           map (\ (a,b,_) -> 
@@ -166,7 +196,7 @@ struct #{appname}_context;
 				 _ -> []) $ 
 		   labEdges graph in 
 	 vcat $ (flip map) egs $ \ (a,b) ->
-          t"consume" <> parens (obj_ref b <> commspc <> (t$ fromAtom a)) <> semi),
+          t"//consume" <> parens (obj_ref b <> commspc <> (t$ fromAtom a)) <> semi),
 
          -- Finally, produce relations:
 	(let egs = concat $ 
@@ -177,9 +207,9 @@ struct #{appname}_context;
 				 _ -> []) $ 
 		   labEdges graph in 
 	 vcat $ (flip map) egs $ \ (a,b) ->
-          t"produce" <> parens (obj_ref a <> commspc <> (t$ fromAtom b)) <> semi),
+          t"//produce" <> parens (obj_ref a <> commspc <> (t$ fromAtom b)) <> semi)
 
-        t"\n#endif"
+        --t"\n#endif"
 	     
         ])
        ] ++
@@ -189,10 +219,11 @@ struct #{appname}_context;
        (t"~" <> maincontext <> parens empty )
        indent 
        -- Body of the constructor
+       empty
        -- Destroy temporary step objects/collections:
-       (vcat$ (flip map) stepls $ \ stp -> 
-	t"delete " <> (t$ step_obj$ fromAtom stp) <> semi
-       )]
+       -- (vcat$ (flip map) stepls $ \ stp -> 
+       -- 	t"delete " <> (t$ step_obj$ fromAtom stp) <> semi)
+     ]
 
    ------------------------------------------------------------
    -- Emit private contexts for each step:

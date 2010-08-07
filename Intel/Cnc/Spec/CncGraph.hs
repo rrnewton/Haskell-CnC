@@ -2,6 +2,7 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 ----------------------------------------------------------------------------------------------------
 -- Data types and utilities for working with CnC Specifications (Graphs)
+-- Original Author: Ryan Newton
 ----------------------------------------------------------------------------------------------------
 module Intel.Cnc.Spec.CncGraph where
 
