@@ -29,7 +29,7 @@ import Intel.Cnc.Spec.Vacuum
 -- These expand the file size quite a bit.  Not committing to include right now:
 -- #define CNCVIZ
 #ifdef CNCVIZ 
-import Intel.Cnc.Spec.CncViz
+import Intel.Cnc.Spec.CncViz as Viz
 #endif
 
 -- TODO: It would be nice to get this from the .cabal file.
@@ -153,7 +153,10 @@ readCnCFile verbose file = do
   
 ------------------------------------------------------------------------------------------------------------------------
 main = 
- do argv <- getArgs
+ do 
+--    putStrLn "TEMP PRINTING STRINGMAP"
+--    print Viz.foo
+    argv <- getArgs
     main2 argv
 
 main2 argv = do  

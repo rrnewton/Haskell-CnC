@@ -23,7 +23,7 @@ import StringTable.Atom
 import Text.PrettyPrint.HughesPJClass 
 
 -- QuasiQuoting is too expensive in final binary size:
-import Text.InterpolatedString.QQ
+-- import Text.InterpolatedString.QQ
 
 import Data.Maybe
 import Data.Graph.Inductive hiding (empty)

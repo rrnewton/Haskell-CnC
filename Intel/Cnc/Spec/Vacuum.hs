@@ -20,10 +20,12 @@ import Text.Parsec.String
 
 import StringTable.Atom
 
+--------------------------------------------------------------------------------
+
 --type NameTag = (String,String)
 type NameTag = (Atom,String)
 
-data CncEvent = 
+data CncTraceEvent = 
    PutI NameTag NameTag
  | GetI NameTag NameTag
  | PutT NameTag NameTag
@@ -32,38 +34,21 @@ data CncEvent =
  | FAIL String
   deriving Show 
 
+-- We should parse tags that we can make sense of, namely scalars and tuples.
+data CncTraceTag = 
+   TTUnknown String
+ | TTInt Int
+ | TTFloat Float
+
+--------------------------------------------------------------------------------
+-- Parsing traces
 
 spc = oneOf " \t"
 whitespc = many spc
-
--- Parse a whole trace (a series of lines)
--- This is a stateful process because of the need to keep track of the enclosing step.
---tracefile :: [String] -> Parser [CncEvent]
--- tracefile lines = loop (error "No enclosing step!") lines
---  where 
---   loop enclosing [] = return []
---   loop enclosing (line:tl) = 
---       do parsed <- traceline enclosing 
--- 	 rest <- case parsed of 
--- 		   StartStep name -> loop name tl
--- 		   _              -> loop enclosing tl
--- 	 return (parsed:rest)
-
--- tracefile :: Parser [CncEvent]
--- tracefile = loop (error "No enclosing step!") 
---  where 
--- --  loop enclosing = return []
---   loop enclosing = 
---       do parsed <- traceline enclosing 
--- 	 rest <- case parsed of 
--- 		   StartStep name -> loop name 
--- 		   _              -> loop enclosing 
--- 	 return (parsed:rest)
-
-
 defaultStepContext = (toAtom "env","")
 
-tracefile :: [String] -> [CncEvent]
+
+tracefile :: [String] -> [CncTraceEvent]
 --tracefile lines = loop (error "No enclosing step!") lines
 tracefile lines = loop defaultStepContext lines
  where 
@@ -78,7 +63,7 @@ tracefile lines = loop defaultStepContext lines
 	   Just x  -> (x:rest)
 
 
-traceline :: NameTag -> Parser CncEvent
+traceline :: NameTag -> Parser CncTraceEvent
 traceline stepctxt = 
  let nametag end = 
        do name <- many1 (letter <|> oneOf "_")
@@ -100,6 +85,29 @@ traceline stepctxt =
   ruletemplate "GetX item"  "[""]" (GetI stepctxt) 
 
 
+------------------------------------------------------------------------------------------------------------------------
+
+
+
+------------------------------------------------------------------------------------------------------------------------
+
+
+runPr prs str = print (run prs str)
+run :: Show a => Parser a -> String -> a
+run p input
+        = case (parse p "" input) of
+            Left err -> error ("parse error at "++ show err)
+            Right x  -> x
+
+
+tryParse :: Parser a -> String -> Maybe a
+tryParse p input
+  = case (parse p "" input) of
+      Left err -> Nothing
+--      Left err -> Just (FAIL input)
+      Right x  -> Just x
+
+
 t19 = runPr (traceline defaultStepContext) "Start step (fib_step: 0)"
 
 t20 = runPr (traceline defaultStepContext) "Put tag <tags: 10>"
@@ -119,23 +127,6 @@ t25 = mapM_ print  $ map (tryParse (traceline defaultStepContext)) sample_trace2
 
 --t26 = mapM_ print  $ catMaybes $ tryParse $ tracefile sample_trace2
 t26 = mapM_ print $ tracefile sample_trace2
-
-
-runPr prs str = print (run prs str)
-
-run :: Show a => Parser a -> String -> a
-run p input
-        = case (parse p "" input) of
-            Left err -> error ("parse error at "++ show err)
-            Right x  -> x
-
-
-tryParse :: Parser a -> String -> Maybe a
-tryParse p input
-  = case (parse p "" input) of
-      Left err -> Nothing
---      Left err -> Just (FAIL input)
-      Right x  -> Just x
 
 
 sample_trace2 = 

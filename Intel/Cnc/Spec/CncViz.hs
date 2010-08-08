@@ -1,21 +1,40 @@
-
+{-# LANGUAGE RecordWildCards, NamedFieldPuns, ScopedTypeVariables #-}
 
 ----------------------------------------------------------------------------------------------------
 -- This module includes visualization code which depends on various libraries.
 ----------------------------------------------------------------------------------------------------
 module Intel.Cnc.Spec.CncViz where
 
-
+import Intel.Cnc.Spec.Vacuum
 import Intel.Cnc.Spec.CncGraph
-import StringTable.Atom 
+
 import Data.Graph.Inductive as G
 import Data.Graph.Inductive.Query.DFS
 import Data.Maybe
+import Data.Char
+import qualified Data.Map as M
+
+import qualified StringTable.AtomMap as AM
+import StringTable.Atom 
+
 import Control.Monad
 import qualified Control.Monad.Reader as R
 
-import Graphics.Ubigraph
-import Data.GraphViz
+import Graphics.Ubigraph as Ub
+import Data.GraphViz as Gv
+
+import System.Posix.Unistd
+
+-- There are various options for trying to improve the stringmaps used in this program:
+--
+--import qualified Data.Map.StringMap as SM -- from TernaryTrees
+--import qualified Data.Map.TernaryMap as TM -- from TernaryTrees
+
+--import qualified Data.ListTrie.Patricia.Map as PM
+
+import qualified Data.Map as SM -- Data.Map serves as StringMap for now.
+
+import Debug.Trace
 
 ----------------------------------------------------------------------------------------------------
 -- Graph Visualization
@@ -27,6 +46,8 @@ cncGraphviz =
 
 
 --------------------------------------------------------------------------------
+-- Display a cncgraph through ubigraph:
+
 cncUbigraph :: Bool -> CncGraph -> IO ()
 cncUbigraph interactive gr = 
   do putStrLn$ "DRAWING UBIGRAPH, total nodes "++ show (length sorted)
@@ -44,9 +65,9 @@ cncUbigraph interactive gr =
    stepstyle <- newVStyle 0
    itemstyle <- newVStyle 0
    tagstyle  <- newVStyle 0
-   mapM_ (flip setVStyleAttr stepstyle) [VColor "#3333ff", VShape Sphere,     VSize 1.0, VShapedetail 10]
-   mapM_ (flip setVStyleAttr itemstyle) [VColor "#008800", VShape Cube,       VSize 0.75]
-   mapM_ (flip setVStyleAttr tagstyle)  [VColor "#555555", VShape Octahedron, VSize 0.4]
+   mapM_ (flip setVStyleAttr stepstyle) (defaultStepAttr)
+   mapM_ (flip setVStyleAttr itemstyle) (defaultItemAttr)
+   mapM_ (flip setVStyleAttr tagstyle)  (defaultTagAttr)
 
    --let eshared = [EOriented True, ESpline True, EStrength 0.001]
    let eshared = [EOriented True]
@@ -62,6 +83,9 @@ cncUbigraph interactive gr =
    mapM_ (flip setEStyleAttr producestyle)$   [EColor "#ff4444", EWidth 2.5] 
    mapM_ (flip setEStyleAttr consumestyle)$   [EColor "#44ff44", EWidth 2.5] 
    mapM_ (flip setEStyleAttr prescribestyle)$ [EColor "#666666"] ++ eshared
+
+   -- Currently doing a two-phased add, but I don't actually like this:
+   -- (I want to see it appear with the dataflow.)
 
    forM_ contexts $ \ (prev, id, label, _) -> 
         do newVertexWithID id 
@@ -86,6 +110,8 @@ cncUbigraph interactive gr =
 		do changeVStyle tagstyle id 
 		   setVAttr (VLabel$ fromAtom atom) id 
 
+
+-- FIXME!!! DOUBLE CHECK.. do GET edges flow from the ITEM to the STEP? (re: gravity)
    forM_ contexts $ \ (prev, id, label, _) -> 
       forM_ prev $ \ (_,p) -> 
 	case label of 
@@ -127,19 +153,254 @@ simple_graphviz lablNode gr =
 
 
 
---------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
 -- Rewind/fast-forward support
 
 -- What's the best way to create a reversible transaction log?
 -- Should I create Data.Sequence of some kind of actions and interpret it?
 
-data GUIAction = AddStepNode | AddItemNode | AddTagNode
 
--- type Log = Sequence GUIAction
+data GUIAction =
+    ChangeV Atom [VAttr]
+  | ChangeE Atom Atom EAttr
+  | AddV Atom
+  | AddE Atom Atom
+ deriving Show
+
+-- This is a little more involved than I would like, but we may need
+-- to track the whole state of the drawing at each point in time.
+--
+-- The GUI state also lets us know what's in the graph at any given point.
+type GUIState = (AM.AtomMap GUINodeState, 
+		 AM.AtomMap (AM.AtomMap GUIEdgeState))
 
 
+-- The V/EAttr types are sum types that we wish to convert to a product type here...
+{-
+data GUINodeState = GNS {
+    color :: String, 
+    label :: String,
+    shape :: Ub.Shape,
+    size :: Float
+    -- ...
+  }
+-}
+-- We could get into SYB generic programming here, but easier is to
+-- use the toPair function provided by the ubigraph library.
+--type GUINodeState = SM.StringMap (String)
+type StringMap a = M.Map String a 
+-- The following StringMaps map the name ("size", "label") of each attribute onto its value.
+type GUIEdgeState = StringMap EAttr
+-- I also add a "count" to nodes to track how many instances they contain.
+data GUINodeState = GNS { count :: Int, props :: StringMap VAttr }
+  deriving Show
+
+
+--type LogEvent = (GUIAction, M.Map String GUIState)
+type LogEvent = (GUIAction, GUIState)
+
+instance Show VAttr where 
+--  show vat = show (toPair vat)
+  show vat = let (hd:tl,b) = toPair vat in "V"++ (toUpper hd : tl) ++" "++ b 
+
+instance Show EAttr where 
+  show eat = show (toPair eat)
+
+--------------------------------------------------------------------------------
+
+-- foo :: SM.StringMap Int
+-- foo = SM.fromList [("foo",3), ("bar", 4)]
+-- bar = TM.lookup "foo" foo
+
+defaultStepMap = SM.fromList [("color", VColor "#3333ff"), ("shape", VShape Sphere), 
+			       ("size", VSize 1.0), ("shapedetail", VShapedetail 10)]
+defaultItemMap = SM.fromList [("color", VColor "#008800"), ("shape", VShape Cube), ("size", VSize 0.75)]
+defaultTagMap  = SM.fromList [("color", VColor "#555555"), ("shape", VShape Octahedron), ("size", VSize 0.4)]
+
+-- For convenience, here are the default attributes as lists:
+defaultStepAttr = map snd$ SM.toList defaultStepMap
+defaultItemAttr = map snd$ SM.toList defaultItemMap
+defaultTagAttr  = map snd$ SM.toList defaultTagMap
+
+-- The environment appears as a tweaked step:
+defaultEnvAttr = map snd $ SM.toList $ 
+  SM.insert "color" (VColor "#ffff00") $ 
+  SM.insert "label" (VLabel "env IN") $ 
+  defaultStepMap
+
+
+
+named def nm = SM.insert "label" vlab $
+	       -- This is a property of my own that I add for future reference:
+	       --SM.insert "origname" vlab $ 
+	       def
+  where vlab = VLabel$ fromAtom nm
+
+namedStep = named defaultStepMap
+
+
+emptyGUIState = (AM.empty, AM.empty)
+
+-- First, convert a parsed trace into a series of GUI actions:
+traceToGUI :: [CncTraceEvent] -> [GUIAction]
+traceToGUI trace = 
+      AddV    (toAtom "env") :
+      ChangeV (toAtom "env") defaultEnvAttr :
+      loop emptyGUIState trace
+ where 
+  loop state [] = []
+  loop state0@(nodes,edges) (hd:tl) = 
+    case hd of 
+      StartStep (nm,tg) -> 
+        --trace("       [startstep] AM size "++ (show$ AM.size nodes)) $
+        case AM.lookup nm nodes of
+	  Nothing -> --trace("        Not present! "++ show nm ++"  "++ (show$ (fromAtom nm :: Int))) $
+		     AddV nm : loop (AM.insert nm (GNS 1 (namedStep nm)) nodes, edges) tl
+	  Just gns@GNS{..} -> let VLabel oldlab = props SM.! "label"  
+			          --VLabel orig   = props SM.! "origname" 
+
+				  -- Experimenting with growing the size too:
+				  VSize oldsize = props SM.! "size"
+				  newsize = VSize$ oldsize + 0.1
+				  props' = SM.insert "size" newsize props
+
+			          state' = (AM.insert nm gns{count=count+1, props=props'} nodes, edges)
+
+			      in --ChangeV (VLabel$ orig ++" #"++ show (count+1)) 
+			         ChangeV nm [VLabel$ oldlab ++" #"++ show (count+1), newsize]
+			         : loop state' tl 
+
+      ------------------------------------------------------------
+      PutT (stepnm,_) (tgnm,tag) -> 
+        case AM.lookup tgnm nodes of 
+	  Nothing -> AddV tgnm : ChangeV tgnm defaultTagAttr :
+		     AddE stepnm tgnm : 
+	             loop (AM.insert tgnm (GNS 1 (named defaultTagMap tgnm)) nodes, edges) tl
+	  _ -> loop state0 tl
+		     
+
+      ------------------------------------------------------------
+      PutI (stepnm,_) (inm,itag) -> 
+        case AM.lookup inm nodes of 
+	  Nothing -> AddV inm : ChangeV inm defaultItemAttr :
+		     AddE stepnm inm : 
+	             loop (AM.insert inm (GNS 1 (named defaultItemMap inm)) nodes, edges) tl
+	  _ -> loop state0 tl
+
+
+      ------------------------------------------------------------
+      GetI (stepnm,_) (inm,itag) -> 
+        case AM.lookup inm nodes of 
+	  Nothing -> AddV inm : ChangeV inm defaultItemAttr :
+		     AddE inm stepnm : 
+	             loop (AM.insert inm (GNS 1 (named defaultItemMap inm)) nodes, edges) tl
+	  _ -> loop state0 tl
+
+
+      _ -> loop state0 tl
+   -- EndStep   NameTag 
+   -- FAIL String
+
+
+
+
+t29 = traceToGUI $ tracefile sample_trace2
+
+t30 = playback emptyGUIState t29 
+
+--------------------------------------------------------------------------------
 -- Another way to do it would be to construct a reverse-log as we go,
 -- for each attribute set, store a command which woud set it back to
 -- the old attribute.
 
--- Attribute settings are difficult to reverse for this reason...
+
+-- playback takes a forward and reverse sequence of actions.  To play
+-- forward it reads from one tape, and reverse the other.  
+-- It also must model the state of the GUI to be able to reverse actions.
+--playback :: GUIState -> [GUIAction] -> [GUIAction] -> IO ()
+
+playback :: GUIState -> [GUIAction] -> IO ()
+
+playback state fwd = 
+  do putStrLn$ "[cnc] Vizualizing trace using ubigraph."
+     initHubigraph server_url >>= runHubigraph initialize
+ where 
+  r x = initHubigraph server_url >>= runHubigraph x
+  server_url = "http://127.0.0.1:20738/RPC2"
+
+  initialize = do 
+   clear
+   stepstyle <- newVStyle 0
+   itemstyle <- newVStyle 0
+   tagstyle  <- newVStyle 0
+   mapM_ (flip setVStyleAttr stepstyle) (defaultStepAttr)
+   mapM_ (flip setVStyleAttr itemstyle) (defaultItemAttr)
+   mapM_ (flip setVStyleAttr tagstyle)  (defaultTagAttr)
+
+   --let eshared = [EOriented True, ESpline True, EStrength 0.001]
+   let eshared = [EOriented True]
+   baseEstyle  <- newEStyle 0
+   mapM_ (flip setEStyleAttr baseEstyle) eshared
+
+   producestyle   <- newEStyle baseEstyle
+   consumestyle   <- newEStyle baseEstyle
+   prescribestyle <- newEStyle baseEstyle
+
+   mapM_ (flip setEStyleAttr producestyle)$   [EColor "#ff4444", EWidth 2.5] 
+   mapM_ (flip setEStyleAttr consumestyle)$   [EColor "#44ff44", EWidth 2.5] 
+   mapM_ (flip setEStyleAttr prescribestyle)$ [EColor "#666666"] ++ eshared
+
+   --------------------------------------------------------------------------------
+   -- Main loop
+   --------------------------------------------------------------------------------
+   let loop idmap state rvrs fwd = 
+
+         -- For now just play forward, maximum speed:
+	case fwd of 
+	 [] -> R.lift$ putStrLn "playback finished: no more actions!"
+	 hd:tl -> 
+	   let idmap' = 
+                case hd of 
+  	         AddV atom -> 
+		  do id <- newVertex
+		     changeVStyle stepstyle id 
+ 		     setVAttr (VLabel$ fromAtom atom) id 
+		     return (AM.insert atom id idmap)
+
+  	         ChangeV nm updates -> 
+	 	  do let id = idmap AM.! nm
+	 	     mapM_ (flip setVAttr id) updates
+		     return idmap
+
+  	         AddE from to -> 
+		  do R.lift$ putStrLn$ "ADDING EDGE "++ show from ++" "++ show to
+		     let from' = idmap AM.! from
+			 to'   = idmap AM.! to
+		     id <- newEdge (from', to')
+		     --changeEStyle producestyle id 
+		     return idmap
+
+		 _ -> return idmap
+           in
+	      do newidmap <- idmap'
+		 R.lift$ usleep (100 * 1000)
+		 --Control.Concurrent.threadDelay
+		 loop newidmap
+		      (updateState state hd) 
+  		      (buildRevAction state hd : rvrs) 
+		      tl
+
+       
+    in loop (AM.fromList [(toAtom "env", envID)]) state [] fwd
+
+-- This simply needs to not conflict with the auto-assigned Ubigraph ids:
+envID = 1
+
+
+updateState = error "updateState"
+buildRevAction = error "buildRevAction"
+
+  -- It also must model the state 
+
+--  loop state 
+
