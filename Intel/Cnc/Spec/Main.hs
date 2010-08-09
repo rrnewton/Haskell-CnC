@@ -208,6 +208,14 @@ main2 argv = do
 	    cncUbigraph True graph
 	    putStrLn$ "Done with visualization, exiting without performing any .cnc spec translation."
 	    exitSuccess
+     VacuumViz -> 
+	 do str <- hGetContents stdin
+	    playback emptyGUIState $  
+	     traceToGUI $ 
+	     tracefile $ 
+	     lines str
+	    putStrLn$ "Done with trace visualization.  Exiting."
+	    exitSuccess
 #endif
 
      m | mode_option m -> return ()

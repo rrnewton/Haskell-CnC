@@ -8,12 +8,13 @@ module Intel.Cnc.Spec.CncViz where
 import Intel.Cnc.Spec.Vacuum
 import Intel.Cnc.Spec.CncGraph
 
-import Data.Graph.Inductive as G
+import qualified Data.Graph.Inductive as G
 import Data.Graph.Inductive.Query.DFS
 import Data.Maybe
 import Data.Char
 import qualified Data.Map as M
 
+import qualified StringTable.AtomSet as AS
 import qualified StringTable.AtomMap as AM
 import StringTable.Atom 
 
@@ -58,7 +59,7 @@ cncUbigraph interactive gr =
 
   server_url = "http://127.0.0.1:20738/RPC2"
   sorted = topsort gr
-  contexts = map (context gr) sorted
+  contexts = map (G.context gr) sorted
 
   go = do 
    clear
@@ -69,8 +70,9 @@ cncUbigraph interactive gr =
    mapM_ (flip setVStyleAttr itemstyle) (defaultItemAttr)
    mapM_ (flip setVStyleAttr tagstyle)  (defaultTagAttr)
 
+   let eshared = [EOriented True, ESpline True, EStrength 1.0]
    --let eshared = [EOriented True, ESpline True, EStrength 0.001]
-   let eshared = [EOriented True]
+   --let eshared = [EOriented True]
    -- EArrow True
 
    baseEstyle  <- newEStyle 0
@@ -121,7 +123,7 @@ cncUbigraph interactive gr =
 	  _ ->
 	       do edge <- newEdge (p,id)
 		  (flip changeEStyle edge) 
-		    (case fromJust$ lab gr p of 
+		    (case fromJust$ G.lab gr p of 
 		      (CGSteps _)       -> producestyle
 		      (CGItems _)       -> consumestyle
 		      (CGTags  _)       -> prescribestyle)
@@ -171,8 +173,12 @@ data GUIAction =
 -- to track the whole state of the drawing at each point in time.
 --
 -- The GUI state also lets us know what's in the graph at any given point.
-type GUIState = (AM.AtomMap GUINodeState, 
-		 AM.AtomMap (AM.AtomMap GUIEdgeState))
+data GUIState = GS {
+   nodes :: AM.AtomMap GUINodeState, 
+   edges :: AM.AtomMap (AM.AtomMap GUIEdgeState),
+   -- Map steps to the tag collections that prescribe them.
+   prescribedBy :: AM.AtomMap Atom
+ }
 
 
 -- The V/EAttr types are sum types that we wish to convert to a product type here...
@@ -195,9 +201,7 @@ type GUIEdgeState = StringMap EAttr
 data GUINodeState = GNS { count :: Int, props :: StringMap VAttr }
   deriving Show
 
-
---type LogEvent = (GUIAction, M.Map String GUIState)
-type LogEvent = (GUIAction, GUIState)
+--type LogEvent = (GUIAction, GUIState)
 
 instance Show VAttr where 
 --  show vat = show (toPair vat)
@@ -239,7 +243,10 @@ named def nm = SM.insert "label" vlab $
 namedStep = named defaultStepMap
 
 
-emptyGUIState = (AM.empty, AM.empty)
+emptyGUIState = GS AM.empty AM.empty AM.empty
+
+--pump_size = False
+pump_size = True
 
 -- First, convert a parsed trace into a series of GUI actions:
 traceToGUI :: [CncTraceEvent] -> [GUIAction]
@@ -248,53 +255,64 @@ traceToGUI trace =
       ChangeV (toAtom "env") defaultEnvAttr :
       loop emptyGUIState trace
  where 
-  loop state [] = []
-  loop state0@(nodes,edges) (hd:tl) = 
+  loop _ [] = []
+  loop state0@GS{..} (hd:tl) = 
+    let pump_up_instance nm gns@GNS{..} = 
+	 let VLabel oldlab = props SM.! "label"  
+	     -- Experimenting with growing the size too:
+	     VSize oldsize = props SM.! "size"
+	     newsize = VSize$ oldsize + 0.1
+	     props' = if pump_size then SM.insert "size" newsize props else props
+
+	     newnodes = AM.insert nm gns{count=count+1, props=props'} nodes
+         in ChangeV nm [VLabel$ oldlab ++" #"++ show (count+1), newsize]
+	    : loop state0{ nodes= newnodes } tl 
+ 
+        newstate nm attrs = state0{ nodes = AM.insert nm (GNS 1 attrs) nodes }
+    in
     case hd of 
+      Prescribe tags step -> 
+	AddV step : 
+	loop state0{ prescribedBy= AM.insert step tags prescribedBy } tl
+
+      ------------------------------------------------------------
       StartStep (nm,tg) -> 
-        --trace("       [startstep] AM size "++ (show$ AM.size nodes)) $
-        case AM.lookup nm nodes of
-	  Nothing -> --trace("        Not present! "++ show nm ++"  "++ (show$ (fromAtom nm :: Int))) $
-		     AddV nm : loop (AM.insert nm (GNS 1 (namedStep nm)) nodes, edges) tl
-	  Just gns@GNS{..} -> let VLabel oldlab = props SM.! "label"  
-			          --VLabel orig   = props SM.! "origname" 
-
-				  -- Experimenting with growing the size too:
-				  VSize oldsize = props SM.! "size"
-				  newsize = VSize$ oldsize + 0.1
-				  props' = SM.insert "size" newsize props
-
-			          state' = (AM.insert nm gns{count=count+1, props=props'} nodes, edges)
-
-			      in --ChangeV (VLabel$ orig ++" #"++ show (count+1)) 
-			         ChangeV nm [VLabel$ oldlab ++" #"++ show (count+1), newsize]
-			         : loop state' tl 
+	case AM.lookup nm prescribedBy of 
+	  Nothing -> error$ "traceToGUI: no Prescribe relation corresponding to step "++show nm
+	  Just tags -> 
+	    AddE tags nm : 
+            case AM.lookup nm nodes of
+   	      Nothing  -> loop (newstate nm$ namedStep nm) tl
+	      Just gns -> pump_up_instance nm gns 
 
       ------------------------------------------------------------
       PutT (stepnm,_) (tgnm,tag) -> 
         case AM.lookup tgnm nodes of 
 	  Nothing -> AddV tgnm : ChangeV tgnm defaultTagAttr :
 		     AddE stepnm tgnm : 
-	             loop (AM.insert tgnm (GNS 1 (named defaultTagMap tgnm)) nodes, edges) tl
-	  _ -> loop state0 tl
-		     
+	             loop (newstate tgnm$ named defaultTagMap tgnm) tl
+	  Just gns -> AddE stepnm tgnm : 
+	              pump_up_instance tgnm gns
+			 
 
       ------------------------------------------------------------
       PutI (stepnm,_) (inm,itag) -> 
         case AM.lookup inm nodes of 
 	  Nothing -> AddV inm : ChangeV inm defaultItemAttr :
 		     AddE stepnm inm : 
-	             loop (AM.insert inm (GNS 1 (named defaultItemMap inm)) nodes, edges) tl
-	  _ -> loop state0 tl
-
+	             loop (newstate inm$ named defaultItemMap inm) tl
+	  Just gns -> AddE stepnm inm : 
+		      pump_up_instance inm gns
 
       ------------------------------------------------------------
       GetI (stepnm,_) (inm,itag) -> 
         case AM.lookup inm nodes of 
 	  Nothing -> AddV inm : ChangeV inm defaultItemAttr :
 		     AddE inm stepnm : 
-	             loop (AM.insert inm (GNS 1 (named defaultItemMap inm)) nodes, edges) tl
-	  _ -> loop state0 tl
+	             loop (newstate inm$ named defaultItemMap inm) tl
+	  --Just gns -> pump_up_instance inm gns
+	  _ -> AddE stepnm inm : 
+	       loop state0 tl
 
 
       _ -> loop state0 tl
@@ -304,7 +322,7 @@ traceToGUI trace =
 
 
 
-t29 = traceToGUI $ tracefile sample_trace2
+t29 = traceToGUI $ tracefile sample_trace
 
 t30 = playback emptyGUIState t29 
 
@@ -338,7 +356,8 @@ playback state fwd =
    mapM_ (flip setVStyleAttr tagstyle)  (defaultTagAttr)
 
    --let eshared = [EOriented True, ESpline True, EStrength 0.001]
-   let eshared = [EOriented True]
+   let eshared = [EOriented True, ESpline True, EStrength 0.0]
+   --let eshared = [EOriented True]
    baseEstyle  <- newEStyle 0
    mapM_ (flip setEStyleAttr baseEstyle) eshared
 
@@ -373,11 +392,11 @@ playback state fwd =
 		     return idmap
 
   	         AddE from to -> 
-		  do R.lift$ putStrLn$ "ADDING EDGE "++ show from ++" "++ show to
-		     let from' = idmap AM.! from
-			 to'   = idmap AM.! to
+		  do --R.lift$ putStrLn$ "ADDING EDGE "++ show from ++" "++ show to
+		     let from' = deJust "Missing source of AddE edge!"      $ AM.lookup from idmap 
+			 to'   = deJust "Missing destination of AddE edge!" $ AM.lookup to idmap
 		     id <- newEdge (from', to')
-		     --changeEStyle producestyle id 
+		     changeEStyle producestyle id 
 		     return idmap
 
 		 _ -> return idmap
@@ -396,6 +415,9 @@ playback state fwd =
 -- This simply needs to not conflict with the auto-assigned Ubigraph ids:
 envID = 1
 
+
+deJust msg Nothing = error msg
+deJust _ (Just x) = x
 
 updateState = error "updateState"
 buildRevAction = error "buildRevAction"

@@ -110,14 +110,14 @@ cnctrans.stripped: viz
 
 cnctrans: preproc buildtrans
 buildtrans: 
-	ghc --make Intel/Cnc/Spec/Main.hs -o cnctrans
+	ghc $(GHCFLAGS) --make Intel/Cnc/Spec/Main.hs -o cnctrans
 #	ghc -c Intel/Cnc/Spec/CncLexer.hs 
 #	ghc -O --make Intel/Cnc/Spec/Main.hs -o cnctrans
 
 
 viz: preproc
-	ghc -c Intel/Cnc/Spec/CncLexer.hs 
-	ghc -DCNCVIZ --make Intel/Cnc/Spec/Main.hs -o cnctrans
+	ghc $(GHCFLAGS) -c Intel/Cnc/Spec/CncLexer.hs 
+	ghc $(GHCFLAGS) -DCNCVIZ --make Intel/Cnc/Spec/Main.hs -o cnctrans
 
 preproc: Intel/Cnc/Spec/CncLexer.hs Intel/Cnc/Spec/CncGrammar.hs
 

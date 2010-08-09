@@ -26,7 +26,8 @@ import StringTable.Atom
 type NameTag = (Atom,String)
 
 data CncTraceEvent = 
-   PutI NameTag NameTag
+   Prescribe Atom Atom
+ | PutI NameTag NameTag
  | GetI NameTag NameTag
  | PutT NameTag NameTag
  | StartStep NameTag 
@@ -63,14 +64,18 @@ tracefile lines = loop defaultStepContext lines
 	   Just x  -> (x:rest)
 
 
+cnc_identifier = 
+   do name <- many1 (letter <|> oneOf "_")
+      return$ toAtom name
+
 traceline :: NameTag -> Parser CncTraceEvent
 traceline stepctxt = 
  let nametag end = 
-       do name <- many1 (letter <|> oneOf "_")
+       do name <- cnc_identifier
           char ':'; whitespc
           -- Then we grab EVERYTHING up until the ">" that ends things
           tag <- many1 (noneOf end)
-	  return (toAtom name,tag)
+	  return (name,tag)
 
      ruletemplate str open close fn = 
        try (do string (str++" "++open); whitespc
@@ -82,7 +87,11 @@ traceline stepctxt =
   ruletemplate "Put tag"    "<"">" (PutT stepctxt) <|> 
   ruletemplate "Put item"   "[""]" (PutI stepctxt) <|> 
   ruletemplate "Get item"   "[""]" (GetI stepctxt) <|> 
-  ruletemplate "GetX item"  "[""]" (GetI stepctxt) 
+  ruletemplate "GetX item"  "[""]" (GetI stepctxt) <|>
+    do string "Prescribe"; whitespc 
+       tags <- cnc_identifier; whitespc
+       step <- cnc_identifier
+       return (Prescribe tags step)
 
 
 ------------------------------------------------------------------------------------------------------------------------
@@ -118,19 +127,20 @@ t22 = tryParse (traceline defaultStepContext) "__Put tag <tags: 10>"
 isfail (Just (FAIL _)) = True
 isfail _ = False
 
-t23 = mapM_ print $ filter (not . isfail) $ map (tryParse (traceline defaultStepContext)) sample_trace2
+t23 = mapM_ print $ filter (not . isfail) $ map (tryParse (traceline defaultStepContext)) sample_trace
 
-t24 = mapM_ print $ filter isfail $ map (tryParse (traceline defaultStepContext)) sample_trace2
-
-
-t25 = mapM_ print  $ map (tryParse (traceline defaultStepContext)) sample_trace2
-
---t26 = mapM_ print  $ catMaybes $ tryParse $ tracefile sample_trace2
-t26 = mapM_ print $ tracefile sample_trace2
+t24 = mapM_ print $ filter isfail $ map (tryParse (traceline defaultStepContext)) sample_trace
 
 
-sample_trace2 = 
- ["Put tag <tags: 10>",
+t25 = mapM_ print  $ map (tryParse (traceline defaultStepContext)) sample_trace
+
+--t26 = mapM_ print  $ catMaybes $ tryParse $ tracefile sample_trace
+t26 = mapM_ print $ tracefile sample_trace
+
+sample_trace = 
+ ["Prescribe tags fib_step",
+  "Prescribe tags fibctrl",
+  "Put tag <tags: 10>",
   "Start step (fibctrl: 10)",
   "Put tag <tags: 9>",
   "Put tag <tags: 8>",
@@ -145,37 +155,21 @@ sample_trace2 =
   "End step (fibctrl: 6)",
   "Start step (fibctrl: 4)",
   "Put tag <tags: 3>",
-  "Start step (fibctrl: 9)",
   "Put tag <tags: 2>",
-  "Put tag <tags: 8>",
   "End step (fibctrl: 4)",
-  "Put tag <tags: 7>",
   "Start step (fibctrl: 2)",
-  "End step (fibctrl: 9)",
   "Put tag <tags: 1>",
-  "Start step (fibctrl: 7)",
   "Put tag <tags: 0>",
-  "Put tag <tags: 6>",
   "End step (fibctrl: 2)",
-  "Put tag <tags: 5>",
   "Start step (fibctrl: 0)",
-  "End step (fibctrl: 7)",
   "End step (fibctrl: 0)",
-  "Start step (fibctrl: 5)",
   "Start step (fib_step: 0)",
-  "Put tag <tags: 4>",
   "Put item [fibs: 0] -> 0",
-  "Put tag <tags: 3>",
   "End step (fib_step: 0)",
-  "End step (fibctrl: 5)",
   "Start step (fibctrl: 1)",
-  "Start step (fibctrl: 3)",
   "End step (fibctrl: 1)",
-  "Put tag <tags: 2>",
   "Start step (fib_step: 1)",
-  "Put tag <tags: 1>",
   "Put item [fibs: 1] -> 1",
-  "End step (fibctrl: 3)",
   "End step (fib_step: 1)",
   "Start step (fib_step: 2)",
   "GetX item [fibs: 1] -> 1",
@@ -222,8 +216,8 @@ sample_trace2 =
   "Put item [fibs: 8] -> 21 getcount=2",
   "item [fibs: <7>] m_getCount decremented to 1",
   "item [fibs: <6>] m_getCount decremented to 0",
-  "Start step (fib_step: 9)",
   "End step (fib_step: 8)",
+  "Start step (fib_step: 9)",
   "GetX item [fibs: 8] -> 21",
   "GetX item [fibs: 7] -> 13",
   "Put item [fibs: 9] -> 34 getcount=2",
@@ -237,76 +231,23 @@ sample_trace2 =
   "item [fibs: <9>] m_getCount decremented to 1",
   "item [fibs: <8>] m_getCount decremented to 0",
   "End step (fib_step: 10)",
-  "Get item [fibs: 10] -> 55",
-  "CnC recursive (10): 55",
-  "time: 0.059801 s" ]
-
-
-sample_trace = --unlines
- ["Put tag <tags: 10>",
-  "Put tag <tags: 9>",
-  "Put tag <tags: 8>",
-  "Put tag <tags: 7>",
-  "Put tag <tags: 6>",
-  "Put tag <tags: 5>",
-  "Put tag <tags: 4>",
-  "Put tag <tags: 3>",
+  "Start step (fibctrl: 3)",
   "Put tag <tags: 2>",
   "Put tag <tags: 1>",
-  "Put tag <tags: 0>",
-  "Put item [fibs: 0] -> 0",
-  "Put item [fibs: 1] -> 1",
-  "etX item [fibs: 1] -> 1",
-  "GetX item [fibs: 0] -> 0",
-  "Put item [fibs: 2] -> 1 getcount=2",
-  "GetX item [fibs: 2] -> 1",
-  "GetX item [fibs: 1] -> 1",
-  "Put item [fibs: 3] -> 2 getcount=2",
-  "item [fibs: <2>] m_getCount decremented to 1",
-  "GetX item [fibs: 3] -> 2",
-  "GetX item [fibs: 2] -> 1",
-  "Put item [fibs: 4] -> 3 getcount=2",
-  "item [fibs: <3>] m_getCount decremented to 1",
-  "item [fibs: <2>] m_getCount decremented to 0",
-  "GetX item [fibs: 4] -> 3",
-  "GetX item [fibs: 3] -> 2",
-  "Put item [fibs: 5] -> 5 getcount=2",
-  "item [fibs: <4>] m_getCount decremented to 1",
-  "item [fibs: <3>] m_getCount decremented to 0",
-  "GetX item [fibs: 5] -> 5",
-  "GetX item [fibs: 4] -> 3",
-  "Put item [fibs: 6] -> 8 getcount=2",
-  "item [fibs: <5>] m_getCount decremented to 1",
-  "item [fibs: <4>] m_getCount decremented to 0",
-  "GetX item [fibs: 6] -> 8",
-  "GetX item [fibs: 5] -> 5",
-  "Put item [fibs: 7] -> 13 getcount=2",
-  "item [fibs: <6>] m_getCount decremented to 1",
-  "item [fibs: <5>] m_getCount decremented to 0",
-  "GetX item [fibs: 7] -> 13",
-  "GetX item [fibs: 6] -> 8",
-  "Put item [fibs: 8] -> 21 getcount=2",
-  "item [fibs: <7>] m_getCount decremented to 1",
-  "item [fibs: <6>] m_getCount decremented to 0",
-  "GetX item [fibs: 8] -> 21",
-  "GetX item [fibs: 7] -> 13",
-  "Put item [fibs: 9] -> 34 getcount=2",
-  "item [fibs: <8>] m_getCount decremented to 1",
-  "item [fibs: <7>] m_getCount decremented to 0",
-  "GetX item [fibs: 9] -> 34",
-  "GetX item [fibs: 8] -> 21",
-  "Put item [fibs: 10] -> 55 getcount=2",
-  "item [fibs: <9>] m_getCount decremented to 1",
-  "item [fibs: <8>] m_getCount decremented to 0",
-  "Put tag <tags: 2>",
-  "Put tag <tags: 1>",
+  "End step (fibctrl: 3)",
+  "Start step (fibctrl: 5)",
   "Put tag <tags: 4>",
   "Put tag <tags: 3>",
+  "End step (fibctrl: 5)",
+  "Start step (fibctrl: 7)",
   "Put tag <tags: 6>",
   "Put tag <tags: 5>",
+  "End step (fibctrl: 7)",
+  "Start step (fibctrl: 9)",
   "Put tag <tags: 8>",
   "Put tag <tags: 7>",
+  "End step (fibctrl: 9)",
   "Get item [fibs: 10] -> 55",
-  "CnC recursive (10): 55",
-  "time: 0.000923 s"]
+  "CnC recursive (10): 55"]
+
 
