@@ -135,7 +135,7 @@ t24 = mapM_ print $ filter isfail $ map (tryParse (traceline defaultStepContext)
 t25 = mapM_ print  $ map (tryParse (traceline defaultStepContext)) sample_trace
 
 --t26 = mapM_ print  $ catMaybes $ tryParse $ tracefile sample_trace
-t26 = mapM_ print $ tracefile sample_trace
+t26 = tracefile sample_trace
 
 sample_trace = 
  ["Prescribe tags fib_step",

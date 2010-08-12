@@ -70,9 +70,9 @@ cncUbigraph interactive gr =
    mapM_ (flip setVStyleAttr itemstyle) (defaultItemAttr)
    mapM_ (flip setVStyleAttr tagstyle)  (defaultTagAttr)
 
-   let eshared = [EOriented True, ESpline True, EStrength 1.0]
+   --let eshared = [EOriented True, ESpline True, EStrength 1.0]
    --let eshared = [EOriented True, ESpline True, EStrength 0.001]
-   --let eshared = [EOriented True]
+   let eshared = [EOriented True]
    -- EArrow True
 
    baseEstyle  <- newEStyle 0
@@ -163,10 +163,11 @@ simple_graphviz lablNode gr =
 
 
 data GUIAction =
-    ChangeV Atom [VAttr]
+    ChangeV NameTag [VAttr]
   | ChangeE Atom Atom EAttr
-  | AddV Atom
-  | AddE Atom Atom
+  | AddV NameTag
+  | AddE NameTag NameTag
+  | WaitAction -- We don't sleep between ALL actions, let's make them explicit.
  deriving Show
 
 -- This is a little more involved than I would like, but we may need
@@ -217,9 +218,9 @@ instance Show EAttr where
 -- bar = TM.lookup "foo" foo
 
 defaultStepMap = SM.fromList [("color", VColor "#3333ff"), ("shape", VShape Sphere), 
-			       ("size", VSize 1.0), ("shapedetail", VShapedetail 10)]
-defaultItemMap = SM.fromList [("color", VColor "#008800"), ("shape", VShape Cube), ("size", VSize 0.75)]
-defaultTagMap  = SM.fromList [("color", VColor "#555555"), ("shape", VShape Octahedron), ("size", VSize 0.4)]
+			       ("size", VSize 1.0), ("shapedetail", VShapedetail 10), ("visible", VVisible True)]
+defaultItemMap = SM.fromList [("color", VColor "#008800"), ("shape", VShape Cube), ("size", VSize 0.75), ("visible", VVisible True)]
+defaultTagMap  = SM.fromList [("color", VColor "#555555"), ("shape", VShape Octahedron), ("size", VSize 0.4), ("visible", VVisible True)]
 
 -- For convenience, here are the default attributes as lists:
 defaultStepAttr = map snd$ SM.toList defaultStepMap
@@ -250,14 +251,14 @@ pump_size = True
 
 -- First, convert a parsed trace into a series of GUI actions:
 traceToGUI :: [CncTraceEvent] -> [GUIAction]
-traceToGUI trace = 
-      AddV    (toAtom "env") :
-      ChangeV (toAtom "env") defaultEnvAttr :
+traceToGUI trace =
+      AddV envpr : ChangeV envpr defaultEnvAttr :
       loop emptyGUIState trace
  where 
+  envpr = (toAtom "env", "")
   loop _ [] = []
   loop state0@GS{..} (hd:tl) = 
-    let pump_up_instance nm gns@GNS{..} = 
+    let pump_up_instance (nm,tag) gns@GNS{..} = 
 	 let VLabel oldlab = props SM.! "label"  
 	     -- Experimenting with growing the size too:
 	     VSize oldsize = props SM.! "size"
@@ -265,54 +266,56 @@ traceToGUI trace =
 	     props' = if pump_size then SM.insert "size" newsize props else props
 
 	     newnodes = AM.insert nm gns{count=count+1, props=props'} nodes
-         in ChangeV nm [VLabel$ oldlab ++" #"++ show (count+1), newsize]
+         in ChangeV (nm,tag) [VLabel$ oldlab ++" #"++ show (count+1), newsize]
 	    : loop state0{ nodes= newnodes } tl 
  
         newstate nm attrs = state0{ nodes = AM.insert nm (GNS 1 attrs) nodes }
     in
     case hd of 
       Prescribe tags step -> 
-	AddV step : 
-	loop state0{ prescribedBy= AM.insert step tags prescribedBy } tl
+	let state1 = state0{ prescribedBy= AM.insert step tags prescribedBy } in
+	if full_dynamic_graph
+	then loop state1 tl
+	else AddV (step,"") : loop state1 tl
 
       ------------------------------------------------------------
-      StartStep (nm,tg) -> 
-	case AM.lookup nm prescribedBy of 
+      StartStep pr@(nm,tg) -> 
+	 case AM.lookup nm prescribedBy of 
 	  Nothing -> error$ "traceToGUI: no Prescribe relation corresponding to step "++show nm
-	  Just tags -> 
-	    AddE tags nm : 
+	  Just tags -> 	    
+	    let edge = AddE (tags,tg) pr
+		vertedge = [AddV pr, edge, ChangeV pr defaultStepAttr, WaitAction] in
+	    (if full_dynamic_graph then vertedge else []) ++
             case AM.lookup nm nodes of
    	      Nothing  -> loop (newstate nm$ namedStep nm) tl
-	      Just gns -> pump_up_instance nm gns 
+	      Just gns -> pump_up_instance pr gns 
 
       ------------------------------------------------------------
-      PutT (stepnm,_) (tgnm,tag) -> 
+      PutT (stepnm,stag) tpr@(tgnm,_) -> 
+        let edge = AddE (stepnm,stag) tpr 
+	    vertedge = [AddV tpr, edge, ChangeV tpr defaultTagAttr, WaitAction] in
         case AM.lookup tgnm nodes of 
-	  Nothing -> AddV tgnm : ChangeV tgnm defaultTagAttr :
-		     AddE stepnm tgnm : 
-	             loop (newstate tgnm$ named defaultTagMap tgnm) tl
-	  Just gns -> AddE stepnm tgnm : 
-	              pump_up_instance tgnm gns
+	  Nothing  -> vertedge ++ loop (newstate tgnm$ named defaultTagMap tgnm) tl
+	  Just gns -> (if full_dynamic_graph then vertedge else [])
+		      ++ pump_up_instance tpr gns
 			 
+      ------------------------------------------------------------
+      PutI (stepnm,stag) ipr@(inm,_) -> 
+        let edge = AddE (stepnm,stag) ipr 
+	    vertedge = [AddV ipr, edge, ChangeV ipr defaultItemAttr, WaitAction] in
+        case AM.lookup inm nodes of 
+	  Nothing  -> vertedge ++ loop (newstate inm$ named defaultItemMap inm) tl
+	  Just gns -> (if full_dynamic_graph then vertedge else [])
+		      ++ pump_up_instance ipr gns
 
       ------------------------------------------------------------
-      PutI (stepnm,_) (inm,itag) -> 
+      GetI (stepnm,stag) ipr@(inm,_) -> 
+        let edge = AddE (stepnm,stag) ipr in
         case AM.lookup inm nodes of 
-	  Nothing -> AddV inm : ChangeV inm defaultItemAttr :
-		     AddE stepnm inm : 
-	             loop (newstate inm$ named defaultItemMap inm) tl
-	  Just gns -> AddE stepnm inm : 
-		      pump_up_instance inm gns
-
-      ------------------------------------------------------------
-      GetI (stepnm,_) (inm,itag) -> 
-        case AM.lookup inm nodes of 
-	  Nothing -> AddV inm : ChangeV inm defaultItemAttr :
-		     AddE inm stepnm : 
-	             loop (newstate inm$ named defaultItemMap inm) tl
-	  --Just gns -> pump_up_instance inm gns
-	  _ -> AddE stepnm inm : 
-	       loop state0 tl
+	  Nothing -> --AddV ipr : 
+		     --ChangeV ipr defaultItemAttr :
+	             edge : loop (newstate inm$ named defaultItemMap inm) tl
+	  _ ->       edge : loop state0 tl
 
 
       _ -> loop state0 tl
@@ -339,6 +342,9 @@ t30 = playback emptyGUIState t29
 
 playback :: GUIState -> [GUIAction] -> IO ()
 
+-- Should we actually create a node for every dynamic instance?
+full_dynamic_graph = True
+
 playback state fwd = 
   do putStrLn$ "[cnc] Vizualizing trace using ubigraph."
      initHubigraph server_url >>= runHubigraph initialize
@@ -348,9 +354,14 @@ playback state fwd =
 
   initialize = do 
    clear
+
+   setVStyleAttr (VVisible False) 0
+   setVStyleAttr (VColor "#ff0000") 0
+
    stepstyle <- newVStyle 0
    itemstyle <- newVStyle 0
    tagstyle  <- newVStyle 0
+
    mapM_ (flip setVStyleAttr stepstyle) (defaultStepAttr)
    mapM_ (flip setVStyleAttr itemstyle) (defaultItemAttr)
    mapM_ (flip setVStyleAttr tagstyle)  (defaultTagAttr)
@@ -380,29 +391,32 @@ playback state fwd =
 	 hd:tl -> 
 	   let idmap' = 
                 case hd of 
-  	         AddV atom -> 
+  	         AddV pr@(atom, tag) -> 
 		  do id <- newVertex
-		     changeVStyle stepstyle id 
- 		     setVAttr (VLabel$ fromAtom atom) id 
-		     return (AM.insert atom id idmap)
+ 		     setVAttr (VLabel$ fromAtom atom ++" "++ tag) id 
+		     return$  M.insert pr id idmap
 
-  	         ChangeV nm updates -> 
-	 	  do let id = idmap AM.! nm
+  	         ChangeV pr updates -> 
+	 	  do let id = idmap M.! pr
 	 	     mapM_ (flip setVAttr id) updates
 		     return idmap
 
+
   	         AddE from to -> 
 		  do --R.lift$ putStrLn$ "ADDING EDGE "++ show from ++" "++ show to
-		     let from' = deJust "Missing source of AddE edge!"      $ AM.lookup from idmap 
-			 to'   = deJust "Missing destination of AddE edge!" $ AM.lookup to idmap
+		     let from' = deJust ("Missing source of AddE edge! "++show from)    $ M.lookup from idmap 
+			 to'   = deJust ("Missing destination of AddE edge! "++show to) $ M.lookup to idmap
 		     id <- newEdge (from', to')
 		     changeEStyle producestyle id 
 		     return idmap
 
+  	         WaitAction -> do R.lift$ usleep (300 * 1000) -- 0.1 second sleep.
+				  return idmap
 		 _ -> return idmap
+		 --x -> error$ "playback: unhandled GUIAction: "++ show x
            in
 	      do newidmap <- idmap'
-		 R.lift$ usleep (100 * 1000)
+		 --R.lift$ usleep (100 * 1000)
 		 --Control.Concurrent.threadDelay
 		 loop newidmap
 		      (updateState state hd) 
@@ -410,7 +424,7 @@ playback state fwd =
 		      tl
 
        
-    in loop (AM.fromList [(toAtom "env", envID)]) state [] fwd
+    in loop (M.fromList [((toAtom "env",""), envID)]) state [] fwd
 
 -- This simply needs to not conflict with the auto-assigned Ubigraph ids:
 envID = 1
