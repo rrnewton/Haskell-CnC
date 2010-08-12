@@ -88,7 +88,8 @@ examples/test_parfor.o : Intel/Cnc3.hi
 #====================================================================================================
 
 
-HSOURCE=SrcLoc.hs Main.hs GatherGraph.hs AST.hs Codegen/CppOld.hs
+HSOURCE=SrcLoc.hs Main.hs GatherGraph.hs AST.hs Codegen/CppOld.hs \
+        CncGraph.hs CncViz.hs Vacuum.hs Curses.hs ReadHarch.hs Util.hs
 
 trans: 
 	@echo 

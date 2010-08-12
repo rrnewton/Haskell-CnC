@@ -193,32 +193,33 @@ textFieldsLine row labels =
        mkTextField lab (row, i * portion) portion --[] []
        
 ----------------------------------------------------------------------------------------------------
--- A "TextCell" is a wrapper around a TextField that stores any Showable type of data.
+-- A "DisplayCell" is a wrapper around a TextField that stores any Showable type of data.
 -- When the contents of the cell is updated, so is the display.
 ----------------------------------------------------------------------------------------------------
 
-type TextCell a = (IORef a, TextField)
+type DisplayCell a = (a -> String, IORef a, TextField)
 
 {-
-mkTextCell x pos wid = 
+mkDisplayCell x pos wid = 
   do tf <- mkTextField stdScr (show x) pos wid
      ref <- newIORef x
      return (ref, tf)
 -}
 
-wrapTextField x tf = 
+--wrapTextField
+mkDisplayCell printer x tf = 
   do ref <- newIORef x
-     setTextField tf (show x)
-     return (ref, tf)
+     setTextField tf (printer x)
+     return (printer, ref, tf)
 
-setTextCell (ref,tf) x = 
+setDisplayCell (printer, ref,tf) x = 
  do writeIORef ref x
-    setTextField tf (show x)
+    setTextField tf (printer x)
     
-getTextCell (ref,_) = readIORef ref
+getDisplayCell (_,ref,_) = readIORef ref
+
 
      
-
 ----------------------------------------------------------------------------------------------------
 
 widget pos size = 
@@ -251,6 +252,9 @@ main = runCurses undefined undefined undefined
 -- visualization and allows a "peak" at the timestamp of the NEXT
 -- event if the user keeps going in that direction.
 type Callback = IO Double
+
+data PlayMode = Realtime Double | Const Double | Paused
+  deriving (Show, Eq, Ord)
 
 runCurses :: [(Double, String)] -> Callback -> Callback -> IO ()
 runCurses timed_log fwd_callback rev_callback = 
@@ -291,16 +295,23 @@ runCurses timed_log fwd_callback rev_callback =
 	  [current_time, play_rate, current_event] <- withStyle grey$ textFieldsLine 3 ln2
 
 	  attrBoldOn
-          setTextField current_event "0"
           setTextField totaltime "00:44.55"
-          --setTextField numevents "99"
-          setTextField numevents "99"
+
+          -- Wrap some of these text fields to store non-string datatypes.
+          numevents_cell     <- mkDisplayCell show 0 numevents
+          current_event_cell <- mkDisplayCell show 0 current_event
+          
+          play_mode_cell <- mkDisplayCell show Paused play_mode
+
+{-
           setTextField play_mode "Realtime"
           setTextField play_rate "1 X"
           setTextField play_mode "Const"
 	  setTextField play_rate "100ms/event"
+
           setTextField play_mode "Paused"
 	  setTextField play_rate ""
+-}
 	  attrBoldOff
 
 	  mvWAddStr stdScr 5 0 $ "Enter keyboard input (? or 'h' for help):" 
