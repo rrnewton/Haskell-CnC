@@ -23,12 +23,12 @@ centeredLine win row str =
 
 -- Hmm...  I absolutely shouldn't have to write this:
 -- It creates a bounding border (box)
-box win (y,x) (h,w) = 
+box (y,x) (h,w) = 
   do let horiz = "+"++ (Prelude.take (w-2) $ repeat '-') ++"+"
-     mvWAddStr win y x horiz
-     mvWAddStr win (y + h - 1) x horiz
-     forM_ [1..h-2] $ \r -> mvWAddStr win (y + r) x "|"
-     forM_ [1..h-2] $ \r -> mvWAddStr win (y + r) (x + w - 1) "|"
+     mvWAddStr stdScr y x horiz
+     mvWAddStr stdScr (y + h - 1) x horiz
+     forM_ [1..h-2] $ \r -> mvWAddStr stdScr (y + r) x "|"
+     forM_ [1..h-2] $ \r -> mvWAddStr stdScr (y + r) (x + w - 1) "|"
      
 
 ------------------------------------------------------------------------------------------------------------------------
@@ -142,56 +142,81 @@ viewLtoList (a :< rest) = a : viewLtoList (viewl rest)
 
 -- These are drawn with wAddStr directly rather than the "textWidget"
 
-data TextFieldRec = TF {
-    contents :: String, 
+data TextFieldRec a = TF {
+--    contents :: String, 
+    contents :: a, 
     tfpos :: Pos,
     width :: Int
 --    hookOn  :: [IO ()],
 --    hookOff :: [IO ()]
 }
 
-type TextField = IORef TextFieldRec
+--type TextField a = IORef (TextFieldRec a)
+type TextField = IORef (TextFieldRec String)
 
---mkTextField :: Window -> String -> Pos -> Int -> [IO ()] -> [IO ()] -> IO TextField
-mkTextField :: Window -> String -> Pos -> Int -> IO TextField
-mkTextField win label (y,x) width {-onhk offhk-} = 
-  do 
-     mvWAddStr win y x label
+mkTextField :: String -> Pos -> Int -> IO TextField
+mkTextField label (y,x) width {-onhk offhk-} = 
+  do mvWAddStr stdScr y x label
      newIORef $ TF "" (y, x + Prelude.length label) (width - Prelude.length label) -- onhk offhk
 
-setTextField :: Window -> TextField -> String -> IO ()
-setTextField win ref str = 
+setTextField :: TextField -> String -> IO ()
+setTextField ref str = 
   do tf <- readIORef ref
      let (y,x) = tfpos tf
      -- Crop the right end of the string:
-     mvWAddStr win y x (Prelude.take (width tf) str)
-     wAddStr win (Prelude.take (width tf - Prelude.length str) $ repeat ' ')
+     mvWAddStr stdScr y x (Prelude.take (width tf) str)
+     wAddStr   stdScr (Prelude.take (width tf - Prelude.length str) $ repeat ' ')
      writeIORef ref tf{ contents = str }
 
 -- Add text to a field rather than overwriting.  Allows building up contents with different styles.
-appendTextField win ref str = 
+appendTextField ref str = 
   do tf <- readIORef ref
      let (y,x) = tfpos tf
 	 len = Prelude.length $ contents tf
-     mvWAddStr win y (x + len) (Prelude.take (width tf - len) str)
+     mvWAddStr stdScr y (x + len) (Prelude.take (width tf - len) str)
      writeIORef ref tf{ contents = contents tf ++ str }
 
 -- If appending bits of text, cap when finished to blank the remainder of the text field.
-capTextField win ref = 
+capTextField ref = 
   do tf <- readIORef ref
      let (y,x) = tfpos tf
 	 len = Prelude.length $ contents tf
-     mvWAddStr win y (x + len) (Prelude.take (width tf - len) $ repeat ' ')
+     mvWAddStr stdScr y (x + len) (Prelude.take (width tf - len) $ repeat ' ')
 
 -- Multiple text fields across a line:
-textFieldsLine :: Window -> Int -> [String] -> IO [TextField]
-textFieldsLine win row labels = 
+textFieldsLine :: Int -> [String] -> IO [TextField]
+textFieldsLine row labels = 
   do size@(height,width) <- scrSize
      let len = Prelude.length labels
 	 portion = width `quot` len
      forM (Prelude.zip [0 .. len-1] labels) $ \ (i,lab) -> do
-       mkTextField win lab (row, i * portion) portion --[] []
+       mkTextField lab (row, i * portion) portion --[] []
        
+----------------------------------------------------------------------------------------------------
+-- A "TextCell" is a wrapper around a TextField that stores any Showable type of data.
+-- When the contents of the cell is updated, so is the display.
+----------------------------------------------------------------------------------------------------
+
+type TextCell a = (IORef a, TextField)
+
+{-
+mkTextCell x pos wid = 
+  do tf <- mkTextField stdScr (show x) pos wid
+     ref <- newIORef x
+     return (ref, tf)
+-}
+
+wrapTextField x tf = 
+  do ref <- newIORef x
+     setTextField tf (show x)
+     return (ref, tf)
+
+setTextCell (ref,tf) x = 
+ do writeIORef ref x
+    setTextField tf (show x)
+    
+getTextCell (ref,_) = readIORef ref
+
      
 
 ----------------------------------------------------------------------------------------------------
@@ -216,12 +241,21 @@ widget pos size =
 
      return ()
 
+main = runCurses undefined undefined undefined
 
-main = do putStrLn$ "Hello"
+----------------------------------------------------------------------------------------------------
 
-          --initCurses
-	  Help.start
-	  win <- initScr
+-- When the visualization layer instantiates this keyboard interface it provides two callbacks.
+
+-- Each callback scrolls either backwards or forwards, updates the
+-- visualization and allows a "peak" at the timestamp of the NEXT
+-- event if the user keeps going in that direction.
+type Callback = IO Double
+
+runCurses :: [(Double, String)] -> Callback -> Callback -> IO ()
+runCurses timed_log fwd_callback rev_callback = 
+       do Help.start
+	  initScr
 	  colors <- hasColors 
 	  if not colors then error "COLORS not available on this terminal" else return()	  
 	  startColor 
@@ -236,45 +270,45 @@ main = do putStrLn$ "Hello"
 
           size@(height,width) <- scrSize
 
-          let sb_start = 9
-
-	  mvWAddStr win sb_start 2 $ "Event Scrollback History:" 
-          box win (sb_start+1,1) (height-sb_start-1,width-4)
-          refresh
-
-          --sb <- mkScrollBuf (sb_start+2,4) (15,width-6)
-	  sb <- mkScrollBuf (sb_start+2,3) (height-sb_start-3,width-7)
-
           move 1 0
 	  [redstyle, yellow, grey, green] <- 
 	      convertStyles [Style DarkRedF BlackB, Style YellowF BlackB, 
 			     Style GreyF BlackB, Style DarkGreenF BlackB ]
 	  withStyle redstyle $ drawLine width (repeat '=')
+          withStyle redstyle $ centeredLine stdScr 0 "CnC Interactive Trace Visualizer"
 
-          centeredLine win 0 "CnC Interactive Trace Visualizer"
+          let sb_start = 9 -- Where the scrollbuffer starts on the screen.
+	      sb_size = (height - sb_start - 3, width - 7)
 
-	  --mvWAddStr win 2 0 $ "Trace events:          Time elapsed:" 
-	  --mvWAddStr win 3 0 $ "Current time:" 
-	  let ln1 = ["Total elapsed time: ", " Trace events: " ]
-	      ln2 = ["      Current time: ", "Current event: "]
-	  [totaltime, numevents]        <- withStyle grey$ textFieldsLine win 2 ln1
-	  [current_time, current_event] <- withStyle grey$ textFieldsLine win 3 ln2
+	  sb <- mkScrollBuf (sb_start+2,3) sb_size
+	  mvWAddStr stdScr sb_start 2 $ "Event Scrollback History:" 
+          box (sb_start+1,1) (height-sb_start-1,width-4)
+          refresh
+
+	  let ln1 = ["Total elapsed time: ", "Playback mode: ", " Trace events: "]
+	      ln2 = ["      Current time: ", "Playback rate: ", "Current event: "]
+	  [totaltime,    play_mode, numevents]     <- withStyle grey$ textFieldsLine 2 ln1
+	  [current_time, play_rate, current_event] <- withStyle grey$ textFieldsLine 3 ln2
 
 	  attrBoldOn
-          setTextField win current_event "0"
-          setTextField win totaltime "99"
-          setTextField win numevents "lots of them"
+          setTextField current_event "0"
+          setTextField totaltime "00:44.55"
+          --setTextField numevents "99"
+          setTextField numevents "99"
+          setTextField play_mode "Realtime"
+          setTextField play_rate "1 X"
+          setTextField play_mode "Const"
+	  setTextField play_rate "100ms/event"
+          setTextField play_mode "Paused"
+	  setTextField play_rate ""
 	  attrBoldOff
 
-	  mvWAddStr win 5 0 $ "Enter keyboard input (? or 'h' for help):" 
+	  mvWAddStr stdScr 5 0 $ "Enter keyboard input (? or 'h' for help):" 
 
 	  let cursor_pos = (6,2)
-	  withStyle yellow$ mvWAddStr win (fst cursor_pos) 0 $ "> " 
+	  withStyle yellow$ mvWAddStr stdScr (fst cursor_pos) 0 $ "> " 
 
-          gotoTop 
-
-	  scrollBufAddLine sb "hello"
-	  scrollBufAddLine sb "yay"
+          --gotoTop 
 	  mapM_ (scrollBufAddLine sb) $ map show [1..200]
 	  refresh
 
@@ -284,7 +318,7 @@ main = do putStrLn$ "Hello"
 	  colors <- hasColors 
 	  refresh
 	  size@(height,width) <- scrSize
-	  [user_input, cursor_field] <- withStyle green$ textFieldsLine win (fst cursor_pos) ["> ", ""]
+	  [user_input, cursor_field] <- withStyle green$ textFieldsLine (fst cursor_pos) ["> ", ""]
 	  event_counter <- newIORef 0 
 
 	  --------------------------------------------------------------------------------
@@ -292,43 +326,47 @@ main = do putStrLn$ "Hello"
 	  --------------------------------------------------------------------------------
 	  let event_loop row 0 = return ()
 	      event_loop row n = do
-		   withStyle green$ box win (sb_start+1,1) (height-sb_start-1,width-4)
+		   withStyle green$ box (sb_start+1,1) (height-sb_start-1,width-4)
                    uncurry move cursor_pos
 		   refresh
 
 		   c <- Help.getKey refresh
-		   setTextField win cursor_field $ "You pressed: "
+		   setTextField cursor_field $ "You pressed: "
 
 		   attrBoldOn
-		   attrSet attr0 (Pair 17)
-		   appendTextField win cursor_field $ show c
-		   capTextField win cursor_field 
+		   --attrSet attr0 (Pair 17)
+		   withStyle green $ appendTextField cursor_field $ show c
+		   capTextField cursor_field 
 		   attrBoldOff
-		   attrSet attr0 (Pair 18)
+		   --attrSet attr0 (Pair 18)
 		   --useDefaultColors
 		   
                    case c of 
-		     KeyUp   -> scrollBufUp   sb 1
-		     KeyDown -> scrollBufDown sb 1
+		     --KeyUp   -> scrollBufUp   sb 1
+		     --KeyDown -> scrollBufDown sb 1
 
-		     KeyLeft  -> do c <- readIORef event_counter 
-				    if c == 0 
-				     then setTextField win current_event "0"
+		     KeyUp  -> do c <- readIORef event_counter 
+				  if c == 0 
+				     then setTextField current_event "0"
 				     else do writeIORef event_counter (c-1)
-					     setTextField win current_event (show$ c-1)
-		     KeyRight -> do c <- readIORef event_counter 
-				    if c == 999999 
-				     then setTextField win current_event (show c)
+					     setTextField current_event (show$ c-1)
+		     KeyDown -> do c <- readIORef event_counter 
+				   if c == 999999 
+				     then setTextField current_event (show c)
 				     else do writeIORef event_counter (c+1)
-					     setTextField win current_event (show$ c+1)
+					     setTextField current_event (show$ c+1)
 
-		     KeyPPage -> scrollBufUp   sb 10
-		     KeyNPage -> scrollBufDown sb 10
+		     KeyPPage -> scrollBufUp   sb (fst sb_size)
+		     KeyNPage -> scrollBufDown sb (fst sb_size)
 
 		     KeyHome  -> scrollBufToTop sb
 		     KeyEnd   -> scrollBufToBottom sb
 
 		     KeyDC    -> scrollBufSet sb ["DELETED"]
+
+		     KeyChar ' ' -> do setTextField user_input "  Playback started."
+
+
 		     KeyChar c -> scrollBufAddLine sb [c]
 		     _ -> return ()
 
@@ -348,6 +386,3 @@ main = do putStrLn$ "Hello"
           putStrLn$ "Exited ncurses"
           return ()
           
-
-
-
