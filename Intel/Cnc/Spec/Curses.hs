@@ -146,15 +146,18 @@ data TextFieldRec = TF {
     contents :: String, 
     tfpos :: Pos,
     width :: Int
+--    hookOn  :: [IO ()],
+--    hookOff :: [IO ()]
 }
 
 type TextField = IORef TextFieldRec
 
+--mkTextField :: Window -> String -> Pos -> Int -> [IO ()] -> [IO ()] -> IO TextField
 mkTextField :: Window -> String -> Pos -> Int -> IO TextField
-mkTextField win label (y,x) width = 
+mkTextField win label (y,x) width {-onhk offhk-} = 
   do 
      mvWAddStr win y x label
-     newIORef $ TF "" (y, x + Prelude.length label) (width - Prelude.length label)
+     newIORef $ TF "" (y, x + Prelude.length label) (width - Prelude.length label) -- onhk offhk
 
 setTextField :: Window -> TextField -> String -> IO ()
 setTextField win ref str = 
@@ -165,6 +168,21 @@ setTextField win ref str =
      wAddStr win (Prelude.take (width tf - Prelude.length str) $ repeat ' ')
      writeIORef ref tf{ contents = str }
 
+-- Add text to a field rather than overwriting.  Allows building up contents with different styles.
+appendTextField win ref str = 
+  do tf <- readIORef ref
+     let (y,x) = tfpos tf
+	 len = Prelude.length $ contents tf
+     mvWAddStr win y (x + len) (Prelude.take (width tf - len) str)
+     writeIORef ref tf{ contents = contents tf ++ str }
+
+-- If appending bits of text, cap when finished to blank the remainder of the text field.
+capTextField win ref = 
+  do tf <- readIORef ref
+     let (y,x) = tfpos tf
+	 len = Prelude.length $ contents tf
+     mvWAddStr win y (x + len) (Prelude.take (width tf - len) $ repeat ' ')
+
 -- Multiple text fields across a line:
 textFieldsLine :: Window -> Int -> [String] -> IO [TextField]
 textFieldsLine win row labels = 
@@ -172,7 +190,7 @@ textFieldsLine win row labels =
      let len = Prelude.length labels
 	 portion = width `quot` len
      forM (Prelude.zip [0 .. len-1] labels) $ \ (i,lab) -> do
-       mkTextField win lab (row, i * portion) portion
+       mkTextField win lab (row, i * portion) portion --[] []
        
      
 
@@ -227,27 +245,6 @@ main = do putStrLn$ "Hello"
           --sb <- mkScrollBuf (sb_start+2,4) (15,width-6)
 	  sb <- mkScrollBuf (sb_start+2,3) (height-sb_start-3,width-7)
 
-	  scrollBufAddLine sb "hello"
-	  scrollBufAddLine sb "yay"
-	  mapM_ (scrollBufAddLine sb) $ map show [1..200]
-	  refresh
-
-	  --usleep (700 * 1000) -- 0.1 second sleep.
-
-	  --scrollBufToTop sb
-
-{-
-	  forM_ [1..7] $ \_ -> do 
-	     scrollBufUp sb 2
-  	     --usleep (100 * 1000)
-	     refresh 
-
-	  forM_ [1..7] $ \_ -> do 
-	     scrollBufDown sb 2
-  	     --usleep (100 * 1000)
-	     refresh 
--}
-
           move 1 0
 	  [redstyle, yellow, grey, green] <- 
 	      convertStyles [Style DarkRedF BlackB, Style YellowF BlackB, 
@@ -264,10 +261,10 @@ main = do putStrLn$ "Hello"
 	  [current_time, current_event] <- withStyle grey$ textFieldsLine win 3 ln2
 
 	  attrBoldOn
+          setTextField win current_event "0"
           setTextField win totaltime "99"
-	  --attrBoldOff
-
           setTextField win numevents "lots of them"
+	  attrBoldOff
 
 	  mvWAddStr win 5 0 $ "Enter keyboard input (? or 'h' for help):" 
 
@@ -275,48 +272,37 @@ main = do putStrLn$ "Hello"
 	  withStyle yellow$ mvWAddStr win (fst cursor_pos) 0 $ "> " 
 
           gotoTop 
-	  --wAddStr win$ "BLAH"
 
-          test_loop win size sb cursor_pos sb_start green
-
-          endWin 
-	  Help.end
-	  --update
-
-          putStrLn$ "Exited ncurses"
-          return ()
-  where 
- test_loop win size sb (y,x) sb_start green = 
-       do move (20) 40
-	  colors <- hasColors 
-	  --wAddStr win$ "FOO, size "++ show size++ "  colors " ++ (show colors)
-	  --move 21 40
-	  --drawLine 30 (repeat '=')
+	  scrollBufAddLine sb "hello"
+	  scrollBufAddLine sb "yay"
+	  mapM_ (scrollBufAddLine sb) $ map show [1..200]
 	  refresh
 
-          size@(height,width) <- scrSize
-          cursor_field <- mkScrollBuf (y,x) (1,15)
 
-          let loop row 0 = return ()
-	      loop row n = 
-		do --move row 50
-		   --wAddStr win$ "Press any key["++ show n ++"]: "
+          ----------------------------------------
+	  move (20) 40
+	  colors <- hasColors 
+	  refresh
+	  size@(height,width) <- scrSize
+	  [user_input, cursor_field] <- withStyle green$ textFieldsLine win (fst cursor_pos) ["> ", ""]
+	  event_counter <- newIORef 0 
+
+	  --------------------------------------------------------------------------------
+	  -- Begin main event loop
+	  --------------------------------------------------------------------------------
+	  let event_loop row 0 = return ()
+	      event_loop row n = do
 		   withStyle green$ box win (sb_start+1,1) (height-sb_start-1,width-4)
-                   move y x
+                   uncurry move cursor_pos
 		   refresh
 
 		   c <- Help.getKey refresh
-		   --c <- getCh
-		   --c_ <- getch; let c = decodeKey c_
-		   --beep
-		   --wAddStr win$ "  You pressed: "
-		   --[blue] <- convertStyles [Style BlueF BlackB]
-		   --withStyle blue$ 
-		   scrollBufSet cursor_field ["  You pressed: "]
+		   setTextField win cursor_field $ "You pressed: "
 
 		   attrBoldOn
 		   attrSet attr0 (Pair 17)
-	           wAddStr win$ show c ++ "            "
+		   appendTextField win cursor_field $ show c
+		   capTextField win cursor_field 
 		   attrBoldOff
 		   attrSet attr0 (Pair 18)
 		   --useDefaultColors
@@ -324,6 +310,18 @@ main = do putStrLn$ "Hello"
                    case c of 
 		     KeyUp   -> scrollBufUp   sb 1
 		     KeyDown -> scrollBufDown sb 1
+
+		     KeyLeft  -> do c <- readIORef event_counter 
+				    if c == 0 
+				     then setTextField win current_event "0"
+				     else do writeIORef event_counter (c-1)
+					     setTextField win current_event (show$ c-1)
+		     KeyRight -> do c <- readIORef event_counter 
+				    if c == 999999 
+				     then setTextField win current_event (show c)
+				     else do writeIORef event_counter (c+1)
+					     setTextField win current_event (show$ c+1)
+
 		     KeyPPage -> scrollBufUp   sb 10
 		     KeyNPage -> scrollBufDown sb 10
 
@@ -331,16 +329,25 @@ main = do putStrLn$ "Hello"
 		     KeyEnd   -> scrollBufToBottom sb
 
 		     KeyDC    -> scrollBufSet sb ["DELETED"]
-
 		     KeyChar c -> scrollBufAddLine sb [c]
 		     _ -> return ()
 
 		   refresh
 		   if c == KeyChar '\ETX' 
 		     then return() 
-		     else  loop (row+1) (n-1)
+		     else event_loop (row+1) (n-1)
+	  --------------------------------------------------------------------------------
+	  -- End event_loop definition
+	  --------------------------------------------------------------------------------
+	  event_loop 22 999999999999
 
-          loop 22 999999999999
+          endWin 
+	  Help.end
+	  --update
+
+          putStrLn$ "Exited ncurses"
+          return ()
+          
 
 
 
