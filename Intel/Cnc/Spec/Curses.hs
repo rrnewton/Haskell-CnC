@@ -22,6 +22,7 @@ centeredLine win row str =
      wAddStr win str
 
 -- Hmm...  I absolutely shouldn't have to write this:
+-- It creates a bounding border (box)
 box win (y,x) (h,w) = 
   do let horiz = "+"++ (Prelude.take (w-2) $ repeat '-') ++"+"
      mvWAddStr win y x horiz
@@ -30,6 +31,9 @@ box win (y,x) (h,w) =
      forM_ [1..h-2] $ \r -> mvWAddStr win (y + r) (x + w - 1) "|"
      
 
+------------------------------------------------------------------------------------------------------------------------
+-- Scrolling Text Windows (Buffers)
+------------------------------------------------------------------------------------------------------------------------
 -- I shouldn't have to write this either.
 -- The hscurses textwidget is written in a profoundly inefficient way.
 
@@ -74,14 +78,6 @@ drawScrollBuf sb =
   do let lns = viewLtoList $ viewl $ visible sb
          tw = newTextWidget defaultTWOptions $ unlines lns
      drawTextWidget (pos sb) (size sb) DHNormal tw
-
--- scrollBufToTop ref = 
---   do sb <- readIORef ref
---      let new = sb { bottom = False, 
--- 		    offscreen= Seq.empty,
--- 		    visible= offscreen sb >< visible sb }
---      writeIORef ref new
---      drawScrollBuf new
 
 scrollBufToTop ref = 
   do sb <- readIORef ref
@@ -129,6 +125,7 @@ scrollBufDown ref n =
        writeIORef ref new
        drawScrollBuf new
 
+scrollBufSet :: ScrollBuf -> [String] -> IO ()
 scrollBufSet ref lines = 
   do sb <- readIORef ref
      let new = sb{ bottom=True, offscreen= Seq.empty, visible= Seq.fromList lines }
@@ -138,22 +135,48 @@ scrollBufSet ref lines =
 viewLtoList EmptyL = []
 viewLtoList (a :< rest) = a : viewLtoList (viewl rest)
 
-
-
+----------------------------------------------------------------------------------------------------
+-- Labeled text fields.
+-- These are something simpler... just a single-line text field that is updated.
 ----------------------------------------------------------------------------------------------------
 
+-- These are drawn with wAddStr directly rather than the "textWidget"
 
---drawScrollBuf :: ScrollBuf -> Pos -> Size -> IO ()
---drawScrollBuf orig (y,x) (h,w) = 
-  -- do let extra = Seq.length (visible orig) - h
-  -- 	 sb = if extra > 0
-  -- 	      then SB{ offscreen= (offscreen orig) >< Seq.take extra (visible orig),
-  -- 		       visible= Seq.drop extra (visible orig)
-  -- 		     }
-  -- 	      else orig
-  -- 	 lns = viewLtoList $ viewl $ visible sb
-  --        tw = newTextWidget defaultTWOptions $ unlines lns
-  --    undefined
+data TextFieldRec = TF {
+    contents :: String, 
+    tfpos :: Pos,
+    width :: Int
+}
+
+type TextField = IORef TextFieldRec
+
+mkTextField :: Window -> String -> Pos -> Int -> IO TextField
+mkTextField win label (y,x) width = 
+  do 
+     mvWAddStr win y x label
+     newIORef $ TF "" (y, x + Prelude.length label) (width - Prelude.length label)
+
+setTextField :: Window -> TextField -> String -> IO ()
+setTextField win ref str = 
+  do tf <- readIORef ref
+     let (y,x) = tfpos tf
+     -- Crop the right end of the string:
+     mvWAddStr win y x (Prelude.take (width tf) str)
+     wAddStr win (Prelude.take (width tf - Prelude.length str) $ repeat ' ')
+     writeIORef ref tf{ contents = str }
+
+-- Multiple text fields across a line:
+textFieldsLine :: Window -> Int -> [String] -> IO [TextField]
+textFieldsLine win row labels = 
+  do size@(height,width) <- scrSize
+     let len = Prelude.length labels
+	 portion = width `quot` len
+     forM (Prelude.zip [0 .. len-1] labels) $ \ (i,lab) -> do
+       mkTextField win lab (row, i * portion) portion
+       
+     
+
+----------------------------------------------------------------------------------------------------
 
 widget pos size = 
   do putStrLn$ "foo"
@@ -198,11 +221,11 @@ main = do putStrLn$ "Hello"
           let sb_start = 9
 
 	  mvWAddStr win sb_start 2 $ "Event Scrollback History:" 
-          box win (sb_start+1,1) (17,width-4)
+          box win (sb_start+1,1) (height-sb_start-1,width-4)
           refresh
 
           --sb <- mkScrollBuf (sb_start+2,4) (15,width-6)
-	  sb <- mkScrollBuf (sb_start+2,3) (15,width-7)
+	  sb <- mkScrollBuf (sb_start+2,3) (height-sb_start-3,width-7)
 
 	  scrollBufAddLine sb "hello"
 	  scrollBufAddLine sb "yay"
@@ -226,15 +249,27 @@ main = do putStrLn$ "Hello"
 -}
 
           move 1 0
-	  [redstyle, yellow] <- convertStyles [Style DarkRedF BlackB, Style YellowF BlackB]
+	  [redstyle, yellow, grey, green] <- 
+	      convertStyles [Style DarkRedF BlackB, Style YellowF BlackB, 
+			     Style GreyF BlackB, Style DarkGreenF BlackB ]
 	  withStyle redstyle $ drawLine width (repeat '=')
 
           centeredLine win 0 "CnC Interactive Trace Visualizer"
 
-	  mvWAddStr win 2 0 $ "Trace events:          Time elapsed:" 
-	  mvWAddStr win 3 0 $ "Current time:" 
+	  --mvWAddStr win 2 0 $ "Trace events:          Time elapsed:" 
+	  --mvWAddStr win 3 0 $ "Current time:" 
+	  let ln1 = ["Total elapsed time: ", " Trace events: " ]
+	      ln2 = ["      Current time: ", "Current event: "]
+	  [totaltime, numevents]        <- withStyle grey$ textFieldsLine win 2 ln1
+	  [current_time, current_event] <- withStyle grey$ textFieldsLine win 3 ln2
 
-	  mvWAddStr win 5 0 $ "Enter keyboard input:" 
+	  attrBoldOn
+          setTextField win totaltime "99"
+	  --attrBoldOff
+
+          setTextField win numevents "lots of them"
+
+	  mvWAddStr win 5 0 $ "Enter keyboard input (? or 'h' for help):" 
 
 	  let cursor_pos = (6,2)
 	  withStyle yellow$ mvWAddStr win (fst cursor_pos) 0 $ "> " 
@@ -242,7 +277,7 @@ main = do putStrLn$ "Hello"
           gotoTop 
 	  --wAddStr win$ "BLAH"
 
-          test_loop win size sb cursor_pos sb_start width
+          test_loop win size sb cursor_pos sb_start green
 
           endWin 
 	  Help.end
@@ -251,7 +286,7 @@ main = do putStrLn$ "Hello"
           putStrLn$ "Exited ncurses"
           return ()
   where 
- test_loop win size sb (y,x) sb_start width = 
+ test_loop win size sb (y,x) sb_start green = 
        do move (20) 40
 	  colors <- hasColors 
 	  --wAddStr win$ "FOO, size "++ show size++ "  colors " ++ (show colors)
@@ -259,13 +294,14 @@ main = do putStrLn$ "Hello"
 	  --drawLine 30 (repeat '=')
 	  refresh
 
+          size@(height,width) <- scrSize
           cursor_field <- mkScrollBuf (y,x) (1,15)
 
           let loop row 0 = return ()
 	      loop row n = 
 		do --move row 50
 		   --wAddStr win$ "Press any key["++ show n ++"]: "
-		   box win (sb_start+1,1) (17,width-4)
+		   withStyle green$ box win (sb_start+1,1) (height-sb_start-1,width-4)
                    move y x
 		   refresh
 
