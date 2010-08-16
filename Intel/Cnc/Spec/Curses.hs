@@ -197,7 +197,7 @@ textFieldsLine row labels =
 -- When the contents of the cell is updated, so is the display.
 ----------------------------------------------------------------------------------------------------
 
-type DisplayCell a = (a -> String, IORef a, TextField)
+type DisplayCell a = (IORef a, [(a -> String, TextField)])
 
 {-
 mkDisplayCell x pos wid = 
@@ -206,17 +206,18 @@ mkDisplayCell x pos wid =
      return (ref, tf)
 -}
 
---wrapTextField
-mkDisplayCell printer x tf = 
+-- This takes a list of displays to update and printer procedures to do the updates.
+mkDisplayCell x ls = 
   do ref <- newIORef x
-     setTextField tf (printer x)
-     return (printer, ref, tf)
+     forM_ ls $ \ (printer,tf) -> setTextField tf (printer x)
+     return (ref, ls)
 
-setDisplayCell (printer, ref,tf) x = 
+setDisplayCell (ref,ls) x = 
  do writeIORef ref x
-    setTextField tf (printer x)
+    forM_ ls $ \ (printer,tf) -> 
+      setTextField tf (printer x)
     
-getDisplayCell (_,ref,_) = readIORef ref
+getDisplayCell (ref,_) = readIORef ref
 
 
      
@@ -242,7 +243,7 @@ widget pos size =
 
      return ()
 
-main = runCurses undefined undefined undefined
+main = runCursesUI undefined undefined (\c -> putStrLn$ "CALLBACK "++show c)
 
 ----------------------------------------------------------------------------------------------------
 
@@ -251,13 +252,23 @@ main = runCurses undefined undefined undefined
 -- Each callback scrolls either backwards or forwards, updates the
 -- visualization and allows a "peak" at the timestamp of the NEXT
 -- event if the user keeps going in that direction.
-type Callback = IO Double
+type Callback a b = a -> IO b
+type PeekEventCallback = Callback () Double
 
 data PlayMode = Realtime Double | Const Double | Paused
   deriving (Show, Eq, Ord)
 
-runCurses :: [(Double, String)] -> Callback -> Callback -> IO ()
-runCurses timed_log fwd_callback rev_callback = 
+disp_mode Paused          = "Paused"
+disp_mode (Realtime coef) = "Realtime"
+disp_mode (Const wait)    = "Const"
+disp_rate Paused          = ""
+disp_rate (Realtime coef) = show coef ++ " X"
+disp_rate (Const wait)    = show (round wait) ++ " ms/event"
+
+--runCurses :: [(Double, String)] -> Callback () -> Callback () -> Callback Key -> IO ()
+--runCurses timed_log fwd_callback rev_callback key_callback =  
+runCursesUI :: PeekEventCallback -> PeekEventCallback -> Callback Key () -> IO ()
+runCursesUI fwd_callback rev_callback key_callback =  
        do Help.start
 	  initScr
 	  colors <- hasColors 
@@ -285,10 +296,13 @@ runCurses timed_log fwd_callback rev_callback =
 	      sb_size = (height - sb_start - 3, width - 7)
 
 	  sb <- mkScrollBuf (sb_start+2,3) sb_size
-	  mvWAddStr stdScr sb_start 2 $ "Event Scrollback History:" 
+	  withStyle green$ mvWAddStr stdScr sb_start 2 $ "Trace Event History:" 
           box (sb_start+1,1) (height-sb_start-1,width-4)
           refresh
 
+          --------------------------------------------------------------------------------
+	  -- Model state
+          --------------------------------------------------------------------------------
 	  let ln1 = ["Total elapsed time: ", "Playback mode: ", " Trace events: "]
 	      ln2 = ["      Current time: ", "Playback rate: ", "Current event: "]
 	  [totaltime,    play_mode, numevents]     <- withStyle grey$ textFieldsLine 2 ln1
@@ -296,23 +310,17 @@ runCurses timed_log fwd_callback rev_callback =
 
 	  attrBoldOn
           setTextField totaltime "00:44.55"
-
           -- Wrap some of these text fields to store non-string datatypes.
-          numevents_cell     <- mkDisplayCell show 0 numevents
-          current_event_cell <- mkDisplayCell show 0 current_event
-          
-          play_mode_cell <- mkDisplayCell show Paused play_mode
+          numevents_cell     <- mkDisplayCell 0 [(show, numevents)]
+          current_event_cell <- mkDisplayCell 0 [(show, current_event)]
 
-{-
-          setTextField play_mode "Realtime"
-          setTextField play_rate "1 X"
-          setTextField play_mode "Const"
-	  setTextField play_rate "100ms/event"
+          play_mode_cell <- mkDisplayCell Paused [(disp_mode, play_mode), (disp_rate, play_rate)]
 
-          setTextField play_mode "Paused"
-	  setTextField play_rate ""
--}
+          setDisplayCell play_mode_cell (Realtime 2.0)
+          setDisplayCell play_mode_cell (Const 100.0)
+
 	  attrBoldOff
+          --------------------------------------------------------------------------------
 
 	  mvWAddStr stdScr 5 0 $ "Enter keyboard input (? or 'h' for help):" 
 
@@ -378,8 +386,9 @@ runCurses timed_log fwd_callback rev_callback =
 		     KeyChar ' ' -> do setTextField user_input "  Playback started."
 
 
-		     KeyChar c -> scrollBufAddLine sb [c]
-		     _ -> return ()
+		     --KeyChar c -> scrollBufAddLine sb [c]
+
+		     _ -> key_callback c
 
 		   refresh
 		   if c == KeyChar '\ETX' 

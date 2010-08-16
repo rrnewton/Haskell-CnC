@@ -7,6 +7,7 @@ module Intel.Cnc.Spec.CncViz where
 
 import Intel.Cnc.Spec.Vacuum
 import Intel.Cnc.Spec.CncGraph
+import Intel.Cnc.Spec.Curses
 
 import qualified Data.Graph.Inductive as G
 import Data.Graph.Inductive.Query.DFS
@@ -22,7 +23,7 @@ import Control.Monad
 import qualified Control.Monad.Reader as R
 
 import Graphics.Ubigraph as Ub
-import Data.GraphViz as Gv
+--import Data.GraphViz as Gv
 
 import System.Posix.Unistd
 
@@ -216,11 +217,11 @@ instance Show EAttr where
 -- foo :: SM.StringMap Int
 -- foo = SM.fromList [("foo",3), ("bar", 4)]
 -- bar = TM.lookup "foo" foo
-
+scale = 3.0
 defaultStepMap = SM.fromList [("color", VColor "#3333ff"), ("shape", VShape Sphere), 
-			       ("size", VSize 1.0), ("shapedetail", VShapedetail 10), ("visible", VVisible True)]
-defaultItemMap = SM.fromList [("color", VColor "#008800"), ("shape", VShape Cube), ("size", VSize 0.75), ("visible", VVisible True)]
-defaultTagMap  = SM.fromList [("color", VColor "#555555"), ("shape", VShape Octahedron), ("size", VSize 0.4), ("visible", VVisible True)]
+			       ("size", VSize (1.0 * scale)), ("shapedetail", VShapedetail 10), ("visible", VVisible True)]
+defaultItemMap = SM.fromList [("color", VColor "#008800"), ("shape", VShape Cube), ("size", VSize (0.75 * scale)), ("visible", VVisible True)]
+defaultTagMap  = SM.fromList [("color", VColor "#555555"), ("shape", VShape Octahedron), ("size", VSize (0.4 * scale)), ("visible", VVisible True)]
 
 -- For convenience, here are the default attributes as lists:
 defaultStepAttr = map snd$ SM.toList defaultStepMap
@@ -329,21 +330,23 @@ t29 = traceToGUI $ tracefile sample_trace
 
 t30 = playback emptyGUIState t29 
 
---------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
 -- Another way to do it would be to construct a reverse-log as we go,
 -- for each attribute set, store a command which woud set it back to
 -- the old attribute.
-
+----------------------------------------------------------------------------------------------------
 
 -- playback takes a forward and reverse sequence of actions.  To play
 -- forward it reads from one tape, and reverse the other.  
 -- It also must model the state of the GUI to be able to reverse actions.
+
 --playback :: GUIState -> [GUIAction] -> [GUIAction] -> IO ()
 
 playback :: GUIState -> [GUIAction] -> IO ()
 
 -- Should we actually create a node for every dynamic instance?
 full_dynamic_graph = True
+
 
 playback state fwd = 
   do putStrLn$ "[cnc] Vizualizing trace using ubigraph."
@@ -383,13 +386,11 @@ playback state fwd =
    --------------------------------------------------------------------------------
    -- Main loop
    --------------------------------------------------------------------------------
-   let loop idmap state rvrs fwd = 
-
-         -- For now just play forward, maximum speed:
+   let step_forward idmap fwd = 
 	case fwd of 
-	 [] -> R.lift$ putStrLn "playback finished: no more actions!"
+	 [] -> do R.lift$ putStrLn "playback finished: no more actions!"
+		  return idmap
 	 hd:tl -> 
-	   let idmap' = 
                 case hd of 
   	         AddV pr@(atom, tag) -> 
 		  do id <- newVertex
@@ -414,17 +415,17 @@ playback state fwd =
 				  return idmap
 		 _ -> return idmap
 		 --x -> error$ "playback: unhandled GUIAction: "++ show x
-           in
-	      do newidmap <- idmap'
-		 --R.lift$ usleep (100 * 1000)
-		 --Control.Concurrent.threadDelay
-		 loop newidmap
-		      (updateState state hd) 
-  		      (buildRevAction state hd : rvrs) 
-		      tl
 
-       
-    in loop (M.fromList [((toAtom "env",""), envID)]) state [] fwd
+    -- For now just play forward, maximum speed:
+   let loop idmap state rvrs fwd = 
+         do newidmap <- step_forward idmap fwd 
+	    --R.lift$ usleep (100 * 1000)
+	    --Control.Concurrent.threadDelay
+	    loop newidmap
+		 (error "no state atm") --(updateState state hd) 
+  		 (error "no rev action") --(buildRevAction state hd : rvrs) 
+		 (tail fwd)
+   loop (M.fromList [((toAtom "env",""), envID)]) state [] fwd
 
 -- This simply needs to not conflict with the auto-assigned Ubigraph ids:
 envID = 1
