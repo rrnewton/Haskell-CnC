@@ -46,13 +46,13 @@ obj_ref a   = (t$ step_obj$ fromAtom a)
 
 ----------------------------------------------------------------------------------------------------
 
-emitCppOld :: StringBuilder m => CncSpec -> m ()
-emitCppOld (spec @ CncSpec{..}) = do 
+emitCpp :: StringBuilder m => Bool -> CncSpec -> m ()
+emitCpp old_05_api (spec @ CncSpec{..}) = do 
 
    -- First we produce the header (a quasiquoted multiline string):
    --------------------------------------------------------------------------------
    -- I love quasiquoting but for now [2010.07.23] the dependencies are complicated and it
-   -- also makes the resulting binary 3X bigger (it shouldn't!?).
+   -- also makes the resulting binary 3X bigger (it shouldn't!?).  It adds 12mb to the binary.
 {-
    putS$ [$istr|    
  #ifndef #{appname}_H_ALREADY_INCLUDED
@@ -84,8 +84,9 @@ struct #{appname}_context;
    putS  "#include <cnc/cnc.h>\n"
    putS  "#include <cnc/debug.h>\n"
 
-   putS  "// Forward declaration of the context class (also known as graph)\n"
-   putS$ "struct "++appname++"_context;\n\n"
+   -- [2010.08.16] This is an INSUFFICIENT forward declaration:
+   --putS  "// Forward declaration of the context class (also known as graph)\n"
+   --putS$ "struct "++appname++"_context;\n\n"
 
    --putS  "// Next this generated file contains prototypes for each step implementation:\n"
    putS  "// The user's step types should be defined SEPARATELY from this header, and must \n"
@@ -104,11 +105,19 @@ struct #{appname}_context;
 		                  Nothing -> error$ "Tag collection '"++ show name ++"' missing type, needed for C++ codegen!"
 		                  Just ty -> ty)
 		prescribers  
+       privcontext stp = textAtom stp <> t"_context"
+       privcontext_member stp = t"m_priv_" <> privcontext stp 
 		
    forM_ (zip stepls tagtys) $ \ (stp,ty) ->
      do emitStep appname (fromAtom stp) ty 
         putS "\n\n"
    putS  "*/\n"
+
+
+   when (not old_05_api) $ do 
+     putS$ "\n\n// Forward declarations for private contexts.\n"
+     forM_ stepls $ \stp -> do
+	putD$ t"class " <> privcontext stp <> semi
 
    ------------------------------------------------------------
    -- Emit the main context class
@@ -127,10 +136,11 @@ struct #{appname}_context;
 
      t "\n  public:" : 
 
-     t "// Step collections members:" : 
-     ((flip map) stepls $ \ stp -> 
-      t "CnC::step_collection" <> angles (textAtom stp) <+> (t$ step_obj$ fromAtom stp) <> semi
-     ) ++      
+     (if old_05_api then [] else  
+       t "// Step collections members:" : 
+       ((flip map) stepls $ \ stp -> 
+         t "CnC::step_collection" <> angles (textAtom stp) <+> (t$ step_obj$ fromAtom stp) <> semi
+       )) ++      
 
      t "": t "// Tag collections members:" : 
      ((flip map) (AM.toList tags) $ \ (tg,mty) -> 
@@ -147,72 +157,14 @@ struct #{appname}_context;
                            angles (dType ty1 <>commspc<> dType ty2) <+> textAtom it <> semi
      ) ++ 
 
-     [space, t "// The context class constructor: "] ++
-     [hangbraces 
-       (maincontext <> parens empty <+> colon $$
-	-- Initializer list:
-	(nest 6 $ vcat $ punctuate commspc $ 
-	 t "// Initialize step collections" :
-         ((flip map) stepls $ \ stp -> 
-	   (t$ step_obj$ fromAtom stp) <> parens (t"this") 
-	 ) ++
+     [space, t "// Pointers to (children) private contexts:" ] ++
+     ((flip map) stepls $ \ stp -> 
+       privcontext stp <> t"*" <+> privcontext_member stp <> semi
+      )++ 
+     
 
-	 t "// Initialize tag collections" :
-	 ((flip map) (AM.toList tags) $ \ (tg,Just ty) -> 
-	   textAtom tg <> parens (t "this, false") 
-	 ) ++ 
-	 t "// Initialize item collections" :
-	 ((flip map) (AM.toList items) $ \ (it,Just (ty1,ty2)) -> 
-  	   textAtom it <> parens (t "this")
-	 )))
-       indent 
-       -- Body of the constructor
-       (vcat $ 
-         [-- Create objects for all step collections:
-	  -- (vcat$ (flip map) stepls $ \ stp -> 
-	  --  (t$ step_obj$ fromAtom stp) <> t" = new " <> textAtom stp <> parens empty <> semi
-	  -- ),	  
-
-          -- Generate prescribe relations first [mandatory]:
-	  (vcat $ (flip map) (zip stepls prescribers) $ \ (stp,tg) ->
-           let privcontext = textAtom stp <> t"_context" in
-           t"//prescribe" <> parens (pad$ hcat $ punctuate commspc $ 
-				     [ textAtom tg, 
-				       obj_ref stp, 
-				       t"CnC::default_tuner< " <> textAtom tg <>commspc<> privcontext <> t" >",
-				       privcontext <> parens (t"this")
-				     ])
-
-
-
-           <> semi),
-
-        --t"\n#ifdef INVASIVE", 
-         -- Next, consume relations:
-	(let egs = concat $ 
-	           map (\ (a,b,_) -> 
-			      case (lab graph a, lab graph b) of 
-				 (Just (CGItems i), Just (CGSteps s)) -> [(i,s)]
-				 _ -> []) $ 
-		   labEdges graph in 
-	 vcat $ (flip map) egs $ \ (a,b) ->
-          t"//consume" <> parens (obj_ref b <> commspc <> (t$ fromAtom a)) <> semi),
-
-         -- Finally, produce relations:
-	(let egs = concat $ 
-	           map (\ (a,b,_) -> 
-			      case (lab graph a, lab graph b) of 
-				 (Just (CGSteps s), Just (CGItems i)) -> [(s,i)]
-			         (Just (CGSteps s), Just (CGTags  t)) -> [(s,t)]
-				 _ -> []) $ 
-		   labEdges graph in 
-	 vcat $ (flip map) egs $ \ (a,b) ->
-          t"//produce" <> parens (obj_ref a <> commspc <> (t$ fromAtom b)) <> semi)
-
-        --t"\n#endif"
-	     
-        ])
-       ] ++
+     [space, t "// The context class constructor (prototype:) "] ++
+     [maincontext <> parens empty <> semi]++
 
      [space, t "// The context class destructor: "] ++
      [hangbraces 
@@ -230,13 +182,12 @@ struct #{appname}_context;
    ------------------------------------------------------------   
    
    -- INVARIANT! Due to error checking above, we can omit some error checking here:
-   putS$ "\n\n// Now we define 'private contexts'.\n"
-   putS$ "// These allow steps to exist in their own little universes with special properties:\n" 
-
-   forM_ stepls $ \stp -> 
-     do let privcontext = textAtom stp <> t"_context"
+   when (not old_05_api) $ do 
+     putS$ "\n\n// Next we define 'private contexts'.\n"
+     putS$ "// These allow steps to exist in their own little universes with special properties:\n" 
+     forM_ stepls $ \stp -> do
 	putD$ 
- 	 cppclass privcontext
+ 	 cppclass (privcontext stp <+> colon <+> t"public CnC::context" <> angles (privcontext stp) )
 	  (--t "\n  private:" $$
 	   --t "// A pointer to the main context for the application.  This context is a wrapper for that one:" $$ 
 	   --maincontext <> t" & m_parent;"  $$ 
@@ -277,7 +228,7 @@ struct #{appname}_context;
 	   ) $$
 	   
 	   t""$$ t "// Constructor for the private/custom context: " $$	   
-	   hangbraces (privcontext <> parens (maincontext <> t" & p") <+> colon $$ 
+	   hangbraces (privcontext stp <> parens (maincontext <> t" & p") <+> colon $$ 
 		       (nest 6 $ vcat $ 
 			(flip map) (AM.toList items) $ \ (it,Just (ty1,ty2)) -> 
 			textAtom it <> parens (t"p") <> commspc ) $$
@@ -289,6 +240,77 @@ struct #{appname}_context;
 	   -- Have to wrap tag collections as well just to redirect references to the main context:
 	  )
 
+   ------------------------------------------------------------
+   -- Main Context constructor
+   ------------------------------------------------------------
+   putS "\n\n"
+   when (not old_05_api)$ putS "// Finally, define the constructor for the main context AFTER the private contexts are defined:\n"
+   putD $ 
+     (hangbraces 
+       (maincontext <> t"::" <> maincontext <> parens empty <+> colon $$
+     	-- Initializer list:
+     	(nest 6 $ vcat $ punctuate commspc $ 
+
+         (if old_05_api then [] else  
+     	   t "// Initialize step collections" :
+           ((flip map) stepls $ \ stp -> 
+	      privcontext_member stp <> parens (t"new "<> privcontext stp <> parens (t"*this")) <> commspc $$
+	      -- For now ALWAYS use a private context
+     	      (t$ step_obj$ fromAtom stp) <> parens (privcontext_member stp)
+     	   )) ++
+
+     	 t "// Initialize tag collections" :
+     	 ((flip map) (AM.toList tags) $ \ (tg,Just ty) -> 
+     	   textAtom tg <> parens (t "this, false") 
+     	 ) ++ 
+     	 t "// Initialize item collections" :
+     	 ((flip map) (AM.toList items) $ \ (it,Just (ty1,ty2)) -> 
+     	   textAtom it <> parens (t "this")
+     	 )))
+       indent 
+       -- Body of the constructor
+       (vcat $ 
+         [-- Create objects for all step collections:
+     	  -- This was an intermediate step in our API evolution:
+     	  -- (vcat$ (flip map) stepls $ \ stp -> 
+     	  --  (t$ step_obj$ fromAtom stp) <> t" = new " <> textAtom stp <> parens empty <> semi
+     	  -- ),	  
+
+          -- Generate prescribe relations first [mandatory]:
+     	  (vcat $ (flip map) (zip stepls prescribers) $ \ (stp,tg) ->
+           t"prescribe" <> parens (pad$ hcat $ punctuate commspc $ 
+     				     [ textAtom tg
+     				     , if old_05_api 
+     				       then textAtom stp <> parens empty
+     				       else obj_ref stp
+     				     --,  t"CnC::default_tuner< " <> textAtom tg <>commspc<> privcontext <> t" >"
+     				     --,  privcontext <> parens (t"this")
+     				     ])
+           <> semi),
+
+          -- Next, consume relations:
+     	  if old_05_api then empty else 
+     	    (let egs = concat $ 
+     	           map (\ (a,b,_) -> 
+     			      case (lab graph a, lab graph b) of 
+     				 (Just (CGItems i), Just (CGSteps s)) -> [(i,s)]
+     				 _ -> []) $ 
+     		   labEdges graph in 
+     	     vcat $ (flip map) egs $ \ (a,b) ->
+              t"//consume" <> parens (obj_ref b <> commspc <> (t$ fromAtom a)) <> semi),
+          -- Finally, produce relations:
+     	  if old_05_api then empty else 
+     	    (let egs = concat $ 
+     	           map (\ (a,b,_) -> 
+     			      case (lab graph a, lab graph b) of 
+     				 (Just (CGSteps s), Just (CGItems i)) -> [(s,i)]
+     			         (Just (CGSteps s), Just (CGTags  t)) -> [(s,t)]
+     				 _ -> []) $ 
+     		   labEdges graph in 
+     	     vcat $ (flip map) egs $ \ (a,b) ->
+              t"//produce" <> parens (obj_ref a <> commspc <> (t$ fromAtom b)) <> semi)
+        ])
+       )
 
 
    ------------------------------------------------------------

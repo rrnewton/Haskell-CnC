@@ -61,8 +61,8 @@ options =
      , Option []        []          (NoArg NullOpt)  "Translating to and from .cnc specification files:"
      , Option []        ["----------------"]  (NoArg$ error "internal problem")  "----------------------------------------------------------------------"
      , Option ['h']     ["haskell"] (NoArg Haskell)      "translate spec to Haskell code"
-     , Option []        ["cpp"]     (NoArg Cpp)          "translate spec to C++ code"
-     , Option ['c']     ["cppold"]  (NoArg CppOld)       "translate spec to C++ code (legacy C++ API) [default]"
+     , Option []        ["cpp"]     (NoArg Cpp)          "translate spec to C++ code [default]"
+     , Option ['c']     ["cppold"]  (NoArg CppOld)       "translate spec to C++ code (legacy 0.5 API)"
      , Option ['o']     ["output"]  (ReqArg Output "FILE") "direct output to FILE instead of default"
 
 
@@ -176,7 +176,7 @@ main2 argv = do
 
   let mode_option o = o `elem` [Cpp, CppOld, Haskell] 
       mode = case filter mode_option opts of
-               [] -> CppOld
+               [] -> Cpp
   	       [o] -> o 
   	       ls -> defaultErr ["\nAsked to generate output in more than one format!  Not allowed presently. "++show ls++"\n"]
       verbose = Verbose `elem` opts
@@ -238,15 +238,16 @@ main2 argv = do
     CppOld -> 
        do let outname = takeDirectory file </> appname ++ ".h"
 	  outhand <- openFile outname WriteMode
-	  putStrLn$ "\nGenerating header, output to: " ++ outname
-	  writeSB outhand $ (emitCppOld graph :: SimpleBuilder ())
+	  putStrLn$ "\nGenerating header (legacy CnC 0.5 API), output to: " ++ outname
+	  writeSB outhand $ (emitCpp True graph :: SimpleBuilder ())
 	  hClose outhand
     Cpp ->        
        do let outname = takeDirectory file </> appname ++ ".h"
 	  outhand <- openFile outname WriteMode
 	  putStrLn$ "\nGenerating header, output to: " ++ outname
-	  writeSB outhand $ (emitCppOld graph :: SimpleBuilder ())
+	  writeSB outhand $ (emitCpp False graph :: SimpleBuilder ())
 	  hClose outhand
+
 --error "New C++ API Not implemented yet!"
     Haskell -> 
        do let outname = takeDirectory file </> appname ++ "_header.hs"
