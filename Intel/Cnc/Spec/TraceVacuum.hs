@@ -9,7 +9,7 @@
 -- Original Author: Ryan Newton
 ----------------------------------------------------------------------------------------------------
 
-module Intel.Cnc.Spec.Vacuum where
+module Intel.Cnc.Spec.TraceVacuum where
 
 import Data.Maybe
 import Control.Monad

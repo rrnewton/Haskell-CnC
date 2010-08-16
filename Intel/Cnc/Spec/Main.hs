@@ -24,7 +24,7 @@ import System.IO
 import System.IO.Unsafe
 import System.Exit
 
-import Intel.Cnc.Spec.Vacuum
+import Intel.Cnc.Spec.TraceVacuum
 
 -- These expand the file size quite a bit.  Not committing to include right now:
 -- #define CNCVIZ

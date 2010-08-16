@@ -19,3 +19,47 @@ Things to work on:
   * Remove lingering IORef usages and replace with HotVar type.
 
 
+--------------------------------------------------------------------------------
+  Translator:
+--------------------------------------------------------------------------------
+
+Tag functions:
+
+ (*) Generate tag-function-correctess-enforcing code for all gets and puts. 
+
+Traces: 
+ (*) Currently the system reads traces but doesn't record them to disk
+     (in compressed, binary format)
+
+ (*) Ubigraph Trace visualization works but doesn't allow reversing
+     time and controlling playback rate.
+     (Many other feature enhancements here too.)
+
+ (*) Synthesize .cnc spec from trace.  Fit (N-dimensional, linear) tag functions to traces.
+
+Hierarchical Partitioning (Harch):
+
+ (*) Generate code for each harch partition (which will at the very
+     least order the collections and allow inlining a subgraph into one
+     execute method).
+
+Translation:
+
+ (*) New API is supported, but advanced optimizations remain unimplemented.
+
+   -- "Dense item collection" optimization is first on the list.  
+      Step 1: allow user to manually say that an item collection is dense.
+      Step 2: infer that downstream item collections are dense
+              starting from dense ones + tag functions.
+
+
+Even more experimental / future-workish:
+
+ (*) Integrate wih Parallel Advisor, adapting it so that it can
+     provide helpful feedback on single-assignment use of memory.
+
+
+
+ (*) Fix lexSpan so that it gets the whole token not just its start.
+
+ PRUNE INVISIBLE LINES..

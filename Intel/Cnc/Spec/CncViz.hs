@@ -5,7 +5,7 @@
 ----------------------------------------------------------------------------------------------------
 module Intel.Cnc.Spec.CncViz where
 
-import Intel.Cnc.Spec.Vacuum
+import Intel.Cnc.Spec.TraceVacuum
 import Intel.Cnc.Spec.CncGraph
 import Intel.Cnc.Spec.Curses
 
@@ -23,7 +23,7 @@ import Control.Monad
 import qualified Control.Monad.Reader as R
 
 import Graphics.Ubigraph as Ub
---import Data.GraphViz as Gv
+import qualified Data.GraphViz as Gv
 
 import System.Posix.Unistd
 
