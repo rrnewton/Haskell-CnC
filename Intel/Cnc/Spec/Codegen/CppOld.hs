@@ -187,7 +187,7 @@ struct #{appname}_context;
      putS$ "// These allow steps to exist in their own little universes with special properties:\n" 
      forM_ stepls $ \stp -> do
 	putD$ 
- 	 cppclass (privcontext stp <+> colon <+> t"public CnC::context" <> angles (privcontext stp) )
+ 	 cppclass (privcontext stp) -- <+> colon <+> t"public CnC::context" <> angles (privcontext stp) )
 	  (--t "\n  private:" $$
 	   --t "// A pointer to the main context for the application.  This context is a wrapper for that one:" $$ 
 	   --maincontext <> t" & m_parent;"  $$ 
@@ -254,9 +254,9 @@ struct #{appname}_context;
          (if old_05_api then [] else  
      	   t "// Initialize step collections" :
            ((flip map) stepls $ \ stp -> 
-	      privcontext_member stp <> parens (t"new "<> privcontext stp <> parens (t"*this")) <> commspc $$
 	      -- For now ALWAYS use a private context
-     	      (t$ step_obj$ fromAtom stp) <> parens (privcontext_member stp)
+	      privcontext_member stp <> parens (t"new "<> privcontext stp <> parens (t"*this")) <> commspc $$
+     	      (t$ step_obj$ fromAtom stp) <> parens (t"this") -- (privcontext_member stp)
      	   )) ++
 
      	 t "// Initialize tag collections" :
@@ -277,14 +277,16 @@ struct #{appname}_context;
      	  -- ),	  
 
           -- Generate prescribe relations first [mandatory]:
-     	  (vcat $ (flip map) (zip stepls prescribers) $ \ (stp,tg) ->
+     	  (vcat $ (flip map) (zip3 stepls prescribers tagtys) $ \ (stp,tg,ty) ->
            t"prescribe" <> parens (pad$ hcat $ punctuate commspc $ 
      				     [ textAtom tg
      				     , if old_05_api 
      				       then textAtom stp <> parens empty
-     				       else obj_ref stp
-     				     --,  t"CnC::default_tuner< " <> textAtom tg <>commspc<> privcontext <> t" >"
-     				     --,  privcontext <> parens (t"this")
+     				       else obj_ref stp] ++
+				     if old_05_api then [] else 
+				     [t"CnC::default_tuner< " <> dType ty <>commspc<> privcontext stp <> t" >" <> parens empty
+				      , t"*" <> privcontext_member stp 
+     				      --,  privcontext stp <> parens (t"this")
      				     ])
            <> semi),
 
