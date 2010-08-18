@@ -71,3 +71,13 @@ collapseMaybe (Just (Just x)) = Just x
 
 instance Pretty Atom where
   pPrint atom = text (show atom)
+
+
+fst3 (a,_,_) = a
+snd3 (_,b,_) = b
+thd3 (_,_,c) = c
+
+
+-- "Official" output from our process should be tagged in the following way:
+--cnctag = ""
+cnctag = "[CnC] "

@@ -8,6 +8,7 @@ module Intel.Cnc.Spec.CncViz where
 import Intel.Cnc.Spec.TraceVacuum
 import Intel.Cnc.Spec.CncGraph
 import Intel.Cnc.Spec.Curses
+import Intel.Cnc.Spec.Util
 
 import qualified Data.Graph.Inductive as G
 import Data.Graph.Inductive.Query.DFS
@@ -250,6 +251,7 @@ emptyGUIState = GS AM.empty AM.empty AM.empty
 --pump_size = False
 pump_size = True
 
+--------------------------------------------------------------------------------
 -- First, convert a parsed trace into a series of GUI actions:
 traceToGUI :: [CncTraceEvent] -> [GUIAction]
 traceToGUI trace =
@@ -349,7 +351,7 @@ full_dynamic_graph = True
 
 
 playback state fwd = 
-  do putStrLn$ "[cnc] Vizualizing trace using ubigraph."
+  do putStrLn$ cnctag++"Visualizing trace using ubigraph."
      initHubigraph server_url >>= runHubigraph initialize
  where 
   r x = initHubigraph server_url >>= runHubigraph x

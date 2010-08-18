@@ -96,29 +96,29 @@ trans:
 	@echo ================================================================================
 	@echo   Building Translator.
 	@echo ================================================================================
-	$(MAKE) cnctrans
+	$(MAKE) hcnc
 
-release: cnctrans.release
+release: hcnc.release
 
-cnctrans.release: cnctrans.stripped
+hcnc.release: hcnc.stripped
 	@echo Packing executable with UPX:
-	rm -f cnctrans.release
-	upx cnctrans.stripped -o cnctrans.release
+	rm -f hcnc.release
+	upx hcnc.stripped -o hcnc.release
 
-cnctrans.stripped: viz
+hcnc.stripped: viz
 	@echo Stripping executable to reduce size.
-	strip cnctrans -o cnctrans.stripped
+	strip hcnc -o hcnc.stripped
 
-cnctrans: preproc buildtrans
+hcnc: preproc buildtrans
 buildtrans: 
-	ghc $(GHCFLAGS) --make Intel/Cnc/Spec/Main.hs -o cnctrans
+	ghc $(GHCFLAGS) --make Intel/Cnc/Spec/Main.hs -o hcnc
 #	ghc -c Intel/Cnc/Spec/CncLexer.hs 
-#	ghc -O --make Intel/Cnc/Spec/Main.hs -o cnctrans
+#	ghc -O --make Intel/Cnc/Spec/Main.hs -o hcnc
 
 
 viz: preproc
 	ghc $(GHCFLAGS) -c Intel/Cnc/Spec/CncLexer.hs 
-	ghc $(GHCFLAGS) -DCNCVIZ --make Intel/Cnc/Spec/Main.hs -o cnctrans
+	ghc $(GHCFLAGS) -DCNCVIZ --make Intel/Cnc/Spec/Main.hs -o hcnc
 
 preproc: Intel/Cnc/Spec/CncLexer.hs Intel/Cnc/Spec/CncGrammar.hs
 
@@ -139,7 +139,7 @@ wctrans:
 	(cd Intel/Cnc/Spec/; cloc-1.08.pl --by-file CncLexer.temp.hs CncGrammar.temp.hs $(HSOURCE))
 
 cleantrans:
-	rm -f cnctrans cnctrans.bloated cnctrans.stripped cnctrans.release
+	rm -f hcnc hcnc.bloated hcnc.stripped hcnc.release
 	(cd Intel/Cnc/Spec/; rm -f CncGrammar.hs CncLexer.hs *.o *.hi)
 	(cd Intel/Cnc/Spec/Codegen; rm -f *.o *.hi)
 	(cd Intel/Cnc/Spec/tests/; rm -f *.h)
