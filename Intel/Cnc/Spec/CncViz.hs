@@ -135,23 +135,23 @@ cncUbigraph interactive gr =
    
 
 
-simple_graphviz :: (nd1 -> String) -> G.Gr nd1 edge -> IO RunResult
+simple_graphviz :: (nd1 -> String) -> G.Gr nd1 edge -> IO Gv.RunResult
 simple_graphviz lablNode gr = 
 --  runGraphvizCanvas Dot dot Gtk
-  runGraphvizCanvas Dot dot Xlib
+  Gv.runGraphvizCanvas Gv.Dot dot Gv.Xlib
  where 
-  dot = graphToDot params gr
+  dot = Gv.graphToDot params gr
   --params ::  GraphvizParams String Int () String
   --params ::  GraphvizParams String unknown () String
   --params ::  GraphvizParams nd1 edge () nd1
   --params = defaultParams { fmtNode= nodeAttrs }
-  params = nonClusteredParams { fmtNode= nodeAttrs }
+  params = Gv.nonClusteredParams { Gv.fmtNode= nodeAttrs }
   nodeAttrs (node, x) =
-    [ Label $ StrLabel $ lablNode x
-    , Shape Circle
+    [ Gv.Label $ Gv.StrLabel $ lablNode x
+    , Gv.Shape Gv.Circle
   --  , Color [colors !! a]
   --  , FillColor $ colors !! a
-    , Style [SItem Filled []]
+    , Gv.Style [Gv.SItem Gv.Filled []]
     ]
 
 

@@ -35,6 +35,8 @@ Traces:
      time and controlling playback rate.
      (Many other feature enhancements here too.)
 
+ (*) NCurses UI for controlling playback.  Almost finished.
+
  (*) Synthesize .cnc spec from trace.  Fit (N-dimensional, linear) tag functions to traces.
 
 Hierarchical Partitioning (Harch):
@@ -52,6 +54,7 @@ Translation:
       Step 2: infer that downstream item collections are dense
               starting from dense ones + tag functions.
 
+ (*) Language features: module system, step skeletons -- not started yet.
 
 Even more experimental / future-workish:
 
