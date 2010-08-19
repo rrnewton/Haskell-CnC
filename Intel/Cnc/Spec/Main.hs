@@ -372,7 +372,7 @@ main2 argv = do
          Help        -> error "unimplemented"
          Debug       -> error "unimplemented"
          GenTracing  -> error "unimplemented"
-         GenStepDefs -> error "unimplemented"
+         GenStepDefs -> return() --error "unimplemented"
 
 	 m | codegenmode_option m -> return ()
 	 o -> simpleErr mode ("Internal error: Currently unhandled option: "++ show o ++"\n")
@@ -384,27 +384,25 @@ main2 argv = do
 
       graph <- readCnCFile verbosity file 
       let appname = takeBaseName file  
+	  base = takeDirectory file </> appname 
+	  toFile outname msg str = 
+	   do outhand <- openFile outname WriteMode
+	      when (verbosity>0)$ putStrLn$ cnctag++"Generating "++msg++", output to: " ++ outname
+	      writeSB outhand $ str
+	      hClose outhand
 
       case codegenmode of
 	CppOld -> 
-	   do let outname = takeDirectory file </> appname ++ ".h"
-	      outhand <- openFile outname WriteMode
-	      when (verbosity>0)$ putStrLn$ cnctag++"Generating header (legacy CnC 0.5 API), output to: " ++ outname
-	      writeSB outhand $ (emitCpp True graph :: SimpleBuilder ())
-	      hClose outhand
+	   toFile (base ++ ".h") "header (legacy CnC 0.5 API)"
+		  (emitCpp True (GenStepDefs `elem` opts) graph :: SimpleBuilder ())
+
 	Cpp ->        
-	   do let outname = takeDirectory file </> appname ++ ".h"
-	      outhand <- openFile outname WriteMode
-	      when (verbosity>0)$ putStrLn$ cnctag++"Generating header, output to: " ++ outname
-	      writeSB outhand $ (emitCpp False graph :: SimpleBuilder ())
-	      hClose outhand
+	   toFile (base ++ ".h") "header"
+		  (emitCpp False (GenStepDefs `elem` opts) graph :: SimpleBuilder ())
 
 	Haskell -> 
-	   do let outname = takeDirectory file </> appname ++ "_header.hs"
-	      outhand <- openFile outname WriteMode
-	      when (verbosity>0)$ putStrLn$ cnctag++"Generating header, output to: " ++ outname
-	      writeSB outhand $ (emitHaskell graph :: SimpleBuilder ())
-	      hClose outhand
+	   toFile (base ++ "_heaader.hs") "header"
+		  (emitHaskell graph :: SimpleBuilder ())
 
 	_ -> error$ "Not a codegen mode: "++ show codegenmode
 

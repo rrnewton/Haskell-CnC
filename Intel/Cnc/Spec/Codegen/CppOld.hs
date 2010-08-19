@@ -46,8 +46,8 @@ obj_ref a   = (t$ step_obj$ fromAtom a)
 
 ----------------------------------------------------------------------------------------------------
 
-emitCpp :: StringBuilder m => Bool -> CncSpec -> m ()
-emitCpp old_05_api (spec @ CncSpec{..}) = do 
+emitCpp :: StringBuilder m => Bool -> Bool -> CncSpec -> m ()
+emitCpp old_05_api genstepdefs (spec @ CncSpec{..}) = do 
 
    -- First we produce the header (a quasiquoted multiline string):
    --------------------------------------------------------------------------------
@@ -88,15 +88,16 @@ struct #{appname}_context;
    --putS  "// Forward declaration of the context class (also known as graph)\n"
    --putS$ "struct "++appname++"_context;\n\n"
 
-   --putS  "// Next this generated file contains prototypes for each step implementation:\n"
-   putS  "// The user's step types should be defined SEPARATELY from this header, and must \n"
-   putS  "// be in scope before this header is included.\n"
-   putS  "// As a hint, the below are valid example definitions:\n"
-
    ------------------------------------------------------------
    -- Emit the step prototypes:
    ------------------------------------------------------------
-   putS  "/*\n"
+   when (genstepdefs)$ 
+     putS  "\n// Next this generated file contains prototypes for each step implementation:\n"
+   when (not genstepdefs)$ do 
+     putS  "// The user's step types should be defined SEPARATELY from this header, and must \n"
+     putS  "// be in scope before this header is included.\n"
+     putS  "// As a hint, the below are valid example definitions:\n"
+     putS  "/*\n"
    -- Don't include builtins (e.g. "env")
    let stepls = filter (\ x -> not$ x `elem` builtinSteps) $
 		AS.toList steps
@@ -111,7 +112,7 @@ struct #{appname}_context;
    forM_ (zip stepls tagtys) $ \ (stp,ty) ->
      do emitStep appname (fromAtom stp) ty 
         putS "\n\n"
-   putS  "*/\n"
+   when (not genstepdefs)$ putS  "*/\n"
 
 
    when (not old_05_api) $ do 
