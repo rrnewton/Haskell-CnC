@@ -1,26 +1,32 @@
 
+--------------------------------------------------------------------------------
+  Haskell CnC Runtime
+--------------------------------------------------------------------------------
 
 Things to work on:
 
-  * reorganize schedulers into separate modules
+  (*) Explore why including the library into the application still
+      performs better than modular compilation (more inline annotation?).
+    
+  (*) reorganize schedulers into separate modules
 
-  * Finish GMAP implementation and test it.  Make it parameterize on
-    key & value type and try Judy arrays.
+  (*) Finish GMAP implementation and test it.  Make it parameterize on
+      key & value type and try Judy arrays.
 
-  * put tail_putt into use and finish it for all schedulers
+  (*) put tail_putt into use and finish it for all schedulers
 
-  * redo scheduler #8 with continuation monad (e.g. scheduler 9)
+  (*) redo scheduler #8 with continuation monad (e.g. scheduler 9)
 
-  * Fix scheduler 6 resulting in sched 7 which can either "heal" lost
-    workers periodically, or which is non-quiescent but which has all
-    workers spin (maybe with some sleeping) until the finalize action
-    is finished.
-
-  * Remove lingering IORef usages and replace with HotVar type.
+  (*) Fix scheduler 6 resulting in sched 7 which can either "heal"
+      lost workers periodically, or which is non-quiescent but which
+      has all workers spin (maybe with some sleeping) until the
+      finalize action is finished.
+    
+  (*) Remove lingering IORef usages and replace with HotVar type.
 
 
 --------------------------------------------------------------------------------
-  Translator:
+  Spec Translator:
 --------------------------------------------------------------------------------
 
 Tag functions:
@@ -62,7 +68,5 @@ Even more experimental / future-workish:
      provide helpful feedback on single-assignment use of memory.
 
 
-
  (*) Fix lexSpan so that it gets the whole token not just its start.
 
- PRUNE INVISIBLE LINES..

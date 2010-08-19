@@ -26,6 +26,7 @@
   #-}
 
 -- Author: Chih-Ping Chen
+-- Modified by Ryan Newton.
 
 -- This program uses CnC to do cholesky transformation.  
 
@@ -264,11 +265,13 @@ main =
     do ls <- getArgs 
        let [n, b, fname] = 
             case ls of 
--- cholesky 1000 50 m1000.in 4
--- cholesky -v 6 2 m6.in
-              []      -> ["6", "2", "cholesky_m6.in"]
-              ["medium"]   -> ["500", "50", "m500.in"]
-              ["big"]      -> ["1000", "50", "m1000.in"]
+              []           -> ["6",     "2", "cholesky_matrix6.dat"]
+
+              -- To get more data try this:
+	      -- wget http://people.csail.mit.edu/newton/haskell-cnc/datasets/cholesky_matrix_data.tbz
+
+              ["medium"]   -> ["500",  "50", "cholesky_matrix500.dat"]
+              ["big"]      -> ["1000", "50", "cholesky_matrix1000.dat"]
 	      [_,_,_] -> ls
        bool <- fileExist fname
        let fname' = if bool then fname else "examples/"++fname
