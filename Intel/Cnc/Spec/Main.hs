@@ -42,7 +42,7 @@ import Intel.Cnc.Spec.CncViz as Viz
 version = "0.1.3.99"
     
 data Flag 
-    = Verbose Int | Version | Help
+    = Verbose Int | Version | Help | Debug | GenTracing
     | Cpp | CppOld | Haskell
  -- | Input String  | LibDir String
     | Output String
@@ -52,9 +52,8 @@ data Flag
     | DotOpt
     | VizOpt
     | UbigraphOpt
-    | VacuumViz
-    | Vacuum
-    | SynthSpec String
+    | VacuumViz  | Vacuum
+    | SynthSpec String    
   deriving (Show, Eq)
     
 
@@ -74,25 +73,23 @@ common_options =
 					                     Nothing -> Verbose (-1)) "N") 
                                     "verbosity level {0,1,2} default 1 (-v with no arg increments)"
 
-     --, Option []     ["help"]  (NoArg Version)  "print this help information"
+     , Option []     ["help"]  (NoArg Version)  "print this help information"
      ]
 
 translate_options ::  [OptDescr Flag]
 translate_options = 
      [ 
---       Option []        []          (NoArg NullOpt)  "Translating to and from .cnc specification files:"
---     , Option []        ["----------------"]  (NoArg$ error "internal problem")  "----------------------------------------------------------------------"
        Option []        ["cpp"]     (NoArg Cpp)          "translate spec to C++ code [default]"
      , Option ['c']     ["cppold"]  (NoArg CppOld)       "translate spec to C++ code (legacy 0.5 API)"
      , Option ['h']     ["haskell"] (NoArg Haskell)      "translate spec to Haskell code"
---     , Option ['o']     ["output"]  (ReqArg Output "FILE") "direct output to FILE instead of default"
-     , Option ['o']     ["output"]  (ReqArg Output "FILE") "use FILE as a prefix for output header/codinghints"
+     , Option ['o']     ["output"]  (ReqArg Output "FILE")    "use FILE as a prefix for output header/codinghints"
+     , Option []        ["harch"]   (ReqArg HarchPart "FILE") "read Harch graph metadata from FILE (used for translation)"
+     , Option []        ["debug"]   (NoArg Debug)             "generate extra code for correctness checking"
+     , Option []        ["trace"]   (NoArg GenTracing)        "generate code in which tracing is on by default"
 
-     , Option []        ["harch"]     (ReqArg HarchPart "FILE")   "read Harch graph metadata from FILE (used for translation)"
 
 #ifdef CNCVIZ
-     , Option []        []          (NoArg NullOpt)  ""
---     , Option []        ["dot"]      (NoArg DotOpt)   "output CnC graph in graphviz .dot format as well"
+     , Option []        []           (NoArg NullOpt)  ""
      , Option []        ["dot"]      (NoArg DotOpt)   "output CnC graph in graphviz .dot format instead of translating"
      , Option []        ["viz"]      (NoArg VizOpt)   "similar to --dot, a shortcut to visualize a CnC graph in a X11 window"
      , Option []        ["ubigraph"] (NoArg UbigraphOpt)  "like --viz, but visualize on a local Ubigraph server"
@@ -100,8 +97,6 @@ translate_options =
 
      ]
 
---     , Option []        []          (NoArg NullOpt)  ""
---     , Option []        ["vacuum"]  (NoArg Vacuum)  "suck up the output of CnC::debug::trace (on stdin) to create a .cnc spec"
 trace_options ::  [OptDescr Flag]
 trace_options = 
      [ 
@@ -113,12 +108,9 @@ trace_options =
      ]
 
 
---     , Option []        []          (NoArg NullOpt)  "Options to control Harch (the hierarchical partitioner):"
 harchpart_options ::  [OptDescr Flag]
 harchpart_options = 
      [ 
---       Option []        ["harchpart"] (ReqArg HarchPart "FILE") "perform graph partitioning on FILE (set output with -o)"
---       Option []  [] (NoArg NullOpt) "harchpart runs graph partitioning on a .harch file producing a .part.harch file"
        Option ['o']     ["output"] (ReqArg Output "FILE") "output the graph-partitioned harchfile to FILE"
 #ifdef CNCVIZ
      , Option []        ["viz"]    (ReqArg HarchViz "FILE")  "visualize the graph stored in FILE with Harch clustering"
@@ -198,22 +190,13 @@ withCol viv col act =
        --setSGR baseline
 
 main2 argv = do  
-  let defaultErr mode errs = --unsafePerformIO$  do --printHeader
-	 --error $ "ERROR!  " ++
-          -- (if null mode then "" else "(hcnc "++mode++" mode)")
-          -- ++ errs ++ 
-          -- "\nUsage: hcnc mode [OPTION...] files..." ++
-          -- usageInfo "\n\nCommon Options (all modes):" common_options ++
-          -- foldl (\ acc (mode, opts, help) -> acc ++
-	  -- 	 "\n '"++ mode ++"' mode:\n "++ help ++ ":\n"++
-	  -- 	 usageInfo (take 80$ repeat '-') opts)
-          --       "" run_modes
+  let defaultErr mode errs = 
        do 
           --setSGR baseline
-          withCol Vivid Red$ putStr$ "ERROR!  " ++ (if null mode then "" else "(hcnc "++mode++" mode)  ") 
+          withCol Vivid Red$ putStr$ "ERROR!  " ++ (if null mode then "" else "("++hcnc_name++" "++mode++" mode)  ") 
                              ++ errs 
 
-          withCol Dull Green$ putStr$ "\nUsage: hcnc mode [OPTION...] files..." 
+          withCol Dull Green$ putStr$ "\nUsage: "++hcnc_name++" mode [OPTION...] files..." 
 
 	  withCol Vivid Black$ putStr$ "\n\nCommon Options (all modes):"
 
@@ -238,7 +221,7 @@ main2 argv = do
       -- 	     "" -> 
 
       simpleErr "" msg = error$ "ERROR!\n  " ++ msg
-      simpleErr mode msg = error$ "ERROR! (hcnc "++ mode ++" mode)\n  " ++ msg
+      simpleErr mode msg = error$ "ERROR! ("++hcnc_name++" "++ mode ++" mode)\n  " ++ msg
 
   ----------------------------------------------------------------------------------------------------
   -- Read and process option flags:
@@ -249,11 +232,11 @@ main2 argv = do
   let (common_opts,_,_) = getOpt Permute common_options argv
   when (Version `elem` common_opts) $  do printHeader; exitSuccess
 
-  when (null argv) $ defaultErr "" "First argument to hcnc must specify a mode!\n"
+  when (null argv) $ defaultErr ""$ "First argument to "++hcnc_name++" must specify a mode!\n"
   
   let (first:__rest) = argv
       (__mode, __mode_opts, _) = case filter (isPrefixOf first . fst3) run_modes of 
-	       []  -> simpleErr ""$ first ++ " does not correspond to any hcnc mode\n"
+	       []  -> simpleErr ""$ first ++ " does not correspond to any "++hcnc_name++" mode\n"
 	       [m] -> m
 	       ls  -> simpleErr ""$ "Prefix '"++first++"' could refer to multiple modes:  "
 	                          ++ concat (intersperse ", "$ map fst3 ls)

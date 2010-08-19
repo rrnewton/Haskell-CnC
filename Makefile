@@ -91,34 +91,36 @@ examples/test_parfor.o : Intel/Cnc3.hi
 HSOURCE=SrcLoc.hs Main.hs GatherGraph.hs AST.hs Codegen/CppOld.hs \
         CncGraph.hs CncViz.hs Vacuum.hs Curses.hs ReadHarch.hs Util.hs
 
+HCNCNAME=hcnc
+
 trans: 
 	@echo 
 	@echo ================================================================================
 	@echo   Building Translator.
 	@echo ================================================================================
-	$(MAKE) hcnc
+	$(MAKE) $(HCNCNAME)
 
-release: hcnc.release
+release: $(HCNCNAME).release
 
-hcnc.release: hcnc.stripped
+$(HCNCNAME).release: $(HCNCNAME).stripped
 	@echo Packing executable with UPX:
-	rm -f hcnc.release
-	upx hcnc.stripped -o hcnc.release
+	rm -f $(HCNCNAME).release
+	upx $(HCNCNAME).stripped -o $(HCNCNAME).release
 
-hcnc.stripped: viz
+$(HCNCNAME).stripped: viz
 	@echo Stripping executable to reduce size.
-	strip hcnc -o hcnc.stripped
+	strip $(HCNCNAME) -o $(HCNCNAME).stripped
 
-hcnc: preproc buildtrans
+$(HCNCNAME): preproc buildtrans
 buildtrans: 
-	ghc $(GHCFLAGS) --make Intel/Cnc/Spec/Main.hs -o hcnc
+	ghc $(GHCFLAGS) --make Intel/Cnc/Spec/Main.hs -o $(HCNCNAME)
 #	ghc -c Intel/Cnc/Spec/CncLexer.hs 
-#	ghc -O --make Intel/Cnc/Spec/Main.hs -o hcnc
+#	ghc -O --make Intel/Cnc/Spec/Main.hs -o $(HCNCNAME)
 
 
 viz: preproc
 	ghc $(GHCFLAGS) -c Intel/Cnc/Spec/CncLexer.hs 
-	ghc $(GHCFLAGS) -DCNCVIZ --make Intel/Cnc/Spec/Main.hs -o hcnc
+	ghc $(GHCFLAGS) -DCNCVIZ --make Intel/Cnc/Spec/Main.hs -o $(HCNCNAME)
 
 preproc: Intel/Cnc/Spec/CncLexer.hs Intel/Cnc/Spec/CncGrammar.hs
 
@@ -139,7 +141,7 @@ wctrans:
 	(cd Intel/Cnc/Spec/; cloc-1.08.pl --by-file CncLexer.temp.hs CncGrammar.temp.hs $(HSOURCE))
 
 cleantrans:
-	rm -f hcnc hcnc.bloated hcnc.stripped hcnc.release
+	rm -f $(HCNCNAME) $(HCNCNAME).bloated $(HCNCNAME).stripped $(HCNCNAME).release
 	(cd Intel/Cnc/Spec/; rm -f CncGrammar.hs CncLexer.hs *.o *.hi)
 	(cd Intel/Cnc/Spec/Codegen; rm -f *.o *.hi)
 	(cd Intel/Cnc/Spec/tests/; rm -f *.h)

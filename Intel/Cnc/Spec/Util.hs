@@ -81,3 +81,6 @@ thd3 (_,_,c) = c
 -- "Official" output from our process should be tagged in the following way:
 --cnctag = ""
 cnctag = "[CnC] "
+
+hcnc_name = "hcnc"
+--appname = "cnc"
