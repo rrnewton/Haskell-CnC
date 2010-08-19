@@ -1,4 +1,6 @@
 {-# LANGUAGE CPP, NamedFieldPuns #-}
+{-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
+
 module Main where
 
 import Intel.Cnc.Spec.CncLexer hiding (main)
@@ -42,7 +44,7 @@ import Intel.Cnc.Spec.CncViz as Viz
 version = "0.1.3.99"
     
 data Flag 
-    = Verbose Int | Version | Help | Debug | GenTracing
+    = Verbose Int | Version | Help | Debug | GenTracing | GenStepDefs
     | Cpp | CppOld | Haskell
  -- | Input String  | LibDir String
     | Output String
@@ -73,7 +75,7 @@ common_options =
 					                     Nothing -> Verbose (-1)) "N") 
                                     "verbosity level {0,1,2} default 1 (-v with no arg increments)"
 
-     , Option []     ["help"]  (NoArg Version)  "print this help information"
+     , Option []     ["help"]       (NoArg Help)        "print this help information"
      ]
 
 translate_options ::  [OptDescr Flag]
@@ -87,6 +89,11 @@ translate_options =
      , Option []        ["debug"]   (NoArg Debug)             "generate extra code for correctness checking"
      , Option []        ["trace"]   (NoArg GenTracing)        "generate code in which tracing is on by default"
 
+--     , Option []        ["defsteps"] (NoArg GenTracing)$  "[c++] rather than the user defining custom types for each step,\n"++
+--	                                                  "      emit default versions within the generated header"
+--		                                          "      create a standard definition in the generate header"
+     , Option []        ["defsteps"] (NoArg GenStepDefs)$ "[c++] define default step structs in the generated header \n"++
+		                                          "      (rather than custom, user-defined type definitions)"
 
 #ifdef CNCVIZ
      , Option []        []           (NoArg NullOpt)  ""
@@ -190,28 +197,31 @@ withCol viv col act =
        --setSGR baseline
 
 main2 argv = do  
-  let defaultErr mode errs = 
-       do 
-          --setSGR baseline
-          withCol Vivid Red$ putStr$ "ERROR!  " ++ (if null mode then "" else "("++hcnc_name++" "++mode++" mode)  ") 
-                             ++ errs 
+  let 
 
-          withCol Dull Green$ putStr$ "\nUsage: "++hcnc_name++" mode [OPTION...] files..." 
+      print_usage_common = 
+         do withCol Vivid Black$ putStr$ "Common Options (all modes):"
+            putStr$ usageInfo "" common_options 		    
 
-	  withCol Vivid Black$ putStr$ "\n\nCommon Options (all modes):"
-
-          putStr$ usageInfo "" common_options 
-
-          forM_ run_modes $ \ (mode, opts, help) -> do
-
+      mode_usage (mode, opts, help) = do 
 	    withCol Dull Green$ putStr$ "\n '"++ mode ++"' mode:\n "
             --withCol Dull Cyan  $ putStr$ help ++":\n"
 	    withCol Vivid Black  $ putStr$ help ++":\n"
             withCol Dull Red   $ putStr$ take 80$ repeat '-'
-
 	    putStr$ usageInfo ""  opts
+            setSGR []
 
-          setSGR []
+      print_usage_all = 
+       do withCol Dull Green$ putStr$ "Usage: "++hcnc_name++" mode [OPTION...] files..." 
+	  putStr$ "\n\n"
+	  print_usage_common
+          forM_ run_modes mode_usage
+
+      defaultErr mode errs = 
+       do 
+          --setSGR baseline
+          withCol Vivid Red$ putStr$ "ERROR!  " ++ (if null mode then "" else "("++hcnc_name++" "++mode++" mode)  ") ++errs++"\n"
+	  print_usage_all
           putStrLn ""
           error $ "ERROR!  "
 
@@ -234,8 +244,10 @@ main2 argv = do
 
   when (null argv) $ defaultErr ""$ "First argument to "++hcnc_name++" must specify a mode!\n"
   
-  let (first:__rest) = argv
-      (__mode, __mode_opts, _) = case filter (isPrefixOf first . fst3) run_modes of 
+  let helpmode = Help `elem` common_opts
+      (first:__rest) = argv
+      (__mode, __mode_opts, _) = case filter (isPrefixOf first . fst3) run_modes of  
+	       [] | helpmode -> unsafePerformIO$ do { print_usage_all; exitSuccess }
 	       []  -> simpleErr ""$ first ++ " does not correspond to any "++hcnc_name++" mode\n"
 	       [m] -> m
 	       ls  -> simpleErr ""$ "Prefix '"++first++"' could refer to multiple modes:  "
@@ -255,6 +267,8 @@ main2 argv = do
 	     (a,b, argv)
 	else (__mode, __mode_opts, __rest)
 
+  evaluate mode -- Force the above unsafePerformIO 
+
   (opts,files) <- 
      --case getOpt' Permute (mode_opts) rest of
      -- Need common options to avoid error messages:
@@ -262,6 +276,18 @@ main2 argv = do
        (o,n,[], [] ) -> return (filter uncommmon o,n)
        (o,n,bad,[] ) -> simpleErr ""$ "Unrecognized options in "++mode++" mode: "++ concat (intersperse " " bad)
        (_,_,_,errs)  -> simpleErr mode$ concat errs
+
+  when helpmode $ 
+    do --putStrLn "Mode specific options:"
+       let do_mode = mode_usage$ fromJust$ find ((== mode) . fst3) run_modes 
+       case mode of 
+         "harchpart" -> do_mode
+         "trace"     -> do_mode
+         "translate" -> do_mode
+         _ -> error "Really egregious internal error"
+       putStrLn ""
+       print_usage_common
+       exitSuccess
 
   ------------------------------------------------------------	       
   case mode of 
@@ -307,12 +333,13 @@ main2 argv = do
 		exitSuccess
 #endif
 	 SynthSpec file -> error "Internal error, spec synthesis not implemented yet"
-	 Output file -> error "Internal error, trace output not implemented yet"
+	 Output    file -> error "Internal error, trace output not implemented yet"
+
 	 _ -> error$ "Internal error, not handled: "++ show opt
 
       defaultErr mode "Trace mode given nothing to do!"
 
-    ------------------------------------------------------------	       
+   ------------------------------------------------------------	       
    "translate" -> do 
       let codegenmode_option o = o `elem` [Cpp, CppOld, Haskell] 
 	  codegenmode = case filter codegenmode_option opts of
@@ -341,6 +368,11 @@ main2 argv = do
 		putStrLn$ "Done with visualization, exiting without performing any .cnc spec translation."
 		exitSuccess
 #endif
+
+         Help        -> error "unimplemented"
+         Debug       -> error "unimplemented"
+         GenTracing  -> error "unimplemented"
+         GenStepDefs -> error "unimplemented"
 
 	 m | codegenmode_option m -> return ()
 	 o -> simpleErr mode ("Internal error: Currently unhandled option: "++ show o ++"\n")
@@ -374,6 +406,9 @@ main2 argv = do
 	      writeSB outhand $ (emitHaskell graph :: SimpleBuilder ())
 	      hClose outhand
 
+	_ -> error$ "Not a codegen mode: "++ show codegenmode
+
+   _ -> error "Really egregious internal error"
   --------------------------------------------------------------------------------
   -- Finished with mode dispatch
   --------------------------------------------------------------------------------
