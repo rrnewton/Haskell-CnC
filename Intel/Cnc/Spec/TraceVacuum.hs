@@ -70,29 +70,76 @@ cnc_identifier =
 
 traceline :: NameTag -> Parser CncTraceEvent
 traceline stepctxt = 
- let nametag end = 
+ let nametag open close = 
        do name <- cnc_identifier
           char ':'; whitespc
           -- Then we grab EVERYTHING up until the ">" that ends things
-          tag <- many1 (noneOf end)
+          --tag <- many1 (noneOf end)
+	  tag <- balanced_nest open close
 	  return (name,tag)
 
      ruletemplate str open close fn = 
-       try (do string (str++" "++open); whitespc
-               pr <- nametag close
+       try (do string (str++" "++[open]); whitespc
+               pr <- nametag open close
                return$ fn pr)
  in
-  ruletemplate "Start step" "("")" StartStep <|> 
-  ruletemplate "End step"   "("")" EndStep <|> 
-  ruletemplate "Put tag"    "<"">" (PutT stepctxt) <|> 
-  ruletemplate "Put item"   "[""]" (PutI stepctxt) <|> 
-  ruletemplate "Get item"   "[""]" (GetI stepctxt) <|> 
-  ruletemplate "GetX item"  "[""]" (GetI stepctxt) <|>
+  ruletemplate "Start step" '('')' StartStep <|> 
+  ruletemplate "End step"   '('')' EndStep <|> 
+  ruletemplate "Put tag"    '<''>' (PutT stepctxt) <|> 
+  ruletemplate "Put item"   '['']' (PutI stepctxt) <|> 
+  ruletemplate "Get item"   '['']' (GetI stepctxt) <|> 
+  ruletemplate "GetX item"  '['']' (GetI stepctxt) <|>
     do string "Prescribe"; whitespc 
        tags <- cnc_identifier; whitespc
        step <- cnc_identifier
        return (Prescribe tags step)
 
+
+
+
+-- This is any old text but it must be balanced in the delimeters of interest: e.g. () <> []
+balanced_nest :: Char -> Char -> Parser String
+balanced_nest open close = loop [] 0
+ where 
+  loop acc n = 
+       do c<-noneOf [open,close]; loop (c:acc) n
+   <|> do c<-char open;           loop (c:acc) (n+1)
+   <|> do c<-char close; 
+          if n==0 then return (reverse acc)
+  	   else loop (c:acc) (n-1)
+
+t27 = tryParse (balanced_nest '(' ')') "foo (a) (b c) bar) baz"
+
+
+ -- <> do char '['; balanced_nest end p ab (sb+1)
+
+ -- <> do char ')'; if p == 0 && end == ')' then return acc else balanced_nest end p ab (sb+1)
+
+
+
+
+  -- loop acc 0 = (do char end; return acc) <|> deeper acc 0
+  -- loop acc n = deeper acc n
+  -- deeper acc n = 
+  --    do many (noneOf [open,end])
+  -- 	(do char open
+  --           inner <- deeper acc (n+1)
+  -- 	    char end)
+  -- 	many (noneOf [open,end])
+
+   
+
+	--inner <- balanced_nest
+-- do char '('; balanced_nest end (p+1) ab sb
+
+--   loop 0 0 0
+--  where 
+--   loop p ab sb = 
+ --    do char '('; balanced_nest end (p+1) ab sb
+ -- <> do char '<'; balanced_nest end p (ab+1) sb
+ -- <> do char '['; balanced_nest end p ab (sb+1)
+
+ -- <> do char ')'; if p == 0 && end == ')' then return acc else balanced_nest end p ab (sb+1)
 
 ------------------------------------------------------------------------------------------------------------------------
 
@@ -136,6 +183,8 @@ t25 = mapM_ print  $ map (tryParse (traceline defaultStepContext)) sample_trace
 
 --t26 = mapM_ print  $ catMaybes $ tryParse $ tracefile sample_trace
 t26 = tracefile sample_trace
+
+
 
 sample_trace = 
  ["Prescribe tags fib_step",

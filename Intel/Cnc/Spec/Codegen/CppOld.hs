@@ -350,3 +350,77 @@ dType ty = case ty of
   --TTuple ls -> error$ "CppOld codegen: Tuple types of length "++ show (length ls) ++" not standardized yet!"
 
 
+------------------------------------------------------------------------------------------------------------------------
+-- Tag function correctness checking code.
+------------------------------------------------------------------------------------------------------------------------
+
+
+------------------------------------------------------------------------------------------------------------------------
+-- CODING HINTS GENERATION
+------------------------------------------------------------------------------------------------------------------------
+
+codingHints :: StringBuilder m => Bool -> CncSpec -> m ()
+
+codingHints old_05_api (spec @ CncSpec{..}) =
+ do putD $ 
+     (hangbraces 
+       (t"foo") 4 (t"baz")
+       )
+    
+
+{-
+
+/****************************************************************************
+/* The following code provides an example of what the user code that invokes
+/* this graph might look, using the inputs and outputs defined for the 
+/* environment (ENV).
+/***************************************************************************/
+    #include "mandel.h"
+    
+    // Create an instance of the context class which defines the graph
+    mandel_context c;
+    
+    // Debug trace can be enabled for a collection with the call:
+    //     CnC::debug::trace( c.position, "position" );
+    
+    // For each item from the environment (ENV), put the item using the  
+    // proper tag    
+    c.data.put( data_Tag, ... );
+    c.max_depth.put( max_depth_Tag, ... );
+    
+    // For each tag value from the environment (ENV), put the tag into
+    // the proper tag collection
+    c.position.put( position_Tag );
+    
+    // Wait for all steps to finish
+    c.wait();
+    
+    // For each output to the environment (ENV), get the item using the 
+    // proper tag    
+    int pixel_ENV;
+    pixel.get( pair(...), pixel_ENV );
+
+/*********************************************************************
+/* The following code provides an example of what the user Step code 
+/* might look like for this Step, using the inputs and outputs defined
+/* in the context.
+/********************************************************************/
+int compute::execute(const pair & t, mandel_context & c ) const
+{
+     
+    // For each input item for this step retrieve the item using the proper tag value
+    complex data_instance;
+    c.data.get( pair(...), data_instance );
+    int max_depth_instance;
+    c.max_depth.get( int(...), max_depth_instance );
+
+    // Step implementation logic goes here
+    ...
+
+    // For each output item for this step, put the new item using the proper tag value   
+    c.pixel.put( pair(...), ... );
+
+    return CnC::CNC_Success;
+}
+
+-}

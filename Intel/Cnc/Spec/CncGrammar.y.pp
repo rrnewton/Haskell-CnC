@@ -185,6 +185,7 @@ Instances
 Instance 
   : var                                    { InstName       (lexSpan $1) (lexStr $1) }
   | var '[' TagExps ']'                    { InstItemCol    LL (lexStr $1) $3 }
+--  | var '<' TagExps '>'                    { InstStepOrTags LL (lexStr $1) $3 }
   | var '(' TagExps ')'                    { InstStepOrTags LL (lexStr $1) $3 }
 #ifdef LEGACY_SYNTAX
   | '<' Var '>'                            { InstTagCol  LL (lexStr $2) [] }
