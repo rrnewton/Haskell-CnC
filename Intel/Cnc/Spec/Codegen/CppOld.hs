@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, QuasiQuotes #-}
+{-# LANGUAGE RecordWildCards, QuasiQuotes, TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
 
@@ -25,6 +25,7 @@ import Text.PrettyPrint.HughesPJClass
 -- QuasiQuoting is too expensive in final binary size:
 -- import Text.InterpolatedString.QQ
 
+import Data.List
 import Data.Maybe
 import Data.Graph.Inductive hiding (empty)
 import Debug.Trace
@@ -38,37 +39,51 @@ import qualified StringTable.AtomSet as AS
 -- don't have explicit step_collection objects.  We make sure to only
 -- allocate one copy of the user's temporary Step() object and then
 -- use its pointer as a key:
-step_obj "env" = "env()"
+step_obj "env" = "env"
 step_obj str = "m_" ++ str 
 
 --obj_ref a   = t"*" <> (t$ step_obj$ fromAtom a)
 obj_ref a   = (t$ step_obj$ fromAtom a)
 
+
+-- The probability of any of the below stuff being reusable is pretty low.
+-- (It's very C++ specific. This whole *strategy* of private context generation is probably pretty C++ specific.)
+-- But I thought I would begin to at least BEGIN to abstract the syntax-construction operations.
+mkPtr d = d <> t"*"
+deref x y = x <> t"." <> y
+
+
+-- initAssign
+-- initAssignCast
+assignCast ty x y = ty <+> x <+> t"=" <+> parens ty <> y <> semi
+assign x y =  toDoc x <+> t"=" <+> toDoc y <> semi
+
+app fn ls = toDoc fn <> (parens$ hcat$ intersperse (t", ")$ map toDoc ls)
+thunkapp fn = app fn ([] :: [Doc])
+
+constructor name args inits body = 
+    hangbraces (app name args <+> colon $$ 
+		nest 10 (vcat$ map_but_last (<>t", ")$ map (\ (a,b) -> a <> parens b) inits)) 
+                indent body
+param ty name = ty <+> name
+mkRef tyD = tyD <> t"&"
+
+class SynChunk a where 
+  toDoc :: a -> Doc
+instance SynChunk String where 
+  toDoc = text
+instance SynChunk Doc where 
+  toDoc = id
+
 ----------------------------------------------------------------------------------------------------
 
-emitCpp :: StringBuilder m => Bool -> Bool -> CncSpec -> m ()
-emitCpp old_05_api genstepdefs (spec @ CncSpec{..}) = do 
+--emitCpp :: StringBuilder m => Bool -> Bool -> CncSpec -> m ()
+-- emitCpp old_05_api genstepdefs (spec @ CncSpec{..}) = do 
+emitCpp :: StringBuilder m => CodeGenConfig -> CncSpec -> m ()
+emitCpp CGC{..} (spec @ CncSpec{..}) = do 
 
-   -- First we produce the header (a quasiquoted multiline string):
+   -- First we produce the header of the file:
    --------------------------------------------------------------------------------
-   -- I love quasiquoting but for now [2010.07.23] the dependencies are complicated and it
-   -- also makes the resulting binary 3X bigger (it shouldn't!?).  It adds 12mb to the binary.
-{-
-   putS$ [$istr|    
- #ifndef #{appname}_H_ALREADY_INCLUDED
- #define #{appname}_H_ALREADY_INCLUDED
-
- #include <cnc/cnc.h>
- #include <cnc/debug.h>
-
-// Forward declaration of the context class (also known as graph)
-struct #{appname}_context;
-
-// Next this generated file contains prototypes for each step implementation:
-|]
--} 
-
-   ------------- This almost looks nicer in emacs anyway: --------------
    putS$ "\n//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"
    putS$ "// This code was GENERATED from a CnC specification, DO NOT MODIFY.\n"
    putS$ "//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n"
@@ -83,13 +98,12 @@ struct #{appname}_context;
 
    putS  "#include <cnc/cnc.h>\n"
    putS  "#include <cnc/debug.h>\n"
+   putS  "#include <cnc/internal/tls.h>\n"
 
    -- [2010.08.16] This is an INSUFFICIENT forward declaration:
-   --putS  "// Forward declaration of the context class (also known as graph)\n"
-   --putS$ "struct "++appname++"_context;\n\n"
 
    ------------------------------------------------------------
-   -- Emit the step prototypes:
+   -- Emit the step prototypes (two possibilities here):
    ------------------------------------------------------------
    when (genstepdefs)$ 
      putS  "\n// Next this generated file contains prototypes for each step implementation:\n"
@@ -98,8 +112,8 @@ struct #{appname}_context;
      putS  "// be in scope before this header is included.\n"
      putS  "// As a hint, the below are valid example definitions:\n"
      putS  "/*\n"
-   -- Don't include builtins (e.g. "env")
-   let stepls = filter (\ x -> not$ x `elem` builtinSteps) $
+   let -- Don't include builtins (e.g. "env"):
+       stepls = filter (\ x -> not$ x `elem` builtinSteps) $
 		AS.toList steps
        prescribers = map (getStepPrescriber spec) stepls
        tagtys = map (\ name -> case tags AM.! name of 
@@ -108,6 +122,7 @@ struct #{appname}_context;
 		prescribers  
        privcontext stp = textAtom stp <> t"_context"
        privcontext_member stp = t"m_priv_" <> privcontext stp 
+       tls_key stp = privcontext stp <> t"_tls_key"
 		
    forM_ (zip stepls tagtys) $ \ (stp,ty) ->
      do emitStep appname (fromAtom stp) ty 
@@ -119,12 +134,30 @@ struct #{appname}_context;
      putS$ "\n\n// Forward declarations for private contexts.\n"
      forM_ stepls $ \stp -> do
 	putD$ t"class " <> privcontext stp <> semi
+     putS$ "\n\n"
+
+   ------------------------------------------------------------
+   -- Prototype for user step wrappers
+   ------------------------------------------------------------   
+   let maincontext = t$ appname++"_context"   
+   let stepwrapper stp = textAtom stp <> t"_step_wrapper"
+
+   when (not old_05_api)$ do
+     putS  "// Forward declaration of the context class (also known as graph)\n"
+     putD$ t"struct " <> maincontext <> t";\n\n"
+
+     putS$ "// Type definitions for wrappers around steps.\n"
+     forM_ (zip stepls tagtys) $ \ (stp,ty) -> do
+	putD$ struct (stepwrapper stp) $ 
+	  textAtom stp <+> t"m_step" <> semi $$
+	  --stepwrapper stp <> parens empty <> semi
+	  t"int execute(" <+> constRefType ty <+> t "tag," <+> maincontext <> t" & c) const;"
+
 
    ------------------------------------------------------------
    -- Emit the main context class
    ------------------------------------------------------------   
    putS$ "\n\n// Here is the definition for the main application context:\n" 
-   let maincontext = t$ appname++"_context"   
 
    putD$ cppclass (maincontext <> t " : public CnC::context" <> angles (pad maincontext)) $ 
      vcat $ 
@@ -140,7 +173,8 @@ struct #{appname}_context;
      (if old_05_api then [] else  
        t "// Step collections members:" : 
        ((flip map) stepls $ \ stp -> 
-         t "CnC::step_collection" <> angles (textAtom stp) <+> (t$ step_obj$ fromAtom stp) <> semi
+	 -- TEMPTOGGLE -- ALWAYS wrap steps for now:
+         t "CnC::step_collection" <> angles (stepwrapper stp) <+> (t$ step_obj$ fromAtom stp) <> semi
        )) ++      
 
      t "": t "// Tag collections members:" : 
@@ -160,23 +194,26 @@ struct #{appname}_context;
 
      [space, t "// Pointers to (children) private contexts:" ] ++
      ((flip map) stepls $ \ stp -> 
-       privcontext stp <> t"*" <+> privcontext_member stp <> semi
+       t "// "<>privcontext stp <> t"*" <+> privcontext_member stp <> semi
       )++ 
      
+     [space, t "// Keys for thread local storage:" ] ++
+     ((flip map) stepls $ \stp -> t"int "<> tls_key stp <> semi) ++ 
 
      [space, t "// The context class constructor (prototype:) "] ++
-     [maincontext <> parens empty <> semi]++
+     [maincontext <> parens empty <> semi]
 
-     [space, t "// The context class destructor: "] ++
-     [hangbraces 
-       (t"~" <> maincontext <> parens empty )
-       indent 
-       -- Body of the constructor
-       empty
-       -- Destroy temporary step objects/collections:
-       -- (vcat$ (flip map) stepls $ \ stp -> 
-       -- 	t"delete " <> (t$ step_obj$ fromAtom stp) <> semi)
-     ]
+     -- [2010.08.19] Don't need the destructor for now:
+     -- [space, t "// The context class destructor: "] ++
+     -- [hangbraces 
+     --   (t"~" <> maincontext <> parens empty )
+     --   indent 
+     --   -- Body of the constructor
+     --   empty
+     --   -- Destroy temporary step objects/collections:
+     --   -- (vcat$ (flip map) stepls $ \ stp -> 
+     --   -- 	t"delete " <> (t$ step_obj$ fromAtom stp) <> semi)
+     -- ]
 
    ------------------------------------------------------------
    -- Emit private contexts for each step:
@@ -194,6 +231,9 @@ struct #{appname}_context;
 	   --maincontext <> t" & m_parent;"  $$ 
 
            t "\n  public:" $$
+
+           t "  int m_scratchpad; // TEMP, testing\n" $$
+
 	   t "// Tag collections are simply aliases to the parents':" $$ 
 	   (vcat$ (flip map) (AM.toList tags) $ \ (tg, Just ty) -> 
 	    text "CnC::tag_collection" <> angles (dType ty) <> t" & " <> textAtom tg <> semi
@@ -204,19 +244,33 @@ struct #{appname}_context;
 	   (vcat $ 
 	    (flip map) (AM.toList items) $ \ (it,Just (ty1,ty2)) -> 
   	    --textAtom it <> parens (t "this")
+
+	    -- Reused bit of syntax for get/put functions:
 	    let f x = hangbraces (t "inline void " <> t x <> parens (dType ty1 <> t" tag, " <> dType ty2 <> t" & ref")) 
-	                         indent (t "m_"<> textAtom it <> t"." <> t x <> t "(tag,ref);") 
+	                         indent 
+				 (t"printf(\"Test %d\\n\", m_context->m_scratchpad++);" $$ 
+				  t "m_"<> textAtom it <> t"." <> t x <> t "(tag,ref);") 
 	        wrapper = textAtom it <> t"_wrapper"
 	        member  = t"m_" <> textAtom it
 	    in
 	    t "// A 'NoOp' wrapper class that does nothing: "$$
+
 	    cppclass wrapper
-	             (t "public:" $$ 
+	             (t "public:" $$  
+		      mkPtr (privcontext stp) <> t" m_context;\n" $$ 
 		      t"CnC::item_collection" <> angles (dType ty1 <>commspc<> dType ty2) <> t" & " <> member <> semi $$ t"" $$
                       t "// The constructor here needs to grab a reference from the main context:" $$
-		      (hangbraces (wrapper <> parens (maincontext <> t" & p") <+> colon <+>
-				   (member <> t "(p." <> textAtom it <> t ")"))
-		       indent empty) $$ 
+		      (constructor wrapper 
+		                   [param (mkRef maincontext)      (t"p"),
+				    param (mkPtr$ privcontext stp) (t"c")]
+		                   [(member, t"p." <> textAtom it)]
+		                   (assign "m_context" "c"))
+
+		      -- (hangbraces (wrapper <> parens (maincontext <> t" & p, " <> 
+		      -- 				      privcontext stp <> t"* c") <+> colon <+>
+		      -- 		   (member <> t "(p." <> textAtom it <> t ")"))
+		      --  indent empty)
+		      $$ 
 		      f "get" $$ 
 		      f "put") $$ 
             t "") $$
@@ -232,7 +286,8 @@ struct #{appname}_context;
 	   hangbraces (privcontext stp <> parens (maincontext <> t" & p") <+> colon $$ 
 		       (nest 6 $ vcat $ 
 			(flip map) (AM.toList items) $ \ (it,Just (ty1,ty2)) -> 
-			textAtom it <> parens (t"p") <> commspc ) $$
+			textAtom it <> parens (t"p, this") <> commspc ) $$
+
 		       (nest 6 $ vcat$ punctuate commspc $ (flip map) (AM.toList tags) $ \ (tg,Just ty) -> 
 		 	 textAtom tg <> parens (t$ "p."++fromAtom tg))
 		      )
@@ -240,6 +295,32 @@ struct #{appname}_context;
 
 	   -- Have to wrap tag collections as well just to redirect references to the main context:
 	  )
+
+
+   ------------------------------------------------------------
+   -- Execute wrapper methods 
+   ------------------------------------------------------------   
+
+   putS$ "\n\n// Execute method wrappers for each step that uses a privaate context:\n"
+   forM_ (zip stepls tagtys) $ \ (stp,ty) -> do
+      putD$ hangbraces 
+	(t"int "<> stepwrapper stp <> t"::execute(" <+> constRefType ty <+> t "tag," <+> maincontext <> t" & c) const")
+	indent $
+
+        assignCast (mkPtr$ privcontext stp) (t"ptr") 
+		   (app "CnC::Internal::CnC_TlsGetValue" [deref (t"c") (tls_key stp)]) $$ 
+
+	hangbraces (t"if " <> parens (t"!ptr")) indent
+		   (assign "ptr" (t"new " <> app (privcontext stp) ["c"]) $$
+		    app "CnC::Internal::CnC_TlsSetValue" [deref (t"c") (tls_key stp), t"ptr" ] 
+		    <> semi) $$
+
+	-- t"printf(\"PTR %p\\n\", ptr);" $$
+
+	t"return" <+> app "m_step.execute" ["tag", "*ptr"] <> semi
+	-- privcontext stp <> t"* ptr = ("<> privcontext stp 
+        --  <> t"*) CnC::Internal::CnC_TlsGetValue" <> parens (t"c." <> tls_key stp) <> semi
+
 
    ------------------------------------------------------------
    -- Main Context constructor
@@ -256,8 +337,8 @@ struct #{appname}_context;
      	   t "// Initialize step collections" :
            ((flip map) stepls $ \ stp -> 
 	      -- For now ALWAYS use a private context
-	      privcontext_member stp <> parens (t"new "<> privcontext stp <> parens (t"*this")) <> commspc $$
-     	      (t$ step_obj$ fromAtom stp) <> parens (t"this") -- (privcontext_member stp)
+	      t"// "<> privcontext_member stp <> parens (t"new "<> privcontext stp <> parens (t"*this")) <> commspc $$
+     	      (t$ step_obj$ fromAtom stp) <> parens (t"this") 
      	   )) ++
 
      	 t "// Initialize tag collections" :
@@ -277,18 +358,22 @@ struct #{appname}_context;
      	  --  (t$ step_obj$ fromAtom stp) <> t" = new " <> textAtom stp <> parens empty <> semi
      	  -- ),	  
 
+          t"CnC::step_collection< "<> textAtom (head stepls)  <>t" > env(this);\n", 
+
           -- Generate prescribe relations first [mandatory]:
      	  (vcat $ (flip map) (zip3 stepls prescribers tagtys) $ \ (stp,tg,ty) ->
            t"prescribe" <> parens (pad$ hcat $ punctuate commspc $ 
      				     [ textAtom tg
      				     , if old_05_api 
      				       then textAtom stp <> parens empty
-     				       else obj_ref stp] ++
-				     if old_05_api then [] else 
-				     [t"CnC::default_tuner< " <> dType ty <>commspc<> privcontext stp <> t" >" <> parens empty
-				      , t"*" <> privcontext_member stp 
-     				      --,  privcontext stp <> parens (t"this")
-     				     ])
+     				       else obj_ref stp] 
+				     -- [2010.08.19] Revamp: don't need tuner/private context here anymore:
+				     -- if old_05_api then [] else 
+				     -- [t"CnC::default_tuner< " <> dType ty <>commspc<> privcontext stp <> t" >" <> parens empty
+				     --  , t"*" <> privcontext_member stp 
+     				     --  --,  privcontext stp <> parens (t"this")
+     				     -- ]
+				  )
            <> semi),
 
           -- Next, consume relations:
@@ -300,7 +385,7 @@ struct #{appname}_context;
      				 _ -> []) $ 
      		   labEdges graph in 
      	     vcat $ (flip map) egs $ \ (a,b) ->
-              t"//consume" <> parens (obj_ref b <> commspc <> (t$ fromAtom a)) <> semi),
+              t"consume" <> parens (obj_ref b <> commspc <> (t$ fromAtom a)) <> semi),
           -- Finally, produce relations:
      	  if old_05_api then empty else 
      	    (let egs = concat $ 
@@ -311,10 +396,18 @@ struct #{appname}_context;
      				 _ -> []) $ 
      		   labEdges graph in 
      	     vcat $ (flip map) egs $ \ (a,b) ->
-              t"//produce" <> parens (obj_ref a <> commspc <> (t$ fromAtom b)) <> semi)
-        ])
-       )
+              t"produce" <> parens (obj_ref a <> commspc <> (t$ fromAtom b)) <> semi), 
 
+          t"", 
+          (vcat$ (flip map) stepls $ \ stp -> 
+	      assign (tls_key stp) 
+	             (thunkapp "CnC::Internal::CnC_TlsAlloc"))
+
+        ]
+          ----------------------------------------
+          -- One more thing, turn on debugging if it has been requested.
+
+	))
 
    ------------------------------------------------------------
    -- Finish up
@@ -349,6 +442,7 @@ dType ty = case ty of
   --TTuple [a,b,c] -> t "Triple" <> angles (hcat$ punctuate commspc (map dType [a,b,c]))
   TTuple ls -> t "cnctup::tuple" <> angles (hcat$ punctuate commspc$ map dType ls)
   --TTuple ls -> error$ "CppOld codegen: Tuple types of length "++ show (length ls) ++" not standardized yet!"
+
 
 
 ------------------------------------------------------------------------------------------------------------------------

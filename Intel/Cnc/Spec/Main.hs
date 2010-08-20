@@ -87,7 +87,7 @@ translate_options =
      , Option ['o']     ["output"]  (ReqArg Output "FILE")    "use FILE as a prefix for output header/codinghints"
      , Option []        ["harch"]   (ReqArg HarchPart "FILE") "read Harch graph metadata from FILE (used for translation)"
      , Option []        ["debug"]   (NoArg Debug)             "generate extra code for correctness checking"
-     , Option []        ["trace"]   (NoArg GenTracing)        "generate code in which tracing is on by default"
+     , Option []        ["tracing"] (NoArg GenTracing)        "generate code in which tracing is on by default"
 
 --     , Option []        ["defsteps"] (NoArg GenTracing)$  "[c++] rather than the user defining custom types for each step,\n"++
 --	                                                  "      emit default versions within the generated header"
@@ -358,9 +358,9 @@ main2 argv = do
 	 _   -> return ()
 
       -- Process options for this mode:
-      forM_ opts $ \opt -> do {
+      config <- foldM (\ cfg opt -> do 
        case opt of 
-
+         Help        -> return cfg
 #ifdef CNCVIZ
 	 UbigraphOpt -> 
 	     do CncSpec{graph} <- readCnCFile verbosity file
@@ -368,15 +368,13 @@ main2 argv = do
 		putStrLn$ "Done with visualization, exiting without performing any .cnc spec translation."
 		exitSuccess
 #endif
+         Debug       -> return cfg{ gendebug=True } 
+         GenTracing  -> return cfg{ gentracing=True } 
+         GenStepDefs -> return cfg{ genstepdefs=True } 
 
-         Help        -> error "unimplemented"
-         Debug       -> error "unimplemented"
-         GenTracing  -> error "unimplemented"
-         GenStepDefs -> return() --error "unimplemented"
-
-	 m | codegenmode_option m -> return ()
+	 m | codegenmode_option m -> return cfg
 	 o -> simpleErr mode ("Internal error: Currently unhandled option: "++ show o ++"\n")
-      }
+       ) default_codegen_config opts
 
       ------------------------------------------------------------
       -- Now do the actual translation (if we get to here):
@@ -394,11 +392,12 @@ main2 argv = do
       case codegenmode of
 	CppOld -> 
 	   toFile (base ++ ".h") "header (legacy CnC 0.5 API)"
-		  (emitCpp True (GenStepDefs `elem` opts) graph :: SimpleBuilder ())
-
+		  (emitCpp config graph :: SimpleBuilder ())
+--True (GenStepDefs `elem` opts)
 	Cpp ->        
 	   toFile (base ++ ".h") "header"
-		  (emitCpp False (GenStepDefs `elem` opts) graph :: SimpleBuilder ())
+		  (emitCpp config graph :: SimpleBuilder ())
+--False (GenStepDefs `elem` opts)
 
 	Haskell -> 
 	   toFile (base ++ "_heaader.hs") "header"

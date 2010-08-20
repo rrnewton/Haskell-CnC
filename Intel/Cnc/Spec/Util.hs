@@ -12,9 +12,6 @@ import Control.Monad.State
 import System.IO
 import StringTable.Atom
 
--- Constant: indentation used across all code generators.
-indent = 4
-
 -- String Builder
 ----------------------------------------------------------------------------------------------------
 -- We abstract the process of creating strings so that we can make our
@@ -78,9 +75,37 @@ snd3 (_,b,_) = b
 thd3 (_,_,c) = c
 
 
+map_but_last fn [] = []
+map_but_last fn [h] = [h]
+map_but_last fn (h:t) = fn h : map_but_last fn t
+
+
+--------------------------------------------------------------------------------
+-- These should be moved to a "globals" file:
+
 -- "Official" output from our process should be tagged in the following way:
 --cnctag = ""
 cnctag = "[CnC] "
 
 hcnc_name = "hcnc"
 --appname = "cnc"
+
+data CodeGenConfig = 
+  CGC { cgverbosity :: Bool 
+      , old_05_api  :: Bool
+      , genstepdefs :: Bool
+      , gentracing  :: Bool
+      , gendebug    :: Bool
+      }
+  deriving Show
+
+default_codegen_config = 
+ CGC {  cgverbosity = False 
+      , old_05_api  = False
+      , genstepdefs = False 
+      , gentracing  = False
+      , gendebug    = False
+     }
+
+-- Constant: indentation used across all code generators.
+indent = 4
