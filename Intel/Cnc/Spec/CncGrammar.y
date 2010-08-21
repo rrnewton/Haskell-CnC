@@ -46,6 +46,8 @@ import Text.PrettyPrint.HughesPJClass
 
 %token 
 
+	tuple		{ L _ LVarId  "tuple" }
+
 	var		{ L _ LVarId  _ }
 	qvar		{ L _ LQVarId _ }
 	int		{ L _ LInteger _ }
@@ -66,6 +68,7 @@ import Text.PrettyPrint.HughesPJClass
 	'<'		{ L _ LReservedOp "<" }
 	'>'		{ L _ LReservedOp ">" }
 
+	'='		{ L _ LVarOp "=" }
 	'+'		{ L _ LVarOp "+" }
 	'-'		{ L _ LVarOp "-" }
 --	'*'		{ L _ LVarOp "*" }
@@ -82,6 +85,8 @@ import Text.PrettyPrint.HughesPJClass
 	dense		{ L _ LReservedId "dense" }
 	prescribes      { L _ LReservedId "prescribes" }
 
+	type            { L _ LReservedId "type" }
+
 	constrain       { L _ LReservedId "constrain" }
 
         eof             { L _ LEOF _ }
@@ -92,7 +97,7 @@ import Text.PrettyPrint.HughesPJClass
 -- The left hand side are the names of the terminals or tokens,
 -- and the right hand side is how to pattern match them.
 
-%nonassoc '<' '>' '<=' '>=' '=='
+%nonassoc '<' '>' '<=' '>=' '==' '='
 %left '+' '-'
 %left '*' '/'
 
@@ -118,16 +123,19 @@ Statements : Statement Statements          { $1 ++ $2 }
 Statement  : Relation ';'                  { [$1] }
            | Decl ';'                      { $1 }
 
-           | Relation eof                  { parseErrorSDoc (getDecor $1) $ text "Premature end of file, possible missing semi-colon." }
+           | type var '=' Type ';'         { [TypeDef (lexPointSpan $2) (tAL $2) $4] }
+--           | type var Type ';'             { [TypeDef (lexPointSpan $2) (tAL $2) $3] }
+
+           -- These are just for better errors:
+           | Relation eof                  { parseErrorSDoc (getDecor $1)   $ text "Premature end of file, possible missing semi-colon." }
            | Decl     eof                  { parseErrorSDoc (getDecorLs $1) $ text "Premature end of file, possible missing semi-colon." }
 
 -- reduce/reduce conflict
 --           | Relation Instance             { parseErrorSDoc (getDecor $2) $ text "Possible missing semi-colon." }
 
-
 Decl :: { [PStatement SrcSpan] } 
 Decl     
-  : steps VarLs                            { map (\x -> DeclareSteps (lexSpan $1) (toAtom$ lexStr x)) $2 }
+  : steps VarLs                            { map (\x -> DeclareSteps (lexSpan $1) (tAL x)) $2 }
 
                                            -- Here we try particularly hard to get good source location info:
   | constrain Instance ':' TagExps         { [Constraints (cLLS $1 (lexSpan $3) $4)  $2 $4] } 
@@ -138,23 +146,23 @@ Decl
   --| constrain  var                           { [Constraints (lexSpan $1) (InstName "foo") []] }
 
 {- #if 0 -}
-  | Mods tags var                          { [DeclareTags (cLL $2 $3) (toAtom$ lexStr $3) Nothing] }
+  | Mods tags var                          { [DeclareTags (cLL $2 $3) (tAL $3) Nothing] }
   -- [2010.07.20] I am having a strange problem making Mods optional:
 --  | Mods tags '<' Type '>' var             { [DeclareTags (lexSpan $2) (lexStr $6) (Just $4)] }
-  | Mod Mods tags '<' Type '>' var         { [DeclareTags (cLL $3 $7) (toAtom$ lexStr $7) (Just $5)] }
-  | tags '<' Type '>' var                  { [DeclareTags (combineSrcSpans (lexSpan $1) (lexSpan $>)) (toAtom$ lexStr $5) (Just $3)] }
+  | Mod Mods tags '<' Type '>' var         { [DeclareTags (cLL $3 $7) (tAL $7) (Just $5)] }
+  | tags '<' Type '>' var                  { [DeclareTags (combineSrcSpans (lexSpan $1) (lexSpan $>)) (tAL $5) (Just $3)] }
 
-  | Mods items var                         { [DeclareItems (cLL $2 $3) (toAtom$ lexStr $3) Nothing] }
-  | Mods items '<' Type ',' Type '>' var   { [DeclareItems (cLL $2 $8) (toAtom$ lexStr $8) (Just ($4, $6))] }
+  | Mods items var                         { [DeclareItems (cLL $2 $3) (tAL $3) Nothing] }
+  | Mods items '<' Type ',' Type '>' var   { [DeclareItems (cLL $2 $8) (tAL $8) (Just ($4, $6))] }
 
 
-  | '<' Type var '>'                       { [DeclareTags (combineSrcSpans (lexSpan $1) (lexSpan $>)) (toAtom$ lexStr $3) (Just $2)] }
+  | '<' Type var '>'                       { [DeclareTags (combineSrcSpans (lexSpan $1) (lexSpan $>)) (tAL $3) (Just $2)] }
   -- Inexplicable problem with this TagExps version, maybe because of '>' not being special...
-  --| '<' Type var ':' TagExps '>'           { [DeclareTags (lexSpan $3) (toAtom$ lexStr $3) (Just $2)] }
-  | '<' Type var ':' VarsOnlyHack '>'      { [DeclareTags (combineSrcSpans (lexSpan $1) (lexSpan $>)) (toAtom$ lexStr $3) (Just $2)] }
+  --| '<' Type var ':' TagExps '>'           { [DeclareTags (lexSpan $3) (tAL $3) (Just $2)] }
+  | '<' Type var ':' VarsOnlyHack '>'      { [DeclareTags (combineSrcSpans (lexSpan $1) (lexSpan $>)) (tAL $3) (Just $2)] }
 
-  | '[' Type var '<' Type '>' ':' TagExps ']' { [DeclareItems (combineSrcSpans (lexSpan $1) (lexSpan $>)) (toAtom$ lexStr $3) (Just ($5, $2))] }
-  | '[' Type var '<' Type '>' ']'             { [DeclareItems (combineSrcSpans (lexSpan $1) (lexSpan $>)) (toAtom$ lexStr $3) (Just ($5, $2))] }
+  | '[' Type var '<' Type '>' ':' TagExps ']' { [DeclareItems (combineSrcSpans (lexSpan $1) (lexSpan $>)) (tAL $3) (Just ($5, $2))] }
+  | '[' Type var '<' Type '>' ']'             { [DeclareItems (combineSrcSpans (lexSpan $1) (lexSpan $>)) (tAL $3) (Just ($5, $2))] }
 
 
 
@@ -206,8 +214,8 @@ TagExps :                                  { []   }
 
 -- TEMP, HACK:
 VarsOnlyHack :                             { []   }
-     | var                                 { [Var (lexSpan $1) (toAtom$ lexStr $1)] }
-     | var ',' VarsOnlyHack                {  Var (lexSpan $1) (toAtom$ lexStr $1) : $3 }
+     | var                                 { [Var (lexSpan $1) (tAL $1)] }
+     | var ',' VarsOnlyHack                {  Var (lexSpan $1) (tAL $1) : $3 }
 
 
 -- This is just for catching errors:
@@ -227,8 +235,8 @@ Var : var                               { $1 }
 
 Exp :: { Exp SrcSpan } -- The haskell type of the result of parsing this syntax class.
 
-Exp : var	             	{ Var (lexSpan $1) (toAtom$ lexStr $1) }
-    | qvar	             	{ Var (lexSpan $1) (toAtom$ lexStr $1) }
+Exp : var	             	{ Var (lexSpan $1) (tAL $1) }
+    | qvar	             	{ Var (lexSpan $1) (tAL $1) }
     | int	             	{ Lit (lexSpan $1) (LitInt $ read (lexStr $1)) }
     | '(' Exp ')'               { $2 }
 
@@ -242,12 +250,13 @@ Exp : var	             	{ Var (lexSpan $1) (toAtom$ lexStr $1) }
     | Exp '<' Exp	        { App (combExpSpans $1 $3) (Var (combineSrcSpans (getDecor $1) (getDecor $>)) (toAtom "<")) [$1, $3] }
     | Exp '>' Exp	        { App (combExpSpans $1 $3) (Var (combineSrcSpans (getDecor $1) (getDecor $>)) (toAtom ">")) [$1, $3] }
 
-    | Exp op Exp	        { App (combExpSpans $1 $3) (Var (combineSrcSpans (getDecor $1) (getDecor $>)) (toAtom$ lexStr $2)) [$1, $3] } 
+    | Exp op Exp	        { App (combExpSpans $1 $3) (Var (combineSrcSpans (getDecor $1) (getDecor $>)) (tAL $2)) [$1, $3] } 
 
 Type 
     : var                       { TSym (toAtom $ lexStr $1) } 
     | Type '*'                  { TPtr $1 } 
     | '(' Types ')'             { TTuple $2 } 
+    | tuple '<' Types '>'       { TTuple $3 } 
 
 Types :                         { [] }
       | Type                    { [$1] }
@@ -260,8 +269,14 @@ Types :                         { [] }
 ----------------------------------------------------------------------------------------------------
 {
 
-cLLS a b c = combineSrcSpans (lexSpan a) $ combineSrcSpans b (getDecorLs c)
+-- Combine two lexical tokens for a source span:
 cLL a b = (lexSpan a) `combineSrcSpans` (lexSpan b)
+-- more obscure, combine two tokens and the first (if it exists) of a list:
+cLLS a b c = combineSrcSpans (lexSpan a) $ combineSrcSpans b (getDecorLs c)
+
+getDecorLs [] = srcLocSpan noSrcLoc
+getDecorLs (h:t) = getDecor h
+
 
 -- All parsers must declair this function, which is called when an error
 -- is detected.  Note that currently we do no error recovery.
@@ -304,12 +319,12 @@ is_comment _ = False
 lexStr :: Lexeme -> String
 lexStr (L _ _ str) = str
 
+tAL = toAtom . lexStr
+
 lexLoc :: Lexeme -> SrcLoc
 lexLoc (L (AlexPn n l c) _ _) = (SrcLoc "" l c)
 
 lexSpan :: Lexeme -> SrcSpan
---lexSpan (L (AlexPn n l c) _ _) = srcLocSpan (SrcLoc "unknownfile" l c)
-
 -- [2010.07.23] We can do a little better by looking at the length of
 -- the string and stretching the src location to include all of it.
 -- DANGER, we assume that Lexemes stay on one line!! (not true of multiline comments)
@@ -318,11 +333,9 @@ lexSpan (L (AlexPn n l c) _ str) =
        end   = mkSrcLoc "" l (c + length str)
    in srcLocSpan start `combineSrcSpans` srcLocSpan end
 
-
-
-
-getDecorLs [] = srcLocSpan noSrcLoc
-getDecorLs (h:t) = getDecor h
+-- Not a span, just a single point:
+--lexPointSpan (L (AlexPn n l c) _ _) = srcLocSpan (SrcLoc "unknownfile" l c)
+lexPointSpan = srcLocSpan . lexLoc
 
 -- Combine the spans in two expressions.
 combExpSpans e1 e2 = combineSrcSpans (getDecor e1) (getDecor e2)

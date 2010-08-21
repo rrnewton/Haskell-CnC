@@ -18,6 +18,7 @@ import Text.Parsec.Char
 import Text.Parsec.Combinator
 import Text.Parsec.String
 
+import Test.HUnit
 import StringTable.Atom
 
 --------------------------------------------------------------------------------
@@ -33,7 +34,7 @@ data CncTraceEvent =
  | StartStep NameTag 
  | EndStep   NameTag 
  | FAIL String
-  deriving Show 
+  deriving (Show, Eq)
 
 -- We should parse tags that we can make sense of, namely scalars and tuples.
 data CncTraceTag = 
@@ -108,43 +109,12 @@ balanced_nest open close = loop [] 0
           if n==0 then return (reverse acc)
   	   else loop (c:acc) (n-1)
 
-t27 = tryParse (balanced_nest '(' ')') "foo (a) (b c) bar) baz"
-
-
- -- <> do char '['; balanced_nest end p ab (sb+1)
-
- -- <> do char ')'; if p == 0 && end == ')' then return acc else balanced_nest end p ab (sb+1)
-
-
-
-
-  -- loop acc 0 = (do char end; return acc) <|> deeper acc 0
-  -- loop acc n = deeper acc n
-  -- deeper acc n = 
-  --    do many (noneOf [open,end])
-  -- 	(do char open
-  --           inner <- deeper acc (n+1)
-  -- 	    char end)
-  -- 	many (noneOf [open,end])
-
-   
-
-	--inner <- balanced_nest
--- do char '('; balanced_nest end (p+1) ab sb
-
---   loop 0 0 0
---  where 
---   loop p ab sb = 
- --    do char '('; balanced_nest end (p+1) ab sb
- -- <> do char '<'; balanced_nest end p (ab+1) sb
- -- <> do char '['; balanced_nest end p ab (sb+1)
-
- -- <> do char ')'; if p == 0 && end == ')' then return acc else balanced_nest end p ab (sb+1)
-
 ------------------------------------------------------------------------------------------------------------------------
 
 
 
+------------------------------------------------------------------------------------------------------------------------
+-- Testing
 ------------------------------------------------------------------------------------------------------------------------
 
 
@@ -164,27 +134,23 @@ tryParse p input
       Right x  -> Just x
 
 
-t19 = runPr (traceline defaultStepContext) "Start step (fib_step: 0)"
+test_traceVacuum = test $
+ let tP = tryParse (traceline defaultStepContext) 
+     sample = map (tryParse (traceline defaultStepContext)) sample_trace
+     isfail (Just (FAIL _)) = True
+     isfail _ = False
+ in
+ [ "traceline1: parse one line" ~: Just (StartStep (toAtom "fib_step","0"))           ~=? tP "Start step (fib_step: 0)"
+ , "traceline2: parse one line" ~: Just (PutT (toAtom "env","") (toAtom "tags","10")) ~=? tP "Put tag <tags: 10>"
+ , "traceline3: parse one line" ~: Nothing                                            ~=? tP "__Put tag <tags: 10>"
 
-t20 = runPr (traceline defaultStepContext) "Put tag <tags: 10>"
-t21 = tryParse (traceline defaultStepContext) "Put tag <tags: 10>"
-t22 = tryParse (traceline defaultStepContext) "__Put tag <tags: 10>"
+ , "sample trace: #fail"    ~:    0 ~=? length (filter isfail sample)
+ , "sample trace: #success" ~:  111 ~=? length (filter (not . isfail) sample)
+ , "sample trace: #noparse" ~:   16 ~=? length (filter (==Nothing) sample)
 
-
-isfail (Just (FAIL _)) = True
-isfail _ = False
-
-t23 = mapM_ print $ filter (not . isfail) $ map (tryParse (traceline defaultStepContext)) sample_trace
-
-t24 = mapM_ print $ filter isfail $ map (tryParse (traceline defaultStepContext)) sample_trace
-
-
-t25 = mapM_ print  $ map (tryParse (traceline defaultStepContext)) sample_trace
-
---t26 = mapM_ print  $ catMaybes $ tryParse $ tracefile sample_trace
-t26 = tracefile sample_trace
-
-
+ , "balanced nesting"       ~:  Just"foo (a) (b c) bar" ~=? tryParse (balanced_nest '(' ')') "foo (a) (b c) bar) baz"
+		              
+ ]
 
 sample_trace = 
  ["Prescribe tags fib_step",

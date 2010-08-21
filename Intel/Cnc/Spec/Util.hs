@@ -102,7 +102,7 @@ data CodeGenConfig =
 default_codegen_config = 
  CGC {  cgverbosity = False 
       , old_05_api  = False
-      , genstepdefs = False 
+      , genstepdefs = True
       , gentracing  = False
       , gendebug    = False
      }

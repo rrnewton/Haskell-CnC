@@ -133,6 +133,9 @@ data PStatement dec =
  | DeclareItems dec Atom (Maybe (Type, Type))
  | DeclareSteps dec Atom 
 
+ -- Type synonyms are of kind * for now...
+ | TypeDef dec Atom Type
+
  | Function
  | DeclareExtern
  | Constraints  dec (CollectionInstance dec) [Exp dec]
@@ -152,6 +155,8 @@ instance Pretty (PStatement dec) where
  pPrint (Constraints _ inst exps) = text "constrain " <> pp inst <+> 
 				    hcat (punctuate (text ", ") $ map pp exps) <> text ";\n"
 
+ pPrint (TypeDef _ nm ty) = text "type"<+> pPrint nm <+> char '=' <+> pPrint ty <> text ";\n"
+
  pPrint (Function )     = text "FUNCTION NOT WORKING YET"
  pPrint (DeclareExtern) = text "DECLARE EXTERN NOT WORKING YET"
 
@@ -168,6 +173,11 @@ instance Decorated PStatement where
      DeclareSteps s name    -> DeclareSteps (f s) name
      Constraints  s inst ls -> Constraints  (f s) (mapDecor f inst) (map (mapDecor f) ls)
 
+     Function -> Function 
+     DeclareExtern -> DeclareExtern 
+     TypeDef      s name ty -> TypeDef      (f s) name ty
+
+
   getDecor stmt = 
    case stmt of 
      Chain (hd:_) _  -> getDecor hd
@@ -177,6 +187,10 @@ instance Decorated PStatement where
      DeclareItems s _ _ -> s
      DeclareSteps s _   -> s
      Constraints  s _ _ -> s
+     TypeDef      s _ _ -> s
+     Function      -> error "getDecor: not implemented yet"
+     DeclareExtern -> error "getDecor: not implemented yet"
+
 
 ------------------------------------------------------------
 data RelLink dec = 

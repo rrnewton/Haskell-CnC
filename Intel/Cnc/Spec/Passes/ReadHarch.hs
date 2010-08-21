@@ -6,7 +6,7 @@
 -- Original Author: Ryan Newton
 ----------------------------------------------------------------------------------------------------
 
-module Intel.Cnc.Spec.ReadHarch where
+module Intel.Cnc.Spec.Passes.ReadHarch where
 
 import Intel.Cnc.Spec.CncGraph
 import Text.Parsec

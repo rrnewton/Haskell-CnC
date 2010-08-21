@@ -248,7 +248,9 @@ emitCpp CGC{..} (spec @ CncSpec{..}) = do
 	    -- Reused bit of syntax for get/put functions:
 	    let f x = hangbraces (t "inline void " <> t x <> parens (dType ty1 <> t" tag, " <> dType ty2 <> t" & ref")) 
 	                         indent 
-				 (t"printf(\"Test %d\\n\", m_context->m_scratchpad++);" $$ 
+				 (
+				  -- TEMPTOGGLE:
+				  -- t"printf(\"Test "<> textAtom it  <> t"  %d\\n\", m_context->m_scratchpad++);" $$ 
 				  t "m_"<> textAtom it <> t"." <> t x <> t "(tag,ref);") 
 	        wrapper = textAtom it <> t"_wrapper"
 	        member  = t"m_" <> textAtom it

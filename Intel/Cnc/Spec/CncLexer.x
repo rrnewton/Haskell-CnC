@@ -31,8 +31,9 @@ $idchar    = [$alpha $digit \']
 --$symchar   = [$symbol \:]
 $symchar   = [$symbol ]
 
+-- These are the KEYWORDS for the language:
 @reservedid = 
-	module|fun|tags|items|steps|dense|constrain|prescribes
+	module|fun|tags|items|steps|dense|constrain|prescribes|type
 --step
 
 @reservedop =

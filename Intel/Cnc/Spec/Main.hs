@@ -8,13 +8,13 @@ import Intel.Cnc.Spec.CncGrammar
 import Intel.Cnc.Spec.AST
 import Intel.Cnc.Spec.CncGraph
 import Intel.Cnc.Spec.GatherGraph
-import Intel.Cnc.Spec.Util
+import Intel.Cnc.Spec.Util hiding(t)
+import Intel.Cnc.Spec.TraceVacuum
 import Intel.Cnc.Spec.Codegen.CppOld
 import Intel.Cnc.Spec.Codegen.Haskell
+import Intel.Cnc.Spec.Passes.TypeDef
+import Intel.Cnc.Spec.Passes.ReadHarch
 
-import Intel.Cnc.Spec.ReadHarch
-
-import Text.PrettyPrint.HughesPJClass
 import Data.Maybe ( fromMaybe, fromJust )
 import Data.IORef
 import Data.List
@@ -31,7 +31,8 @@ import System.IO
 import System.IO.Unsafe
 import System.Exit
 
-import Intel.Cnc.Spec.TraceVacuum
+import Text.PrettyPrint.HughesPJClass
+import Test.HUnit
 
 -- These expand the file size quite a bit.  Not committing to include right now:
 -- #define CNCVIZ
@@ -44,7 +45,7 @@ import Intel.Cnc.Spec.CncViz as Viz
 version = "0.1.3.99"
     
 data Flag 
-    = Verbose Int | Version | Help | Debug | GenTracing | GenStepDefs
+    = Verbose Int | Version | Help | Debug | GenTracing | NoStepDefs | SelfTest
     | Cpp | CppOld | Haskell
  -- | Input String  | LibDir String
     | Output String
@@ -74,7 +75,7 @@ common_options =
      , Option ['v']     ["verbose"] (OptArg (\x -> case x of Just n  -> Verbose (read n); 
 					                     Nothing -> Verbose (-1)) "N") 
                                     "verbosity level {0,1,2} default 1 (-v with no arg increments)"
-
+     , Option []     ["selftest"]   (NoArg SelfTest)    "run internal unit tests"
      , Option []     ["help"]       (NoArg Help)        "print this help information"
      ]
 
@@ -92,8 +93,13 @@ translate_options =
 --     , Option []        ["defsteps"] (NoArg GenTracing)$  "[c++] rather than the user defining custom types for each step,\n"++
 --	                                                  "      emit default versions within the generated header"
 --		                                          "      create a standard definition in the generate header"
-     , Option []        ["defsteps"] (NoArg GenStepDefs)$ "[c++] define default step structs in the generated header \n"++
-		                                          "      (rather than custom, user-defined type definitions)"
+
+     -- , Option []        ["defsteps"] (NoArg GenStepDefs)$ "[c++] define default step structs in the generated header \n"++
+     -- 		                                          "      (rather than custom, user-defined type definitions)"
+
+     , Option []        ["customsteps"] (NoArg NoStepDefs)$ "[c++] Don't define default step structs in the generated header \n"++
+		                                              "      (Instead the user provides custom type definitions.)"
+
 
 #ifdef CNCVIZ
      , Option []        []           (NoArg NullOpt)  ""
@@ -133,10 +139,11 @@ printHeader = do
 when b action = if b then action else return ()
 
 
-
 ------------------------------------------------------------------------------------------------------------------------
 -- The translator front-end: parse a file, convert to graph:
 ------------------------------------------------------------------------------------------------------------------------
+
+-- This invokes the parser and creates the graph coelescence.
 
 readCnCFile :: Int -> String -> IO CncSpec
 readCnCFile verbosity file = do 
@@ -151,6 +158,14 @@ readCnCFile verbosity file = do
 
   let parsed = runCncParser file str
 
+      ----------------------------------------
+      -- Pass 1: desugar type
+      p1 = desugarTypeDefs parsed
+
+      ----------------------------------------
+      final_statements = p1
+
+  ----------------------------------------
   when (verbosity > 2)$ putStrLn "================================================================================"
   when (verbosity > 2)$ putStrLn "\nParsed AST (detailed):"
   when (verbosity > 2)$ sequence_ $ map (print . stripDecor) parsed
@@ -171,7 +186,7 @@ readCnCFile verbosity file = do
   when (verbosity > 1)$ putStrLn "\nCoalesced CnC Graph:"
   -- The name of the module is derived from the file name:	   
   let appname = takeBaseName file
-      graph = coalesceGraph appname parsed
+      graph = coalesceGraph appname final_statements
 
   when (verbosity > 1)$ putStrLn ""
   when (verbosity > 1)$ print $ pp graph
@@ -241,6 +256,9 @@ main2 argv = do
   -- Do a little pre-processing of the opts so we can catch --version:
   let (common_opts,_,_) = getOpt Permute common_options argv
   when (Version `elem` common_opts) $  do printHeader; exitSuccess
+  when (SelfTest `elem` common_opts) $ 
+    do cncRunAllTests
+       exitSuccess
 
   when (null argv) $ defaultErr ""$ "First argument to "++hcnc_name++" must specify a mode!\n"
   
@@ -257,6 +275,7 @@ main2 argv = do
       uncommmon (Verbose _) = False
       uncommmon (Version  ) = False
       uncommmon (Help     ) = False
+      uncommmon (SelfTest ) = False
       uncommmon _           = True
 
       -- HACKish SHORTCUT to make things easy for people.  A ".cnc" file is allowed as the first argument.
@@ -370,7 +389,7 @@ main2 argv = do
 #endif
          Debug       -> return cfg{ gendebug=True } 
          GenTracing  -> return cfg{ gentracing=True } 
-         GenStepDefs -> return cfg{ genstepdefs=True } 
+         NoStepDefs  -> return cfg{ genstepdefs=False } 
 
 	 m | codegenmode_option m -> return cfg
 	 o -> simpleErr mode ("Internal error: Currently unhandled option: "++ show o ++"\n")
@@ -414,6 +433,16 @@ main2 argv = do
 
 ------------------------------------------------------------------------------------------------------------------------
 -- Testing 
+------------------------------------------------------------------------------------------------------------------------
+
+
+all_unit_tests = test $ 
+ [ test_desugarTypeDefs
+ , test_traceVacuum
+ ]
+
+cncRunAllTests = runTestTT all_unit_tests
+t = cncRunAllTests -- Lazy shorthand
 
 {-
 

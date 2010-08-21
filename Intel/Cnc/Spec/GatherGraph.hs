@@ -54,6 +54,7 @@ coalesceGraph name parsed =
       DeclareTags  _ _ _ -> return ()
       DeclareItems _ _ _ -> return ()
       DeclareSteps _ _   -> return ()
+      TypeDef      _ _ _ -> return ()
 
 
 -- This is tedious, but here we simply go over the big list of statements that come out of

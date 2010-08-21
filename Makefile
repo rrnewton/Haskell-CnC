@@ -3,6 +3,7 @@
 all: runtime trans
 
 clean: cleanruntime cleantrans
+	cabal clean
 
 #====================================================================================================
 # FIrst, some entrypoints that help build the runtime
@@ -88,8 +89,9 @@ examples/test_parfor.o : Intel/Cnc3.hi
 #====================================================================================================
 
 
-HSOURCE=SrcLoc.hs Main.hs GatherGraph.hs AST.hs Codegen/CppOld.hs \
-        CncGraph.hs CncViz.hs Vacuum.hs Curses.hs ReadHarch.hs Util.hs
+HSOURCE=SrcLoc.hs Main.hs GatherGraph.hs AST.hs Codegen/CppOld.hs Codegen/Haskell.hs \
+        CncGraph.hs CncViz.hs TraceVacuum.hs Curses.hs Util.hs \
+        Passes/ReadHarch.hs Passes/ReadCnC.hs Passes/TypeDefs.hs
 
 HCNCNAME=hcnc
 
