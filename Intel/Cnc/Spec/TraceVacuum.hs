@@ -33,7 +33,7 @@ data CncTraceEvent =
  | PutT NameTag NameTag
  | StartStep NameTag 
  | EndStep   NameTag 
- | FAIL String
+ | FAIL String -- For debugging purposes record the failures.
   deriving (Show, Eq)
 
 -- We should parse tags that we can make sense of, namely scalars and tuples.
@@ -49,6 +49,11 @@ spc = oneOf " \t"
 whitespc = many spc
 defaultStepContext = (toAtom "env","")
 
+doParse :: Parser CncTraceEvent -> String -> CncTraceEvent
+doParse p input
+  = case (parse p "" input) of
+      Left err -> FAIL input
+      Right x  -> x
 
 tracefile :: [String] -> [CncTraceEvent]
 --tracefile lines = loop (error "No enclosing step!") lines
@@ -56,7 +61,8 @@ tracefile lines = loop defaultStepContext lines
  where 
   loop enclosing [] = []
   loop enclosing (line:tl) = 
-     let parsed = tryParse (traceline enclosing) line
+--     let parsed = tryParse (traceline enclosing) line
+     let parsed = Just$ doParse (traceline enclosing) line
 	 rest = case parsed of 
 		   Just (StartStep nametag) -> loop nametag tl
 		   _                        -> loop enclosing tl
@@ -66,7 +72,7 @@ tracefile lines = loop defaultStepContext lines
 
 
 cnc_identifier = 
-   do name <- many1 (letter <|> oneOf "_")
+   do name <- many1 (letter <|> digit <|> oneOf "_")
       return$ toAtom name
 
 traceline :: NameTag -> Parser CncTraceEvent
@@ -90,7 +96,7 @@ traceline stepctxt =
   ruletemplate "Put item"   '['']' (PutI stepctxt) <|> 
   ruletemplate "Get item"   '['']' (GetI stepctxt) <|> 
   ruletemplate "GetX item"  '['']' (GetI stepctxt) <|>
-    do string "Prescribe"; whitespc 
+    do string "Prescribe"    ; whitespc 
        tags <- cnc_identifier; whitespc
        step <- cnc_identifier
        return (Prescribe tags step)
@@ -143,6 +149,8 @@ test_traceVacuum = test $
  [ "traceline1: parse one line" ~: Just (StartStep (toAtom "fib_step","0"))           ~=? tP "Start step (fib_step: 0)"
  , "traceline2: parse one line" ~: Just (PutT (toAtom "env","") (toAtom "tags","10")) ~=? tP "Put tag <tags: 10>"
  , "traceline3: parse one line" ~: Nothing                                            ~=? tP "__Put tag <tags: 10>"
+ , "traceline4: parse one line" ~: Just (Prescribe (toAtom "control_S1") (toAtom "kj_compute"))
+                               ~=? tP  "Prescribe control_S1 kj_compute"
 
  , "sample trace: #fail"    ~:    0 ~=? length (filter isfail sample)
  , "sample trace: #success" ~:  111 ~=? length (filter (not . isfail) sample)

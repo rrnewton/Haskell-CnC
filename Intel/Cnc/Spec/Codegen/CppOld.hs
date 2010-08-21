@@ -68,12 +68,17 @@ constructor name args inits body =
 param ty name = ty <+> name
 mkRef tyD = tyD <> t"&"
 
+dubquotes d = (t"\"") <> toDoc d <> (t"\"")
+
+-- This overloading just supports my laziness:
 class SynChunk a where 
   toDoc :: a -> Doc
 instance SynChunk String where 
   toDoc = text
 instance SynChunk Doc where 
   toDoc = id
+instance SynChunk Atom where 
+  toDoc = text . fromAtom
 
 ----------------------------------------------------------------------------------------------------
 
@@ -133,8 +138,8 @@ emitCpp CGC{..} (spec @ CncSpec{..}) = do
    when (not old_05_api) $ do 
      putS$ "\n\n// Forward declarations for private contexts.\n"
      forM_ stepls $ \stp -> do
-	putD$ t"class " <> privcontext stp <> semi
-     putS$ "\n\n"
+	putD$ t"class " <> privcontext stp <> semi <> t"\n"
+     putS$ "\n"
 
    ------------------------------------------------------------
    -- Prototype for user step wrappers
@@ -152,7 +157,7 @@ emitCpp CGC{..} (spec @ CncSpec{..}) = do
 	  textAtom stp <+> t"m_step" <> semi $$
 	  --stepwrapper stp <> parens empty <> semi
 	  t"int execute(" <+> constRefType ty <+> t "tag," <+> maincontext <> t" & c) const;"
-
+	putS$ "\n"
 
    ------------------------------------------------------------
    -- Emit the main context class
@@ -360,7 +365,22 @@ emitCpp CGC{..} (spec @ CncSpec{..}) = do
      	  --  (t$ step_obj$ fromAtom stp) <> t" = new " <> textAtom stp <> parens empty <> semi
      	  -- ),	  
 
-          t"CnC::step_collection< "<> textAtom (head stepls)  <>t" > env(this);\n", 
+          t"CnC::step_collection< "<> textAtom (head stepls)  <>t" > env(this);\n"
+          ]++
+
+	  --------------------------------------------------------------------------------
+	  -- FIXME:
+	  -- This should be completely obsoleted when the API catches up (e.g. trace_all works properly)
+	  (if gendebug then 
+	    ((flip map) (zip3 stepls prescribers tagtys) $ \ (stp,tg,ty) ->
+	       app "CnC::debug::trace" [stepwrapper stp <> parens empty, (dubquotes stp)] <> semi) ++
+	    ((flip map) (AM.toList tags) $ \ (tg,_) -> 
+     	     app "CnC::debug::trace" [textAtom tg, dubquotes tg] <> semi) ++
+	    ((flip map) (AM.toList items) $ \ (it,_) -> 
+	     app "CnC::debug::trace" [textAtom it, dubquotes it] <> semi) 
+	   else []) ++
+	  --------------------------------------------------------------------------------
+	  [t"", 
 
           -- Generate prescribe relations first [mandatory]:
      	  (vcat $ (flip map) (zip3 stepls prescribers tagtys) $ \ (stp,tg,ty) ->

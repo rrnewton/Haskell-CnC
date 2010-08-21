@@ -66,7 +66,8 @@ run_modes =
   , ("trace"    , trace_options, "Works with Traces, e.g. the output of CnC::debug::trace.\n"++
                                  " (Reads a trace from an input file, if provided, or stdin.)")
   , ("harchpart", harchpart_options, "Uses Harch, the hierarchical graph partitioner for CnC.\n"++
-                                     " (This mode expects one .harch as input and produces a .part.harch)")
+--                                     " (This mode expects one .harch as input and produces a .part.harch)")
+                                     " (This mode enriches a .harch file with partition info.)")
   ]
 
 common_options :: [OptDescr Flag]
@@ -133,7 +134,9 @@ harchpart_options =
 
 
 printHeader = do
-  putStrLn$ "Intel(R) Concurrent Collections Spec Translator, Haskell CnC Edition version "++ version
+--  putStrLn$ "Intel(R) Concurrent Collections Specification Tool, version "++ version
+  putStrLn$ "The fabulous, multi-purpose CnC Specification Tool, version "++ version
+  putStrLn$ "Part of the Intel(R) Concurrent Collections (CnC) Project"
   putStrLn$ "Copyright 2010 Intel Corporation."
 
 when b action = if b then action else return ()
@@ -344,7 +347,10 @@ main2 argv = do
 		let thetrace = tracefile $ lines str
 		    guiactions = traceToGUI thetrace
 
-		when (verbosity>1) $ do (forkIO $ mapM_ print guiactions); return ()
+                -- This prints it out ASAP so it doesn't follow the actual playback unfortunately...
+		-- TODO: Push this functionality down into "playback".
+		--when (verbosity>1) $ do (forkIO $ mapM_ print guiactions); return ()
+		when (verbosity>1) $ do (forkIO $ mapM_ print thetrace); return ()
 
 		playback emptyGUIState guiactions
 		 

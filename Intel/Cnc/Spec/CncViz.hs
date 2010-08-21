@@ -407,11 +407,17 @@ playback state fwd =
 
   	         AddE from to -> 
 		  do --R.lift$ putStrLn$ "ADDING EDGE "++ show from ++" "++ show to
-		     let from' = deJust ("Missing source of AddE edge! "++show from)    $ M.lookup from idmap 
-			 to'   = deJust ("Missing destination of AddE edge! "++show to) $ M.lookup to idmap
-		     id <- newEdge (from', to')
-		     changeEStyle producestyle id 
-		     return idmap
+		     let from' = M.lookup from idmap 
+			 to'   = M.lookup to idmap
+		     case (M.lookup from idmap, M.lookup to idmap) of 
+		       (Just from', Just to') -> do 
+			  id <- newEdge (from', to')
+			  changeEStyle producestyle id 
+			  return idmap
+		       (Nothing,_) -> do R.lift$ putStrLn$ ("Warning: Missing source of AddE edge! "++show from)
+		                         return idmap
+		       (_,Nothing) -> do R.lift$ putStrLn$ ("Warning: Missing destination of AddE edge! "++show to)
+		                         return idmap
 
   	         WaitAction -> do R.lift$ usleep (300 * 1000) -- 0.1 second sleep.
 				  return idmap
