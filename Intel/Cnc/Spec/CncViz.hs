@@ -27,6 +27,7 @@ import Graphics.Ubigraph as Ub
 import qualified Data.GraphViz as Gv
 
 import System.Posix.Unistd
+import System.Posix.Env
 
 -- There are various options for trying to improve the stringmaps used in this program:
 --
@@ -38,6 +39,8 @@ import System.Posix.Unistd
 import qualified Data.Map as SM -- Data.Map serves as StringMap for now.
 
 import Debug.Trace
+
+default_server_url = "http://127.0.0.1:20738/RPC2"
 
 ----------------------------------------------------------------------------------------------------
 -- Graph Visualization
@@ -51,15 +54,16 @@ cncGraphviz =
 --------------------------------------------------------------------------------
 -- Display a cncgraph through ubigraph:
 
+
 cncUbigraph :: Bool -> CncGraph -> IO ()
 cncUbigraph interactive gr = 
-  do putStrLn$ "DRAWING UBIGRAPH, total nodes "++ show (length sorted)
+  do server_url <- getEnvDefault "UBIGRAPH_SERVER" default_server_url
+     putStrLn$ "DRAWING UBIGRAPH, total nodes "++ show (length sorted)
      initHubigraph server_url >>= runHubigraph go
   --r $ mkRing 10
  where 
-  r x = initHubigraph server_url >>= runHubigraph x
+  r x = initHubigraph default_server_url >>= runHubigraph x
 
-  server_url = "http://127.0.0.1:20738/RPC2"
   sorted = topsort gr
   contexts = map (G.context gr) sorted
 
@@ -252,7 +256,21 @@ emptyGUIState = GS AM.empty AM.empty AM.empty
 pump_size = True
 
 --------------------------------------------------------------------------------
--- First, convert a parsed trace into a series of GUI actions:
+-- Convert a parsed trace into a series of GUI actions:
+--  Two distinct behaviors.
+--
+--  Drawing collections ():
+--    Steps are indexed with an empty ("") tag.  Each additional
+--    instance added to a collection may change its appearance but
+--    will not add a new node.
+--    
+--  Drawing instances (full_dynamic_graph):
+
+--    Draw the "dynamic graph" of step instances.  Instances are
+--    identified by a pair of their collection name and a string
+--    representing a tag value.
+
+
 traceToGUI :: [CncTraceEvent] -> [GUIAction]
 traceToGUI trace =
       AddV envpr : ChangeV envpr defaultEnvAttr :
@@ -261,22 +279,28 @@ traceToGUI trace =
   envpr = (toAtom "env", "")
   loop _ [] = []
   loop state0@GS{..} (hd:tl) = 
-    let pump_up_instance (nm,tag) gns@GNS{..} = 
-	 let VLabel oldlab = props SM.! "label"  
+    let -- When drawing step collections we may "pump them up" as we get more instances:
+        -- (This function also continues the loop, so it's called as a continuation.)
+        pump_up_instance (nm,tag) gns@GNS{..} = 
+            if full_dynamic_graph
+	    then keep_going
+	    else ChangeV (nm,tag) [VLabel$ oldlab ++" #"++ show (count+1), newsize] : keep_going
+          where 
+	     keep_going = loop state0{ nodes= newnodes } tl 
+	     newnodes = AM.insert nm gns{count=count+1, props=props'} nodes
+
+	     VLabel oldlab = props SM.! "label"  
 	     -- Experimenting with growing the size too:
 	     VSize oldsize = props SM.! "size"
 	     newsize = VSize$ oldsize + 0.1
 	     props' = if pump_size then SM.insert "size" newsize props else props
 
-	     newnodes = AM.insert nm gns{count=count+1, props=props'} nodes
-         in ChangeV (nm,tag) [VLabel$ oldlab ++" #"++ show (count+1), newsize]
-	    : loop state0{ nodes= newnodes } tl 
- 
         newstate nm attrs = state0{ nodes = AM.insert nm (GNS 1 attrs) nodes }
     in
     case hd of 
       Prescribe tags step -> 
 	let state1 = state0{ prescribedBy= AM.insert step tags prescribedBy } in
+	-- When drawing
 	if full_dynamic_graph
 	then loop state1 tl
 	else AddV (step,"") : loop state1 tl
@@ -286,6 +310,7 @@ traceToGUI trace =
 	 case AM.lookup nm prescribedBy of 
 	  Nothing -> error$ "traceToGUI: no Prescribe relation corresponding to step "++show nm
 	  Just tags -> 	    
+	    -- Add an edge connecting the tag [collection] to the step [collection]:
 	    let edge = AddE (tags,tg) pr
 		vertedge = [AddV pr, edge, ChangeV pr defaultStepAttr, WaitAction] in
 	    (if full_dynamic_graph then vertedge else []) ++
@@ -347,15 +372,15 @@ t30 = playback emptyGUIState t29
 playback :: GUIState -> [GUIAction] -> IO ()
 
 -- Should we actually create a node for every dynamic instance?
-full_dynamic_graph = True
+full_dynamic_graph = False
 
 
 playback state fwd = 
-  do putStrLn$ cnctag++"Visualizing trace using ubigraph."
+  do server_url <- getEnvDefault "UBIGRAPH_SERVER" default_server_url
+     putStrLn$ cnctag++"Visualizing trace using ubigraph."
      initHubigraph server_url >>= runHubigraph initialize
  where 
-  r x = initHubigraph server_url >>= runHubigraph x
-  server_url = "http://127.0.0.1:20738/RPC2"
+  r x = initHubigraph default_server_url >>= runHubigraph x
 
   initialize = do 
    clear

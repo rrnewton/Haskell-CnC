@@ -349,7 +349,7 @@ main2 argv = do
 
                 -- This prints it out ASAP so it doesn't follow the actual playback unfortunately...
 		-- TODO: Push this functionality down into "playback".
-		--when (verbosity>1) $ do (forkIO $ mapM_ print guiactions); return ()
+		when (verbosity>1) $ do (forkIO $ mapM_ print guiactions); return ()
 		when (verbosity>1) $ do (forkIO $ mapM_ print thetrace); return ()
 
 		playback emptyGUIState guiactions
