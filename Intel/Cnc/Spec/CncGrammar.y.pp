@@ -25,8 +25,8 @@ import Text.PrettyPrint.HughesPJClass
 #define DL   (combineSrcSpans (getDecor $1) (lexSpan $>))
 #define DD   (combineSrcSpans (getDecor $1) (getDecor $>))
 
--- Here's a praticularly painful special case where we have a possibly
--- empty list on the right end.  We take any source info that's there
+-- Here is a praticularly painful special case where we have a possibly
+-- empty list on the right end.  We take any source info that is there
 -- and fall back to the second to last token otherwise.
 #define LLS(ARG)  (combineSrcSpans (lexSpan $1) $ combineSrcSpans ARG (getDecorLs $>))
 
