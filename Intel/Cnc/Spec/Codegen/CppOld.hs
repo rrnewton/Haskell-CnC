@@ -67,6 +67,7 @@ constructor name args inits body =
                 indent body
 param ty name = ty <+> name
 mkRef tyD = tyD <> t"&"
+mkConstRef tyD = t"const" <+> mkRef tyD
 
 dubquotes d = (t"\"") <> toDoc d <> (t"\"")
 
@@ -239,29 +240,44 @@ emitCpp CGC{..} (spec @ CncSpec{..}) = do
 
            t "  int m_scratchpad; // TEMP, testing\n" $$
 
+           ------------------------------------------------------------   
+	   -- Wrap tag collections:
+           ------------------------------------------------------------   
 	   t "// Tag collections are simply aliases to the parents':" $$ 
 	   (vcat$ (flip map) (AM.toList tags) $ \ (tg, Just ty) -> 
 	    text "CnC::tag_collection" <> angles (dType ty) <> t" & " <> textAtom tg <> semi
 	   ) $$ 
 
+           ------------------------------------------------------------   
 	   -- Wrap item collections:
+           ------------------------------------------------------------   
 	   t""$$ 
 	   (vcat $ 
 	    (flip map) (AM.toList items) $ \ (it,Just (ty1,ty2)) -> 
-  	    --textAtom it <> parens (t "this")
 
-	    -- Reused bit of syntax for get/put functions:
-	    let f x = hangbraces (t "inline void " <> t x <> parens (dType ty1 <> t" tag, " <> dType ty2 <> t" & ref")) 
+	    let -- A reused bit of syntax for wrapper methods:
+ 	        -- (This is one of those things that you don't want to duplicate, 
+		--  but it has too many arguments and is poorly abstracted.)
+	        wrapGP doret retty nm args = 
+                       let args' = map (\ (tyD,v) -> tyD <+> text v) args 
+			   decls = hcat$ intersperse (t", ") args'
+			   vars  = hcat$ intersperse (t", ") $ map (text . snd) args
+		       in
+		       hangbraces (t "inline "<> toDoc retty <+> t nm <> parens decls) 
 	                         indent 
 				 (
-				  -- TEMPTOGGLE:
-				  -- t"printf(\"Test "<> textAtom it  <> t"  %d\\n\", m_context->m_scratchpad++);" $$ 
-				  t "m_"<> textAtom it <> t"." <> t x <> t "(tag,ref);") 
+				  --------------------------------------------------------------------------------
+				  -- TODO INSERT CORRECTNESS CHECKING HERE:
+				  --------------------------------------------------------------------------------
+				  (if doret then t"return " else t"") <>
+				  t "m_"<> textAtom it <> t"." <> t nm <> parens vars <> semi) 
+
+		basicGP nm = wrapGP False "void" nm [(mkConstRef (dType ty1), "tag"), (mkRef (dType ty2), "ref")]
+
 	        wrapper = textAtom it <> t"_wrapper"
 	        member  = t"m_" <> textAtom it
 	    in
-	    t "// A 'NoOp' wrapper class that does nothing: "$$
-
+	    t "// The item collection wrapper: A 'NoOp' wrapper class that does nothing: "$$
 	    cppclass wrapper
 	             (t "public:" $$  
 		      mkPtr (privcontext stp) <> t" m_context;\n" $$ 
@@ -271,15 +287,11 @@ emitCpp CGC{..} (spec @ CncSpec{..}) = do
 		                   [param (mkRef maincontext)      (t"p"),
 				    param (mkPtr$ privcontext stp) (t"c")]
 		                   [(member, t"p." <> textAtom it)]
-		                   (assign "m_context" "c"))
-
-		      -- (hangbraces (wrapper <> parens (maincontext <> t" & p, " <> 
-		      -- 				      privcontext stp <> t"* c") <+> colon <+>
-		      -- 		   (member <> t "(p." <> textAtom it <> t ")"))
-		      --  indent empty)
-		      $$ 
-		      f "get" $$ 
-		      f "put") $$ 
+		                   (assign "m_context" "c"))  $$ 
+		      -- Just three methods: two variants of get and one put.
+		      basicGP "get" $$ 
+		      basicGP "put" $$ 
+		      wrapGP True  (dType ty2) "get" [(mkConstRef (dType ty1),"tag")] ) $$
             t "") $$
 
            -- Declare MEMBERS
@@ -289,6 +301,7 @@ emitCpp CGC{..} (spec @ CncSpec{..}) = do
 	    textAtom it <> t"_wrapper" <+> textAtom it <> semi 
 	   ) $$
 	   
+           ------------------------------------------------------------   
 	   t""$$ t "// Constructor for the private/custom context: " $$	   
 	   hangbraces (privcontext stp <> parens (maincontext <> t" & p") <+> colon $$ 
 		       (nest 6 $ vcat $ 
