@@ -7,12 +7,13 @@
 -- The main entrypoint is "assembleSpec".
 ----------------------------------------------------------------------------------------------------
 
-module Intel.Cnc.Spec.GatherGraph where
+module Intel.Cnc.Spec.GatherGraph ( coalesceGraph ) where
 import Intel.Cnc.Spec.AST
 import Intel.Cnc.Spec.CncGraph
 import Intel.Cnc.Spec.SrcLoc
 import Intel.Cnc.Spec.Util
 
+import Data.Map as Map
 import Data.List as L
 import Data.Maybe
 import StringTable.Atom 
@@ -30,7 +31,7 @@ coalesceGraph :: String -> [PStatement SrcSpan] -> CncSpec
 coalesceGraph name parsed = 
    -- trace ("Got ALL nodes "++ show (L.map fst$ AM.toList$ tags allnodes) ++"\nsteps "++ 
    -- 	  show (AS.toList$ steps allnodes) ++"\nitems "++ show (L.map fst$ AM.toList$ items allnodes)) $ 
-   allnodes { graph=g2, appname=name, nodemap=nm }
+   allnodes { graph=g2, appname=name, nodemap=nm, realmap= rm }
  where 
   g1 :: CncGraph = run_ G.empty $ 
        -- First add all the nodes to the graph
@@ -42,6 +43,8 @@ coalesceGraph name parsed =
 
   (_,(nm,g2)) = --trace ("Done collecting declares.. all nodes: " ++ show g1) $ 
        run g1 $ forM_ parsed collect -- Then add the edges.
+
+  rm = Map.fromList$ Prelude.map (\ (a,b) -> (b,a)) $ labNodes g2
 
   allnodes = --trace "Collecting allnodes" $
 	     collectInsts parsed $ collectDecls parsed
@@ -199,6 +202,7 @@ seedWorld =
 	  ,  graph  = error "CncSpec: graph uninitialized"
 	  ,  nodemap= error "CncSpec: nodemap uninitialized"
 	  ,  appname= error "CncSpec: appname uninitialized"
+	  ,  realmap= error "CncSpec: realmap uninitialized"
 	  }
 
 example =   

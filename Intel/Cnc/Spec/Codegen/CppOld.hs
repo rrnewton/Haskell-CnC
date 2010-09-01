@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, QuasiQuotes, TypeSynonymInstances #-}
+{-# LANGUAGE RecordWildCards, QuasiQuotes, TypeSynonymInstances, NamedFieldPuns #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
 
@@ -86,7 +86,8 @@ instance SynChunk Atom where
 --emitCpp :: StringBuilder m => Bool -> Bool -> CncSpec -> m ()
 -- emitCpp old_05_api genstepdefs (spec @ CncSpec{..}) = do 
 emitCpp :: StringBuilder m => CodeGenConfig -> CncSpec -> m ()
-emitCpp CGC{..} (spec @ CncSpec{..}) = do 
+--emitCpp CGC{..} (spec @ CncSpec{..}) = do 
+emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, nodemap}) = do 
 
    -- First we produce the header of the file:
    --------------------------------------------------------------------------------
@@ -236,9 +237,9 @@ emitCpp CGC{..} (spec @ CncSpec{..}) = do
 	   --t "// A pointer to the main context for the application.  This context is a wrapper for that one:" $$ 
 	   --maincontext <> t" & m_parent;"  $$ 
 
-           t "\n  public:" $$
+           t"\n  public:" $$
 
-           t "  int m_scratchpad; // TEMP, testing\n" $$
+           t"  int m_scratchpad; // TEMP, testing\n" $$
 
            ------------------------------------------------------------   
 	   -- Wrap tag collections:
@@ -268,6 +269,9 @@ emitCpp CGC{..} (spec @ CncSpec{..}) = do
 				 (
 				  --------------------------------------------------------------------------------
 				  -- TODO INSERT CORRECTNESS CHECKING HERE:
+				  let --gctxt = nodemap ! (CGItems it) 
+				      -- context graph (CGItems it)
+				  in
 				  --------------------------------------------------------------------------------
 				  (if doret then t"return " else t"") <>
 				  t "m_"<> textAtom it <> t"." <> t nm <> parens vars <> semi) 

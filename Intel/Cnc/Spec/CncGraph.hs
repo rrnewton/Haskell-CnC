@@ -9,6 +9,7 @@ module Intel.Cnc.Spec.CncGraph where
 import Intel.Cnc.Spec.AST
 import Data.List as L
 import Data.Maybe
+import Data.Map
 import StringTable.Atom 
 import StringTable.AtomMap as AM
 import StringTable.AtomSet as AS
@@ -25,7 +26,9 @@ data CncSpec = CncSpec {
   graph :: CncGraph,
   appname :: String,
   -- Might as well cache this after it is extracted:
-  nodemap :: NodeMap CncGraphNode
+  nodemap :: NodeMap CncGraphNode,
+  -- Annoyingly, nodemaps are essentially unreadable and useless:
+  realmap :: Map CncGraphNode Node
 }
 
 type CncGraph = (Gr CncGraphNode (Maybe TagFun))
