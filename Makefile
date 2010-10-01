@@ -93,7 +93,7 @@ HSOURCE=SrcLoc.hs Main.hs GatherGraph.hs AST.hs Codegen/CppOld.hs Codegen/Haskel
         CncGraph.hs CncViz.hs TraceVacuum.hs Curses.hs Util.hs \
         Passes/ReadHarch.hs Passes/ReadCnC.hs Passes/TypeDefs.hs
 
-HCNCNAME=hcnc
+HCNCNAME=cnc
 
 trans: 
 	@echo 

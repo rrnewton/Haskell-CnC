@@ -96,6 +96,7 @@ data CodeGenConfig =
       , genstepdefs :: Bool
       , gentracing  :: Bool
       , gendebug    :: Bool
+      , wrapall     :: Bool -- wrap all collections
       }
   deriving Show
 
@@ -105,6 +106,7 @@ default_codegen_config =
       , genstepdefs = True
       , gentracing  = False
       , gendebug    = False
+      , wrapall     = False
      }
 
 -- Constant: indentation used across all code generators.

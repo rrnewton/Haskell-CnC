@@ -25,6 +25,7 @@ import Text.PrettyPrint.HughesPJClass
 -- QuasiQuoting is too expensive in final binary size:
 -- import Text.InterpolatedString.QQ
 
+import qualified Data.Map as M
 import Data.List
 import Data.Maybe
 import Data.Graph.Inductive hiding (empty)
@@ -87,7 +88,7 @@ instance SynChunk Atom where
 -- emitCpp old_05_api genstepdefs (spec @ CncSpec{..}) = do 
 emitCpp :: StringBuilder m => CodeGenConfig -> CncSpec -> m ()
 --emitCpp CGC{..} (spec @ CncSpec{..}) = do 
-emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, nodemap}) = do 
+emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = do 
 
    -- First we produce the header of the file:
    --------------------------------------------------------------------------------
@@ -149,10 +150,9 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, nodemap}) = 
    let maincontext = t$ appname++"_context"   
    let stepwrapper stp = textAtom stp <> t"_step_wrapper"
 
-   when (not old_05_api)$ do
+   when (wrapall && not old_05_api)$ do
      putS  "// Forward declaration of the context class (also known as graph)\n"
      putD$ t"struct " <> maincontext <> t";\n\n"
-
      putS$ "// Type definitions for wrappers around steps.\n"
      forM_ (zip stepls tagtys) $ \ (stp,ty) -> do
 	putD$ struct (stepwrapper stp) $ 
@@ -180,8 +180,8 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, nodemap}) = 
      (if old_05_api then [] else  
        t "// Step collections members:" : 
        ((flip map) stepls $ \ stp -> 
-	 -- TEMPTOGGLE -- ALWAYS wrap steps for now:
-         t "CnC::step_collection" <> angles (stepwrapper stp) <+> (t$ step_obj$ fromAtom stp) <> semi
+         t "CnC::step_collection" <> angles (if wrapall then stepwrapper stp else textAtom stp) 
+	   <+> (t$ step_obj$ fromAtom stp) <> semi
        )) ++      
 
      t "": t "// Tag collections members:" : 
@@ -227,7 +227,7 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, nodemap}) = 
    ------------------------------------------------------------   
    
    -- INVARIANT! Due to error checking above, we can omit some error checking here:
-   when (not old_05_api) $ do 
+   when (wrapall && not old_05_api) $ do 
      putS$ "\n\n// Next we define 'private contexts'.\n"
      putS$ "// These allow steps to exist in their own little universes with special properties:\n" 
      forM_ stepls $ \stp -> do
@@ -252,6 +252,7 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, nodemap}) = 
            ------------------------------------------------------------   
 	   -- Wrap item collections:
            ------------------------------------------------------------   
+	   -- FIXME: No reason to wrap ALL item collections.
 	   t""$$ 
 	   (vcat $ 
 	    (flip map) (AM.toList items) $ \ (it,Just (ty1,ty2)) -> 
@@ -259,24 +260,43 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, nodemap}) = 
 	    let -- A reused bit of syntax for wrapper methods:
  	        -- (This is one of those things that you don't want to duplicate, 
 		--  but it has too many arguments and is poorly abstracted.)
-	        wrapGP doret retty nm args = 
+	        wrapGP doret retty nm args isPut = 
                        let args' = map (\ (tyD,v) -> tyD <+> text v) args 
 			   decls = hcat$ intersperse (t", ") args'
 			   vars  = hcat$ intersperse (t", ") $ map (text . snd) args
 		       in
 		       hangbraces (t "inline "<> toDoc retty <+> t nm <> parens decls) 
 	                         indent 
-				 (
+				 (-- CHECK TAG FUNCTIONS
 				  --------------------------------------------------------------------------------
-				  -- TODO INSERT CORRECTNESS CHECKING HERE:
-				  let --gctxt = nodemap ! (CGItems it) 
-				      -- context graph (CGItems it)
+				  let checkTagFun stp target getnbrs = 
+				        -- TODO INSERT CORRECTNESS CHECKING HERE:
+				        let stpnd  = realmap M.! (CGSteps stp)
+				            itemnd = realmap M.! target
+				            gctxt  = context graph itemnd
+				            lnhbrs = getnbrs gctxt-- lpre' gctxt ++ lsuc' gctxt
+				            ls =  filter (\ (nd,lab) -> nd == stpnd) lnhbrs
+	 			            -- [(_,tf)] = filter (\ (nd,lab) -> nd == stpnd)$  lpre' gctxt				            
+				            --[(_,tf)] = trace (" LENGTH "++ show (length ls) ++" "++ show stpnd ++" "++ show itemnd++" "++ show lnhbrs) ls
+				        in 
+				           case ls of 
+				             [] -> t$"fprintf(stderr, \"CnC graph violation: should not access collection '"
+				                     ++ graphNodeName target ++"' from step '"++ show stp ++"'\\n\"); abort();"
+				             [(_,Nothing)] -> t"// No tag function to check..."
+				             --((_,Just (TF args exps)) : []) -> 
+				             ((_,Just (TF args exps)) : tl) ->  -- TEMPTOGGLE ... permissive
+				               t("// CHECK args "++ show args) $$
+				               t("// exps "++ show exps)
+				             _ -> error$ "internal error: tag function correctness codegen: \n "++show ls
 				  in
+				  (if gendebug
+        	  	            then checkTagFun stp (CGItems it) (if isPut then lpre' else lsuc') 
+				    else empty) $$
 				  --------------------------------------------------------------------------------
 				  (if doret then t"return " else t"") <>
 				  t "m_"<> textAtom it <> t"." <> t nm <> parens vars <> semi) 
 
-		basicGP nm = wrapGP False "void" nm [(mkConstRef (dType ty1), "tag"), (mkRef (dType ty2), "ref")]
+		basicGP nm isPut = wrapGP False "void" nm [(mkConstRef (dType ty1), "tag"), (mkRef (dType ty2), "ref")] isPut
 
 	        wrapper = textAtom it <> t"_wrapper"
 	        member  = t"m_" <> textAtom it
@@ -293,9 +313,9 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, nodemap}) = 
 		                   [(member, t"p." <> textAtom it)]
 		                   (assign "m_context" "c"))  $$ 
 		      -- Just three methods: two variants of get and one put.
-		      basicGP "get" $$ 
-		      basicGP "put" $$ 
-		      wrapGP True  (dType ty2) "get" [(mkConstRef (dType ty1),"tag")] ) $$
+		      basicGP "get" False $$ 
+		      basicGP "put" True $$ 
+		      wrapGP True  (dType ty2) "get" [(mkConstRef (dType ty1),"tag")] False) $$
             t "") $$
 
            -- Declare MEMBERS
@@ -325,8 +345,9 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, nodemap}) = 
    -- Execute wrapper methods 
    ------------------------------------------------------------   
 
-   putS$ "\n\n// Execute method wrappers for each step that uses a privaate context:\n"
-   forM_ (zip stepls tagtys) $ \ (stp,ty) -> do
+   when (wrapall) $ do
+     putS$ "\n\n// Execute method wrappers for each step that uses a privaate context:\n"
+     forM_ (zip stepls tagtys) $ \ (stp,ty) -> do
       putD$ hangbraces 
 	(t"int "<> stepwrapper stp <> t"::execute(" <+> constRefType ty <+> t "tag," <+> maincontext <> t" & c) const")
 	indent $
@@ -388,7 +409,7 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, nodemap}) = 
 	  --------------------------------------------------------------------------------
 	  -- FIXME:
 	  -- This should be completely obsoleted when the API catches up (e.g. trace_all works properly)
-	  (if gendebug then 
+	  (if gentracing then 
 	    ((flip map) (zip3 stepls prescribers tagtys) $ \ (stp,tg,ty) ->
 	       app "CnC::debug::trace" [stepwrapper stp <> parens empty, (dubquotes stp)] <> semi) ++
 	    ((flip map) (AM.toList tags) $ \ (tg,_) -> 

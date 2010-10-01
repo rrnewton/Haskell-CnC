@@ -5,8 +5,8 @@
 // Dense & bounded is not a GUARANTEE of total coverage in that interval.
 
 
-dense tags <(int,int)>      T;
-dense items<(int,int), Foo> I; 
+tags <(int,int)>            T with dense = true;
+items<(int,int), Foo> I; 
 steps                       S;
 
 /*
