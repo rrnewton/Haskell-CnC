@@ -109,6 +109,7 @@ data Type =
  -- An abstract type not intpreted by CnC:
  | TSym Atom
  | TPtr Type
+ | TDense Type -- Density annotations.
  | TTuple [Type]
  deriving (Eq,Ord,Show,Data,Typeable)
 
@@ -117,6 +118,7 @@ instance Pretty (Type) where
  pPrint (TFloat)    = text "float"
  pPrint (TSym str)  = text (fromAtom str)
  pPrint (TPtr ty)   = pPrint ty <> text "*"
+ pPrint (TDense ty) = text "dense" <+> pPrint ty 
  pPrint (TTuple ty) = text "(" <> commacat ty <> text ")"
 
 ----------------------------------------------------------------------------------------------------

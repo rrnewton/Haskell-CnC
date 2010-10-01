@@ -252,6 +252,7 @@ Exp : var { Var (lexSpan $1) (tAL $1) }
 
 Type
     : var { TSym (toAtom $ lexStr $1) }
+    | dense Type { TDense $2 }
     | Type '*' { TPtr $1 }
     | '(' Types ')' { TTuple $2 }
     | tuple '<' Types '>' { TTuple $3 }

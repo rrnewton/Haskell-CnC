@@ -195,8 +195,14 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
      ((flip map) (AM.toList items) $ \ (it,mty) -> 
        case mty of 
          Nothing -> error$ "CppOld Codegen: item collection without type: "++ (fromAtom it)
-         Just (ty1,ty2) -> t "CnC::item_collection" <> 
-                           angles (dType ty1 <>commspc<> dType ty2) <+> textAtom it <> semi
+         Just (ty1,ty2) -> trace ("ITEM COLLECTION WITH TYPE" ++ show (ty1,ty2)) $
+                           t "CnC::item_collection" <> 
+                           let extra = 
+                                case ty1 of  
+                                  -- In the case where the tag type is dense in all dimensions, turn on CNC_VECTOR:
+                                  TDense _ -> commspc<> t"CnC::cnc_tag_hash_compare" <> angles (dType ty1) <>commspc<> t"CnC::CNC_VECTOR"
+                                  _        -> empty
+                           in angles (dType ty1 <>commspc<> dType ty2 <> extra) <+> textAtom it <> semi
      ) ++ 
 
      [space, t "// Pointers to (children) private contexts:" ] ++
@@ -497,6 +503,10 @@ dType ty = case ty of
   TFloat -> t "float"
   TSym s -> textAtom s
   TPtr ty -> dType ty <> t "*"
+
+  -- This doesn't affect the C-type, any influence has already taken place.
+  TDense ty -> dType ty 
+
   -- Here is the convention for representing tuples in C++.
   --TTuple [a,b]   -> t "Pair"   <> angles (hcat$ punctuate commspc (map dType [a,b]))
   --TTuple [a,b,c] -> t "Triple" <> angles (hcat$ punctuate commspc (map dType [a,b,c]))
