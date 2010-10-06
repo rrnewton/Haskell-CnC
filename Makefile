@@ -1,9 +1,10 @@
 
 
-all: runtime trans
+all: runtime 
+#all: runtime trans
 
 clean: cleanruntime cleantrans
-	cabal clean
+	runhaskell ./Setup.hs clean
 
 #====================================================================================================
 # FIrst, some entrypoints that help build the runtime
@@ -19,19 +20,25 @@ default:
 	ghc --make -c -cpp -DCNC_SCHEDULER=5 Intel/Cnc.hs
 
 runtime:
-	cabal configure
-	cabal build
+	runhaskell ./Setup.hs configure
+	runhaskell ./Setup.hs build
 	@echo 
+# TEMP [2010.10.06] Disabling doc build
+#	$(MAKE) doc
+#	$(MAKE) unit_test
+
+doc:
 	@echo ================================================================================
 	@echo   Building Documentation
 	@echo ================================================================================
-	cabal haddock
+	runhaskell ./Setup.hs haddock
 
+unit_test:
 	@echo 
 	@echo ================================================================================
 	@echo   Running Test executable in the cabal distribution package
 	@echo ================================================================================
-	./Setup.hs test
+	runhaskell ./Setup.hs test
 
 
 interact:
