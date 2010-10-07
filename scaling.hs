@@ -2,6 +2,8 @@
 {-# LANGUAGE NamedFieldPuns
   #-}
 
+-- This script generates gnuplot plots.
+
 import Text.PrettyPrint.HughesPJClass
 import Text.Regex
 import Data.List

@@ -30,13 +30,15 @@ pack (a,b) = shiftL (fromIntegral a) 16 + (fromIntegral b)
 unpack n   = (fromIntegral$ shiftR n 16, fromIntegral$ n .&. 0xFFFF)
 
 mandel :: Int -> Complex Double -> Int
-mandel max_depth c = loop 0 0 0
+mandel max_depth c = loop 0 0 
   where   
    fn = magnitude
-   loop i z count
-    | i == max_depth = count
-    | fn(z) >= 2.0   = count 
-    | otherwise      = loop (i+1) (z*z + c) (count+1)
+   loop i z 
+    | i == max_depth = i
+    | fn(z) >= 2.0   = i
+    | otherwise      = loop (i+1) (z*z + c) 
+
+dynAPI = True
 
 mandelProg :: Int -> Int -> Int -> Int -> GraphCode Int
 mandelProg optlvl max_row max_col max_depth = 
@@ -57,7 +59,9 @@ mandelProg optlvl max_row max_col max_depth =
 
        let kernel i j = do let (packed,z) = packit i j 
  		       	   put  dat packed z
-       	                   putt position packed
+       	                   if dynAPI 
+			     then forkStep$ mandelStep packed
+			     else putt position packed
 
        let init1 = forM_ [0..max_row] $ \i -> 
                      forM_ [0..max_col] $ \j ->

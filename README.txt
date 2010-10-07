@@ -112,3 +112,13 @@ Notes on running a full benchmark suite
 ------------------------------------------------------------
 
 
+To compile with profiling support (for threadscope)
+
+  GHC_DEFAULT_FLAGS="-eventlog" NORUN=1 runcnc mandel.hs 
+
+To run and generate a .eventlog:
+
+  ./mandel.exe 300 300 80000 +RTS -ls -N31
+
+Will generate mandel.exe.eventlog
+

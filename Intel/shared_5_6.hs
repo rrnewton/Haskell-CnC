@@ -43,6 +43,11 @@ putt = proto_putt
               foldM (\ () step -> STEPLIFT push stack (step tag))
                        () steps)
 
+-- New, more dynamic API:
+forkStep s = 
+  do (HiddenState5 { stack }) <- S.get
+     STEPLIFT push stack s
+
 #endif
 
 instance Show (Int -> IO ()) where

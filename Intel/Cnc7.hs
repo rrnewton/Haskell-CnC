@@ -73,6 +73,11 @@ putt = proto_putt
               foldM (\ () step -> stepcode_push stack (step tag))
                        () steps)
 
+-- New, more dynamic API:
+forkStep s = 
+  do (HiddenState5 { stack }) <- S.get
+     stepcode_push stack s
+
 get col tag = ver5_6_core_get (return ()) col tag
 
 -- At finalize time we set up the workers and run them.

@@ -31,11 +31,13 @@ type GraphCode = IO
 -- Version 3: Here we try for forked parallelism:
 ------------------------------------------------------------
 
+forkStep s = do forkIO s; return ()
+
 putt = proto_putt (\ steps tag -> 
 		    case steps of 
 	             --[] -> error "putt on tag collection with no prescribed steps"
 	             steps -> 
-		      foldM (\ () step -> do forkIO (step tag); return ())
+		      foldM (\ () step -> do forkStep (step tag); return ())
    	  	       () steps
 		   )
 

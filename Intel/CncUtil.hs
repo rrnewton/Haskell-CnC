@@ -145,6 +145,7 @@ doTrials trials mnd =
 
 #ifdef HASHTABLE_TEST
 
+#warning "Enabling HashTable item collections.  These are not truly thread safe (yet)."
 -- TODO -- try it with a global lock to make it safe.
 type MutableMap a b = HashTable a (MVar b)
 newMutableMap :: (Eq tag, Hashable tag) => IO (MutableMap tag b)
@@ -157,7 +158,6 @@ assureMvar col tag =
 		       return mvar
 	 Just mvar -> return mvar
 mmToList = HT.toList
-#warning "Enabling HashTable item collections.  These are not truly thread safe (yet)."
 
 #else 
 #ifdef USE_GMAP

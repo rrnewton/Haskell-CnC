@@ -44,9 +44,11 @@
 
 -- import qualified  Control.Monad.State.Strict as S 
 
-
-------------------------------------------------------------
--- Version 10: A merger of the manual-get-syncing in versions 8 & 9
+----------------------------------------------------------------------------------------------------
+-- NOTE: This is Ryan's original version of blocking ContT based steps.  
+-- Simon's turned out more efficient, so it was adopted for the current Schedulers 10 & 11.
+----------------------------------------------------------------------------------------------------
+-- Version 10:  A merger of the manual-get-syncing in versions 8 & 9
 -- with the global work queue in version 4-7.
 
 -- The idea here is to verify that the attempt to use sparks in
@@ -199,6 +201,10 @@ putt = proto_putt
               foldM (\ () step -> 
 		     STEPLIFT push stack (runStep $ step tag))
                        () steps)
+
+forkStep s = 
+  do (HiddenState5 { stack }) <- C.lift S.get
+     STEPLIFT push stack (runStep s)
 
 itemsToList = error "itemsolist unimplemented"
 graphInStep = C.lift

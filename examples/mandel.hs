@@ -28,15 +28,17 @@ import Control.Monad
 #include <haskell_cnc.h>
 
 mandel :: Int -> Complex Double -> Int
-mandel max_depth c = loop 0 0 0
+mandel max_depth c = loop 0 0 
   where   
    fn = magnitude
-   loop i z count
-    | i == max_depth = count
-    | fn(z) >= 2.0   = count 
-    | otherwise      = loop (i+1) (z*z + c) (count+1)
+   loop i z 
+    | i == max_depth = i
+    | fn(z) >= 2.0   = i
+    | otherwise      = loop (i+1) (z*z + c) 
 
 type Pair = (Int16, Int16)
+
+dynAPI = True -- TEMPTOGGLE
 
 mandelProg :: Int -> Int -> Int -> GraphCode Int
 mandelProg max_row max_col max_depth = 
@@ -58,7 +60,9 @@ mandelProg max_row max_col max_depth =
 	      z = (r_scale * (fromIntegral j) + r_origin) :+ 
   		  (c_scale * (fromIntegral i) + c_origin) in
 	  do put dat (_i,_j) z
-	     putt position (_i,_j)
+	     if dynAPI
+	       then forkStep$ mandelStep (_i,_j)
+	       else putt position (_i,_j)
 
        -- Final result, count coordinates of the  pixels with a certain value:
        finalize $ do 
@@ -87,6 +91,6 @@ runMandel a b c =
 
 main = do args <- getArgs  
 	  case args of
-	   []      -> runMandel 1 1 3   -- Should output 57.
+	   --[]      -> runMandel 1 1 3   -- Should output 57.
 	   []      -> runMandel 4 4 3   -- Should output 57.
 	   [a,b,c] -> runMandel (read a) (read b) (read c)

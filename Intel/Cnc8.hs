@@ -81,9 +81,13 @@ stepStats =
 -- parallel and then blocking on the result.
 launch_steps :: [StepCode ()] -> StepCode ()
 launch_steps mls = 
-    foldM (\ () m -> spawn (do try_stepcode m m; return ()))
+--    foldM (\ () m -> spawn (do try_stepcode m m; return ()))
+    foldM (\ () m -> forkStep m)
           () mls
 
+-- New, more dynamic API:
+forkStep s = 
+  spawn (do try_stepcode s s; return ())
 
 -- This consumes the state thats threaded through step code by capping
 -- the end of the step with a sync.  It needs a retry action to tuck
@@ -160,6 +164,8 @@ putt = proto_putt
 		  -- Spark each downstream step, attempting to do it in parallel before a 
 		  -- subsequent sync (at the end of the containing step).		  
                   launch_steps (Prelude.map (\step -> step tag) steps))
+
+
 
 get (ItemCol icol) tag = 
     do map <- S.lift$ readIORef icol       

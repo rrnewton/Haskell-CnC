@@ -47,6 +47,9 @@ pushSteps steps tag = do
 -- Make sure THIS doesn't cause any performance loss:
   sequence_ [ pushWork (step tag) | step <- steps ]
 
+-- New, more dynamic API
+forkStep = pushWork
+
 -- get :: ItemCol k v -> k -> StepCode v
 get col tag =
   mycallCC $ \cont -> do

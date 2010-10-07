@@ -261,7 +261,7 @@ prescribe (_set,_steps) step =
        GRAPHLIFT writeIORef _steps (step:steps)
 
 -- This encapsulates the book-keeping necessary for a put-tag (putt).
--- It is common to all the scheduler variants below.
+-- It is common to all the scheduler variants.
 -- 
 -- FIXME: Consider a trampoline.  Some schedulers may stack leak.
 --proto_putt :: Ord a =>  ([Step a] -> a -> StepCode b) -> TagCol a -> a -> StepCode b
@@ -411,6 +411,9 @@ newItem  = error "newItem not implemented under this scheduler"
 readItem = error "readItem not implemented under this scheduler"
 putItem  = error "putItem not implemented under this scheduler"
 #endif
+
+-- [2010.10.07] New, more dynamic step API
+forkStep :: StepCode () -> StepCode ()
 
 
 -- Internal function. We may allow extending the graph from within a
