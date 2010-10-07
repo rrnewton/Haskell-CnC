@@ -105,3 +105,10 @@ Preprocessor variables:
             ignore this, it's internal and is used for switching 
             between schedulers-as-modules or schedulers-as-includes
 
+
+
+------------------------------------------------------------
+Notes on running a full benchmark suite
+------------------------------------------------------------
+
+

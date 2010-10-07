@@ -28,7 +28,7 @@
 # Call it with environment variable LONGRUN=1 to get a longer run that
 # can serve as benchmarks.
 
-# Call it with THREADS="1 2 4" to run with # threads = 1, 2, or 4.
+# Call it with THREADSETTINGS="1 2 4" to run with # threads = 1, 2, or 4.
 
 # Call it with NONSTRICT=1 to keep going after the first error.
 
@@ -263,7 +263,15 @@ function run_normal_benchmark() {
 #for line in  "par_seq_par_seq 8.5" "embarrassingly_par 9.2" "primes2 200000" "mandel 300 300 4000" "mandel_opt 1 300 300 4000" "sched_tree 18" "fib 20000" "threadring 50000000 503" "nbody 1200" "primes 200000"; do
 
 # Parallel benchmarks only:
-for line in  "blackscholes 10000 15000000" "nbody 5000" "cholesky 1000 50 m1000.in" "par_seq_par_seq 8.5" "embarrassingly_par 9.2"  "primes2 200000" "mandel 300 300 4000" "mandel_opt2 1 300 300 4000" "sched_tree 18" "primes 200000"; do
+#for line in  "blackscholes 10000 15000000" "nbody 5000" "cholesky 1000 50 m1000.in" "par_seq_par_seq 8.5" "embarrassingly_par 9.2"  "primes2 200000" "mandel 300 300 4000" "mandel_opt2 1 300 300 4000" "sched_tree 18" "primes 200000"; do
+
+# FOR BIG machines, copied back from run_all_FROMPACKED
+#for line in "nbody 10000"  "blackscholes 10000 50000000" "mandel_opt2 2 300 300 20000" "cholesky 1000 50 m1000.in"  "embarrassingly_par 9.8" "par_seq_par_seq 9.2"  "primes2 1000000" "sched_tree 19" "mandel 300 300 20000" "mandel_opt 1 300 300 20000"  "primes 1000000"; 
+
+# FOR big machiens:
+# Upping mandel iterations to see how speedup changes
+#for line in "mandel 150 150 80000" "mandel_opt2 1 150 150 80000" ; do
+for line in "mandel 150 150 160000" "mandel_opt2 1 150 150 160000" ; do
 
   run_normal_benchmark
 

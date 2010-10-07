@@ -24,16 +24,16 @@ runtime:
 	runhaskell ./Setup.hs build
 	@echo 
 # TEMP [2010.10.06] Disabling doc build
-#	$(MAKE) doc
-#	$(MAKE) unit_test
+#	$(MAKE) setup_doc
+#	$(MAKE) setup_test
 
-doc:
+setup_doc:
 	@echo ================================================================================
 	@echo   Building Documentation
 	@echo ================================================================================
 	runhaskell ./Setup.hs haddock
 
-unit_test:
+setup_test:
 	@echo 
 	@echo ================================================================================
 	@echo   Running Test executable in the cabal distribution package
@@ -51,7 +51,8 @@ test:
 	THREADS=1 ./run_all_tests.sh
 
 longtest: 
-	TRIALS=5 NONSTRICT=1 LONGRUN=1 THREADSETTINGS="0 1 2 3 4 8" ./run_all_tests.sh &> /dev/stdout | tee all_tests.log
+	TRIALS=3 NONSTRICT=1 LONGRUN=1 THREADSETTINGS=="0 1 2 3 4 8" ./run_all_examples.sh &> /dev/stdout | tee all_tests.log
+#	TRIALS=3 NONSTRICT=1 LONGRUN=1 THREADSETTINGS=="0 1 2 3 4 8" ./run_all_examples.sh &> /dev/stdout | tee all_tests.log
 #	LONGRUN=1 THREADSETTINGS="0 1 2 3 4 8" ./run_all_tests.sh &> /dev/stdout | tee all_tests.log
 
 
@@ -89,6 +90,19 @@ Intel/Cnc3.o : Intel/CncUtil.hi
 examples/test_parfor.o : examples/test_parfor.hs
 examples/test_parfor.o : Intel/Cnc3.hi
 # DO NOT DELETE: End of Haskell dependencies
+
+#====================================================================================================
+
+cleanrun:
+	rm -f uname.txt cpuinfo issue all_tests*.log results.dat
+
+copyrun:
+	mkdir -p last_run
+	cp uname.txt cpuinfo issue all_tests*.log results.dat last_run/
+
+
+
+#====================================================================================================
 
 
 #====================================================================================================
@@ -159,3 +173,5 @@ cleantrans:
 #====================================================================================================
 
 # cd graphPartitioner; $(MAKE)
+
+

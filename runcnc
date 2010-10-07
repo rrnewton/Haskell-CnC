@@ -30,9 +30,11 @@
 
 #   CNC_VARIANT    -- which implementation?  "pure" or "io"
 #   CNC_SCHEDULER  -- which (numbered) scheduler, 1-N?
-#   FLAGS          -- flags for ghc
+#   GHC_DEFAULT_FLAGS -- flags for ghc
+#   GHC_DEFAULT_RTS   -- flags for ghc
 #   GHC            -- command to call ghc compiler
 #   INTERACTIVE    -- set to non-empty value to call ghci instead of ghc
+#   NORUN          -- compile but do not run
 # --------------------------------------------------------------------------------
 
 #source "$HASKELLCNC/default_opt_settings.sh"
