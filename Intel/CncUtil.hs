@@ -36,6 +36,7 @@ where
 
 import GHC.Conc
 import Control.Concurrent
+import Control.Concurrent.QSem
 import Data.Time.Clock -- Not in 6.10
 import qualified Data.Map as DM
 import qualified Data.IntMap as DI
@@ -147,17 +148,30 @@ doTrials trials mnd =
 
 #warning "Enabling HashTable item collections.  These are not truly thread safe (yet)."
 -- TODO -- try it with a global lock to make it safe.
-type MutableMap a b = HashTable a (MVar b)
+safe_hashtables = True
+
+withSem lock action = 
+  do waitQSem lock
+     x <- action
+     signalQSem lock
+     return x
+
+type MutableMap a b = (QSem, HT.HashTable a (MVar b))
 newMutableMap :: (Eq tag, Hashable tag) => IO (MutableMap tag b)
-newMutableMap = HT.new (==) hash
-assureMvar col tag = 
+newMutableMap = do lock <- newQSem 1 
+		   ht   <- HT.new (==) hash
+		   return (lock, ht)
+assureMvar (lock,col) tag = 
+  if safe_hashtables then withSem lock lkup else lkup 
+ where 
+ lkup = 
   do mayb <- HT.lookup col tag
      case mayb of 
          Nothing -> do mvar <- newEmptyMVar
 		       HT.insert col tag mvar
 		       return mvar
 	 Just mvar -> return mvar
-mmToList = HT.toList
+mmToList (lock,ht) = withSem lock$ HT.toList ht
 
 #else 
 #ifdef USE_GMAP
@@ -304,6 +318,10 @@ instance Hashable Bool where
 
 instance Hashable Int where
     hash = HT.hashInt
+
+instance Hashable Int16 where
+    hash = HT.hashInt . fromIntegral
+
 instance Hashable Char where
     hash = HT.hashInt . fromEnum 
 instance Hashable Word16 where

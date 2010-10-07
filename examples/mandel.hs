@@ -42,14 +42,16 @@ dynAPI = True -- TEMPTOGGLE
 
 mandelProg :: Int -> Int -> Int -> GraphCode Int
 mandelProg max_row max_col max_depth = 
-    do dat      :: ItemCol Pair (Complex Double) <- newItemCol
+    do --dat      :: ItemCol Pair (Complex Double) <- newItemCol
        pixel    :: ItemCol Pair Int              <- newItemCol
        
-       let mandelStep tag = 
+       let mandelStep tag@(i,j) = 
+	    let z = (r_scale * (fromIntegral j) + r_origin) :+ 
+  		    (c_scale * (fromIntegral i) + c_origin) in
 	    do tid <- stepUnsafeIO myThreadId
 	       --stepPutStr$ "["++ show tid ++"] Mandel Step executing: "++ show tag ++ "\n"
-	       cplx <- get dat tag
-	       put pixel tag (mandel max_depth cplx)
+	       --cplx <- get dat tag
+	       put pixel tag (mandel max_depth z)
 
        position :: TagCol  Pair <- prescribeNT [mandelStep] 
 
@@ -59,7 +61,7 @@ mandelProg max_row max_col max_depth =
           let (_i,_j) = (fromIntegral i, fromIntegral j)
 	      z = (r_scale * (fromIntegral j) + r_origin) :+ 
   		  (c_scale * (fromIntegral i) + c_origin) in
-	  do put dat (_i,_j) z
+	  do -- put dat (_i,_j) z
 	     if dynAPI
 	       then forkStep$ mandelStep (_i,_j)
 	       else putt position (_i,_j)

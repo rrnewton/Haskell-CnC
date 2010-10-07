@@ -124,7 +124,12 @@ run n = runGraph $
            prescribe tags (compute initVecs accels)
 
            initialize $
-               do sequence_ (List.map (putt tags) [1..n])
+               --do sequence_ (List.map (putt tags) [1..n])
+	       --do forM_ [1..n] $ \ t -> putt tags t
+               do forM_ [1..n] $ \ t -> forkStep (compute initVecs accels t)
+	       -- [2010.10.07] Considering this, but need to test it:
+	       -- Ack, it seems to hang with sched 11... blocked mvar sched 7
+               --cncFor 1 (n-1) $ \ t -> compute initVecs accels t
 
            finalize $ 
                do stepPutStr "Begin finalize action.\n"
