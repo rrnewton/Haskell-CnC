@@ -1,8 +1,6 @@
 -- Author: Ryan Newton 
 
 -- In this version we flatten our (x,y) positions into a single integer.
--- To that end, we FIX the grid size statically to 300x300.
-
 
 -- In this improved version, we look at three different optimizations.
 --   First: enable GMaps and pack 
@@ -30,13 +28,15 @@ pack (a,b) = shiftL (fromIntegral a) 16 + (fromIntegral b)
 unpack n   = (fromIntegral$ shiftR n 16, fromIntegral$ n .&. 0xFFFF)
 
 mandel :: Int -> Complex Double -> Int
-mandel max_depth c = loop 0 0 0
+mandel max_depth c = loop 0 0 
   where   
    fn = magnitude
-   loop i z count
-    | i == max_depth = count
-    | fn(z) >= 2.0   = count 
-    | otherwise      = loop (i+1) (z*z + c) (count+1)
+   loop i z 
+    | i == max_depth = i
+    | fn(z) >= 2.0   = i
+    | otherwise      = loop (i+1) (z*z + c) 
+
+dynAPI = True
 
 mandelProg :: Int -> Int -> Int -> Int -> GraphCode Int
 mandelProg optlvl max_row max_col max_depth = 
@@ -51,15 +51,20 @@ mandelProg optlvl max_row max_col max_depth =
 
        position <- prescribeNT [mandelStep]
 
-       let init1 = forM_ [0..max_row] $ \i -> 
+       let push i j = 
+	       if dynAPI 
+	       then forkStep$ mandelStep (pack (fromIntegral i, fromIntegral j))
+	       else putt position $ pack (fromIntegral i, fromIntegral j)
+
+	   init1 = forM_ [0..max_row] $ \i -> 
                      forM_ [0..max_col] $ \j ->
-  	               putt position $ pack (fromIntegral i, fromIntegral j)
+  	               push i j
 
        -- This version uses cncFor to structure the work spawning.
        let init2 = 
                  do stepPutStr "mandel_opt: Using cncFor implementation...\n"
                     cncFor2D (0,0) (max_row, max_col)  $ \ i j ->
-		       putt position $ pack (fromIntegral i, fromIntegral j)
+		       push i j
 
        -- This version uses cncFor to do the actual work.
        let init3 = do stepPutStr "mandel_opt: Using even better cncFor method...\n"

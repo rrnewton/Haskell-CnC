@@ -1,8 +1,6 @@
 -- Author: Ryan Newton 
 
 -- In this version we flatten our (x,y) positions into a single integer.
--- To that end, we FIX the grid size statically to 300x300.
-
 
 -- In this improved version, we look at three different optimizations.
 --   First: enable GMaps and pack 

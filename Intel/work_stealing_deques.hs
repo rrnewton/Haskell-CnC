@@ -1,6 +1,11 @@
 -----------------------------------------------------------------------------
--- Work stealing DEQUES 
------------------------
+-- Work stealing DEQUES implemented in Haskell
+-----------------------------------------------------------------------------
+
+-- These are surely not as efficient as they could be.  Currently we
+-- use atomic variables containing Data.Seq.  
+
+-- Perhaps another option would be a IOArray circular buffer?
 
 -- To be included in other files:
 -----------------------------------------------------------------------------

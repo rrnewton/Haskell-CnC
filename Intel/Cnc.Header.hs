@@ -443,15 +443,17 @@ cncFor :: Int -> Int -> (Int -> StepCode ()) -> StepCode ()
 -- explicitly provide cncFor2D etc...
 -- 
 cncFor start end body = 
- do ts <- graphInStep newTagCol
-    --stepPutStr$ "Performing cncFor on range " ++ show (start,end) ++ "\n"
-    graphInStep$ prescribe ts$ \(x,y) -> 
-      do --stepPutStr$ "  Executing range segment: "++ show (x,y) ++ "\n"
-         for_ x (y+1) body
+ do --stepPutStr$ "Performing cncFor on range " ++ show (start,end) ++ "\n"
+    let run (x,y) = do --stepPutStr$ "  Executing range segment: "++ show (x,y) ++ "\n"
+		       for_ x (y+1) body
+        range_segments = splitInclusiveRange (4*numCapabilities) (start,end)
     --stepPutStr$ "Desired segments "++ show (4*numCapabilities) ++ " putting first segment...\n"
-    let range_segments = splitInclusiveRange (4*numCapabilities) (start,end)
+    -- [2010.10.07] Updating this to use forkStep:
+    --ts <- graphInStep newTagCol
+    --graphInStep$ prescribe ts run
     --stepPutStr$ "PUTTING RANGES "++ show (length range_segments) ++" "++ show range_segments ++"\n"
-    forM_ range_segments (putt ts)
+    --forM_ range_segments (putt ts)
+    forM_ range_segments (\ pr -> forkStep (run pr))
 #endif
 
 #ifndef SUPPRESS_cncFor2D
