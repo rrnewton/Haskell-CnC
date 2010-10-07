@@ -44,7 +44,8 @@
 unset HASKELLCNC
 
   # Which subset of schedures should we test:
-PURESCHEDS="2 3"
+#PURESCHEDS="2 3"
+PURESCHEDS=""
 
 IOSCHEDS="4 7 8 3 10 11"
 # IOSCHEDS="11"
@@ -58,6 +59,10 @@ then THREADSETTINGS="4"
 fi
 
 source default_opt_settings.sh
+
+# HACK: with all the intermachine syncing and different version control systems I run into permissions problems sometimes.
+chmod +x ./ntime* ./*.sh
+
 
   # Where to put the timing results:
 RESULTS=results.dat

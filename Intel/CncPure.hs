@@ -70,6 +70,10 @@ import Test.HUnit
 -- Below you will see two interfaces, the "raw" functional interface
 -- (functions prefixed with "_") and a nicer monadic interface.
 
+-- TODO: It is likely that this can be much simplified by using a
+-- separate library for heterogenously typed collections... I believe
+-- I saw such a thing on hackage.
+
 ------------------------------------------------------------
 -- Toggles
 
@@ -818,6 +822,12 @@ put col tag val = CC $
 putt col tag = CC $ 
    \ w tags items -> 
       (Just (), Done (_putt col tag : tags) items)
+
+-- UNFINISHED:
+-- HACK: send a tag to the "universal" tag/step collection to do a forkStep
+-- forkStep stp = CC $ 
+--    \ w tags items -> 
+--       (Just (), Done (NT (TCID 0) stp : tags) items)
 
 
 -- The graph monad captures code that builds graphs:
