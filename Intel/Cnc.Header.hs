@@ -145,11 +145,14 @@ import GHC.Conc
 import GHC.Prim
 import GHC.Exts 
 
+#ifdef USE_HUNIT
 import Test.HUnit
+#endif
 
 -- Inline the utility library as well:
 #ifndef INCLUDEMETHOD
-import Intel.CncUtil as GM hiding (tests)
+--import Intel.CncUtil as GM hiding (tests)
+import Intel.CncUtil as GM 
 #else
 #include "CncUtil.hs"
 #endif
@@ -349,6 +352,8 @@ cncVariant ="io-based, scheduler " ++ show (CNC_SCHEDULER :: Int)
 --  Testing
 --------------------------------------------------------------------------------
 
+#ifdef USE_HUNIT
+
 -- Here's a tiny program to run:
 incrStep d1 (t2,d2) tag = 
  do val <- get d1 tag 
@@ -393,6 +398,10 @@ smalltest = testCase "Small test of Cnc model under Cnc.hs" $
 #ifndef INCLUDEMETHOD
 tests :: Test
 tests = TestList [ smalltest ]
+#endif
+
+#else 
+tests = undefined
 #endif
 
 --------------------------------------------------------------------------------

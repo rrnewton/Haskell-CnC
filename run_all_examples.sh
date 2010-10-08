@@ -42,13 +42,14 @@
 #export GHC=ghc-6.13.20100511 
 #export GHC=~/bin/Linux-i686/bin/ghc-6.13.20100511
 unset HASKELLCNC
+export HASKELLCNC=`pwd`
 
   # Which subset of schedures should we test:
 #PURESCHEDS="2 3"
 PURESCHEDS=""
 
-IOSCHEDS="4 7 8 3 10 11"
-# IOSCHEDS="11"
+#IOSCHEDS="4 7 8 3 10 11"
+IOSCHEDS="10 11"
 
 #SEPARATESCHEDS="6"
 SEPARATESCHEDS=""
@@ -58,6 +59,7 @@ then THREADSETTINGS="4"
 #then THREADSETTINGS="0 1 2 3 4"
 fi
 
+if [ "$GHC" == "" ];  then GHC=ghc; fi
 source default_opt_settings.sh
 
 # HACK: with all the intermachine syncing and different version control systems I run into permissions problems sometimes.
@@ -98,7 +100,7 @@ fi
 echo "# TestName Variant Scheduler NumThreads HashHackEnabled MinTime MedianTime MaxTime" > $RESULTS
 echo "# "`date` >> $RESULTS
 echo "# "`uname -a` >> $RESULTS
-echo "# "`ghc -V` >> $RESULTS
+echo "# "`$GHC -V` >> $RESULTS
 echo "# "
 echo "# Running each test for $TRIALS trials." >> $RESULTS
 echo "#  ... with default compiler options: $GHC_DEFAULT_FLAGS" >> $RESULTS
@@ -134,7 +136,17 @@ function runit()
 
   echo "Executing $NTIMES $TRIALS ./examples/$test.exe $ARGS +RTS $RTS -RTS "
   if [ "$LONGRUN" == "" ]; then export HIDEOUTPUT=1; fi
-  times=`$NTIMES "$TRIALS" ./examples/$test.exe $ARGS +RTS $RTS -RTS`
+
+  # Hack, don't bother running the multiple trials under a threshold:
+  if [ "TRIALSTHRESHOLD" == "" ]
+  # TODO: IMPLEMENT THIS POLICY
+  then thistrials=$TRIALS
+  else thistrials=$TRIALS
+  fi
+  # Another option woud be dynamic feedback where if the first one
+  # takes a long time we don't bother doing more trials.
+
+  times=`$NTIMES "$thistrials" ./examples/$test.exe $ARGS +RTS $RTS -RTS`
   CODE=$?
 
   echo " >>> MIN/MEDIAN/MAX TIMES $times"
@@ -264,22 +276,28 @@ function run_normal_benchmark() {
 
 #for line in "mandel_opt 1 300 300 4000" "mandel_opt 2 300 300 4000" "mandel_opt 3 300 300 4000" "mandel 300 300 4000"; do
 
+# Even wasp could handle this one, right:
 #  
 #for line in  "par_seq_par_seq 8.5" "embarrassingly_par 9.2" "primes2 200000" "mandel 300 300 4000" "mandel_opt 1 300 300 4000" "sched_tree 18" "fib 20000" "threadring 50000000 503" "nbody 1200" "primes 200000"; do
 
 # Parallel benchmarks only:
-#for line in  "blackscholes 10000 15000000" "nbody 5000" "cholesky 1000 50 m1000.in" "par_seq_par_seq 8.5" "embarrassingly_par 9.2"  "primes2 200000" "mandel 300 300 4000" "mandel_opt2 1 300 300 4000" "sched_tree 18" "primes 200000"; do
+#for line in  "blackscholes 10000 15000000" "nbody 5000" "cholesky 1000 50 m1000.in" "par_seq_par_seq 8.5" "embarrassingly_par 9.2"  "primes2 200000" "mandel 300 300 4000" "mandel_opt2 1 300 300 4000" "sched_tree 18" "primes 200000"; 
+
 
 # FOR BIG machines, copied back from run_all_FROMPACKED
-#for line in "nbody 10000"  "blackscholes 10000 50000000" "mandel_opt2 2 300 300 20000" "cholesky 1000 50 m1000.in"  "embarrassingly_par 9.8" "par_seq_par_seq 9.2"  "primes2 1000000" "sched_tree 19" "mandel 300 300 20000" "mandel_opt 1 300 300 20000"  "primes 1000000"; 
+# for line in "nbody 10000"  "blackscholes 10000 50000000" "mandel 150 150 160000" "mandel_opt2 2 150 150 160000" "cholesky 1000 50 cholesky_matrix1000.dat" "primes 1000000" "embarrassingly_par 9.8" "par_seq_par_seq 9.2"  "sched_tree 19" ; 
 
-# FOR big machiens:
-# Upping mandel iterations to see how speedup changes
-#for line in "mandel 150 150 80000" "mandel_opt2 1 150 150 80000" ; do
-for line in "mandel 150 150 160000" "mandel_opt2 1 150 150 160000" ; do
+if [ "$BENCHLIST" == "" ];
+then BENCHLIST="./benchlist.txt"
+fi
 
+echo Reading benchmarks from $BENCHLIST ...
+cat $BENCHLIST | grep -v "\#" | 
+while read line
+do
+  if [ "$line" == "" ]; then continue; fi
+  echo RUNNING BENCH:  $line
   run_normal_benchmark
-
 done
 
 echo "Finished with all test configurations."

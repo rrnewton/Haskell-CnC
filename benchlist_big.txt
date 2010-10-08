@@ -1,0 +1,12 @@
+# These are heftier benchmarks with 32 core servers in mind.
+
+nbody 10000
+blackscholes 10000 50000000
+mandel         150 150 160000
+mandel_opt2  2 150 150 160000
+
+# cholesky 1000 50 cholesky_matrix1000.dat
+primes 1000000
+embarrassingly_par 9.8
+par_seq_par_seq 9.2
+sched_tree 19

@@ -162,4 +162,3 @@ put col tag (!item) = do
   pushSteps steps item
 
 
-itemsToList = error "itemstolist not implemented yet for this scheduler" -- XXX

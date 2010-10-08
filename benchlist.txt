@@ -1,0 +1,18 @@
+# This is a default set of benchmarks reasonable for a powerful four core machine.
+
+nbody 1200
+blackscholes 10000 15000000
+mandel 300 300 4000
+mandel_opt 1 300 300 4000
+
+# cholesky 1000 50 cholesky_matrix1000.dat
+# primes 200000
+# embarrassingly_par 9.2
+# par_seq_par_seq 8.5
+# sched_tree 18
+
+# threadring 50000000 503
+primes2 200000
+
+
+# fib 20000

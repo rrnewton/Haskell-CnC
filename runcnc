@@ -28,28 +28,30 @@
 # --------------------------------------------------------------------------------
 #   NUMTHREADS     -- if this is "0" the program is compiled without threading
 
+#   NORUN          -- compile but do not run
+
 #   CNC_VARIANT    -- which implementation?  "pure" or "io"
 #   CNC_SCHEDULER  -- which (numbered) scheduler, 1-N?
 #   GHC_DEFAULT_FLAGS -- flags for ghc
 #   GHC_DEFAULT_RTS   -- flags for ghc
 #   GHC            -- command to call ghc compiler
 #   INTERACTIVE    -- set to non-empty value to call ghci instead of ghc
-#   NORUN          -- compile but do not run
+
+#   CNCOPT -- set to -O0 -O2 -to control optimization level [default -O2]
 # --------------------------------------------------------------------------------
+
+if [ "$GHC" == "" ];  then 
+ GHC=ghc
+fi
 
 #source "$HASKELLCNC/default_opt_settings.sh"
 DEFAULT_SETTINGS_FILE=`dirname $0`/default_opt_settings.sh
 source $DEFAULT_SETTINGS_FILE
 # if [ -z ]
 
-
 FILE=$1
 BIN=`echo $1 | sed 's/\.hs//'`.exe
 shift
-
-if [ "$GHC" == "" ];  then 
- GHC=ghc
-fi
 
 if [ "$INTERACTIVE" == "" ];
 then CMD="$GHC --make";

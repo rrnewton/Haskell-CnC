@@ -18,8 +18,10 @@ module Intel.CncUtil (
 		      GMapKey (..), 
 		      Hashable (..),
 		      (!),
+#ifdef USE_HUNIT
 		      testCase,
 		      tests,
+#endif
 
                       MutableMap, newMutableMap, assureMvar, mmToList,
 		      HotVar, newHotVar, readHotVar, writeHotVar, modifyHotVar, modifyHotVar_, 
@@ -50,7 +52,9 @@ import Data.IORef
 import qualified Data.HashTable as HT
 import Debug.Trace
 
+#ifdef USE_HUNIT
 import Test.HUnit
+#endif
 -- import Test.QuickCheck (quickCheck, (==>))
 
 --------------------------------------------------------------------------------
@@ -858,8 +862,7 @@ instance (FitInWord k, J.JE v) => GMapKeyVal k v where
 -- 				return$ DI.lookup (wordToInt $ toWord k) m
 --   insert2 k v (GMapInt2 r) = modifyIORef r (DI.insert (wordToInt $ toWord k) v)
 
-
-
+#ifdef USE_HUNIT
 
 test1gmap = putStrLn $ maybe "Couldn't find key!" id $ lookup (5, Right ()) myGMap
 test2gmap = putStrLn $ maybe "Couldn't find key!" id $ lookup 3 intMap
@@ -880,3 +883,4 @@ test1 = testCase "Spot check list lengths"$ assertEqual "splitN" [[1,2], [3,4,5]
 
 tests = TestList [test1]
 
+#endif

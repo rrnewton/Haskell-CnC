@@ -96,10 +96,22 @@ examples/test_parfor.o : Intel/Cnc3.hi
 cleanrun:
 	rm -f uname.txt cpuinfo issue all_tests*.log results.dat
 
-copyrun:
+mvrun:
 	mkdir -p last_run
 	cp uname.txt cpuinfo issue all_tests*.log results.dat last_run/
 
+UNAME=$(shell uname -n )
+BENCHPACK="benchpack_$(UNAME)"
+
+# Make a separate directory for running benchmarks.
+benchpack:
+	mkdir -p "$(BENCHPACK)/examples/"
+	mkdir -p "$(BENCHPACK)/Intel/"
+	cp -a *big_run*.sh default_opt_settings.sh ntimes ntimes_minmedmax ntimes_binsearch.sh binsearch_throughput timeout.sh timeout.hs \
+          benchlist*.txt install_environment_vars.sh runcnc run_all_shared.sh run_all_examples.sh haskell_cnc.h "$(BENCHPACK)/"
+	cp -a Intel/*.hs     "$(BENCHPACK)/Intel/"
+	cp -a examples/*.hs  "$(BENCHPACK)/examples/"
+	cp -a examples/*.dat "$(BENCHPACK)/examples/"
 
 
 #====================================================================================================

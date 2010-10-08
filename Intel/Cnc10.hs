@@ -27,6 +27,8 @@
 
 -----------------------------------------------------------------------------
 
+-- This version uses a simple shared workpool (like 4,5,6,7).
+
 data Sched = Sched 
     { workpool :: HotVar [StepCode ()],
       myid :: Int
@@ -44,6 +46,18 @@ finalize finalAction =
        GRAPHLIFT forM_ [1.. numCapabilities] $ \_ -> readChan joiner
        --cncPutStr$ " *** Workers returned, now finalize action:\n"
        finalAction			   
+
+itemsToList col = 
+ do 
+    m <- STEPLIFT readHotVar col
+    let ls = Map.toList m 
+    return$ map (\ (k,either) -> 
+	         case either of 
+		   Left b  -> (k,b)
+		   Right _ -> error$ "itemsToList: no value for tag: " ++ show k
+		) ls
+
+   --error "itemstolist not implemented yet for this scheduler" -- XXX
 
 quiescence_support=True
 

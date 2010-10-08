@@ -8,7 +8,7 @@
   #-}
 
 
--- UNFINISHED: this version will implement work stealing deques as
+-- This version will implement work stealing deques as
 -- Haskell data structures.
 
 
@@ -100,6 +100,8 @@ finalize finalAction =
        -- Optional, wait till all workers complete also:
        --GRAPHLIFT forM_ [1.. numCapabilities] $ \_ -> readChan joiner
        return result
+
+itemsToList = error "itemstolist not implemented yet for this scheduler" -- XXX
 
 quiescence_support=False
 
