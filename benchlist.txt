@@ -3,9 +3,9 @@
 nbody 1200
 blackscholes 10000 15000000
 mandel 300 300 4000
-mandel_opt 1 300 300 4000
+#mandel_opt 1 300 300 4000
+mandel_opt2 2 300 300 4000
 
-# cholesky 1000 50 cholesky_matrix1000.dat
 # primes 200000
 # embarrassingly_par 9.2
 # par_seq_par_seq 8.5
@@ -13,6 +13,6 @@ mandel_opt 1 300 300 4000
 
 # threadring 50000000 503
 primes2 200000
-
+cholesky 1000 50 cholesky_matrix1000.dat
 
 # fib 20000

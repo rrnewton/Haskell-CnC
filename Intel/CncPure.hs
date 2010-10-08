@@ -40,7 +40,8 @@ import Control.Monad
 import Debug.Trace
 import Unsafe.Coerce
 
-import Intel.CncUtil hiding (tests)
+--import Intel.CncUtil hiding (tests)
+import Intel.CncUtil 
 
 import System.IO.Unsafe
 import System.Random

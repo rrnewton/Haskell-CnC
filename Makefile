@@ -113,6 +113,11 @@ benchpack:
 	cp -a examples/*.hs  "$(BENCHPACK)/examples/"
 	cp -a examples/*.dat "$(BENCHPACK)/examples/"
 
+# upload datasets
+upload:
+	unison-2.32 upload_hcnc_datasets -batch -ui text
+	ssh fort.ffh.us '(cd public_html/haskell-cnc/datasets/; tar czvf benchmarks.tgz benchmarks/)'
+
 
 #====================================================================================================
 

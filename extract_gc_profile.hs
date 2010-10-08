@@ -9,10 +9,23 @@ data LogEntry = Config String String Int -- bench sched threads
 	      | Productivity Double
   deriving Show
 
+
+
+-- Found this genuinely corrupt line in one log:
+-- ["Running","Config","26:","embarrassingly_par","variant","0","sched","threads","8"]
+
 parseLine (_: "Config" :_ : bench: _: _: _: sched : "threads": thr : _) = Config bench sched (read thr)
+
+-- OH WAIT THESE ARE FROM THE .DAT FILES:
+-- # *** Config [0 ..], testing with command/args: nbody.exe +RTS -H500M -RTS 10000
+--parseLine ["#","***","Config","[0","..],","testing","with","command/args:","nbody.exe","10000"] = 
+--parseLine ["#","***","Config",_,_,"testing","with","command/args:",bench,"10000"] = 
+
 parseLine ("Productivity": percent: _) = 
     Productivity (read$ filter (not . (=='%')) percent)
-parseLine line = error$ "Unmatched line: "++ unwords line
+parseLine line = error$ "Unmatched line, length "++ show (length line) 
+		        ++" :\n  "++ unwords line
+		        ++"\n  "++ show line
 
 
 configp (Config _ _ _)  = True

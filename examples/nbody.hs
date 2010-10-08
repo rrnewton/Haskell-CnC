@@ -71,8 +71,11 @@ compute vecList accels tag =
                                                     dy = y'-y
                                                     dz = z'-z
                                                     eps = 0.005
-                                                    distanceSq = dx^2 + dy^2 + dz^2 + eps
-                                                    factor = 1/sqrt(distanceSq ^ 3)
+						    -- Performance degredation here:
+                                                    -- distanceSq = dx^2 + dy^2 + dz^2 + eps
+                                                    -- factor = 1/sqrt(distanceSq ^ 3)
+						    distanceSq = dx*dx + dy*dy + dz*dz + eps
+						    factor = 1/sqrt(distanceSq * distanceSq * distanceSq)
 --                                                in multTriple factor (dx,dy,dz)
                                                 in multTriple factor (dx,dy,dz)
 -- #define OLD_VER
