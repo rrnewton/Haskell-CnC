@@ -72,10 +72,9 @@ compute vecList accels tag =
                                                     dz = z'-z
                                                     eps = 0.005
 						    -- Performance degredation here:
-                                                    -- distanceSq = dx^2 + dy^2 + dz^2 + eps
-                                                    -- factor = 1/sqrt(distanceSq ^ 3)
 						    distanceSq = dx*dx + dy*dy + dz*dz + eps
 						    factor = 1/sqrt(distanceSq * distanceSq * distanceSq)
+
 --                                                in multTriple factor (dx,dy,dz)
                                                 in multTriple factor (dx,dy,dz)
 -- #define OLD_VER
@@ -99,8 +98,8 @@ compute vecList accels tag =
 
                            (# dx,dy,dz #) = (# x'-x, y'-y, z'-z #)
 			   eps = 0.005
-			   distanceSq = dx^2 + dy^2 + dz^2 + eps
-			   factor = 1/sqrt(distanceSq ^ 3)
+			   distanceSq = dx*dx + dy*dy + dz*dz + eps
+			   factor = 1/sqrt(distanceSq * distanceSq * distanceSq)
 
 			   (# px,py,pz #) = (# factor * dx, factor * dy, factor *dz #)
 
@@ -110,9 +109,6 @@ compute vecList accels tag =
 
 
 -- This describes the graph-- The same tag collection prescribes the two step collections.             
---run :: Int -> (b, c)
---run :: Int -> ([(Int, (Float, Float, Float))], [(Int, (Float, Float, Float))])
---run :: Int -> ([Float3D], [Float3D])
 run :: Int -> [Float3D]
 run n = runGraph $  
         do tags    <- newTagCol

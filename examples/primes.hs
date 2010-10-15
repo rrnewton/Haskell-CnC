@@ -46,13 +46,20 @@ primes n =
 		                  then put primes t t
 		                  else return ()]
 
+#if 0
       let loop i | i >= n = return ()
-  	  loop i = do putt tags i 
-	              loop (i+2)
+      	  loop i = do putt tags i 
+      	              loop (i+2)
+      initialize $
+      	do put primes 2 2
+           loop 3      
+#else
       initialize $
 	do put primes 2 2
-           loop 3      
-
+           cncFor 0 ((n - 1) `quot` 2 - 1) $ \i -> do
+	    --stepPutStr$ "putting " ++ show i ++ "\n"
+	    putt tags (3 + i*2)
+#endif
       finalize $ 
         do result <- itemsToList primes
 	   return (length result)	       

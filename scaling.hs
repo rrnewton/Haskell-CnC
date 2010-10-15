@@ -3,6 +3,8 @@
   #-}
 
 -- This script generates gnuplot plots.
+-- Give it a .dat file as input... (or it will try to open results.dat)
+
 
 import Text.PrettyPrint.HughesPJClass
 import Text.Regex
@@ -10,6 +12,8 @@ import Data.List
 import Data.Function
 import Control.Monad
 import System
+import System.IO
+import System.FilePath 
 import System.Environment
 
 import HSH
@@ -392,6 +396,9 @@ main = do
  -- putStrLn$ show (pPrint (map length chopped))
  -- putStrLn$ show (pPrint (map parse chopped))
 
+-- print "parsed:"; print parsed
+ --print "Organized:"; print organized
+
 {- 
  putStrLn$ renderStyle (style { lineLength=150 }) (pPrint organized)
  -}
@@ -399,7 +406,8 @@ main = do
  --Plot.plot X11.cons myoverlay
  --Simple.plotList [Simple.LineStyle 0 [Simple.LineTitle "foobar"]] [0,5..100]
 
- let root = "./graph_temp/"
+ --let root = "./graph_temp/"
+ let root = "./" ++ dropExtension file ++ "_graphs/"
  -- For hygiene, completely anhilate output directory:
  system$ "rm -rf "  ++root ++"/"
  system$ "mkdir -p "++root
@@ -425,17 +433,23 @@ main = do
 
  --plotDots [x11, Size$ Scale 3.0] dat
  --plotDots [x11, LineStyle 0 [PointSize 5.0]] dat
- putStrLn$ "Plotted list"
+ putStrLn$ "Plotted list\n\n"
 
- putStrLn$ "\n\nBenchmark, scheduler, best #threads, best median time, max parallel speedup: "
+ let summarize hnd = do 
+       hPutStrLn hnd $ "# Benchmark, scheduler, best #threads, best median time, max parallel speedup: "
+       hPutStrLn hnd $ "# Summary for " ++ file
 
- let pads n s = take (n - length s) $ repeat ' '
- let pad  n x = pads n (show x)
+       let pads n s = take (n - length s) $ repeat ' '
+       let pad  n x = " " ++ (pads n (show x))
 
- forM_ bests $ \ (Best(name, sched, threads, best, speed)) ->
-   putStrLn$ "  "++ name++ (pads 25 name) ++ 
-	            show sched++   (pad 5 sched) ++ 
-	            show threads++ (pad 5 threads)++ 
-	            show best ++   (pad 15 best) ++
-		    show speed 
- putStrLn$ "\n\n"
+       forM_ bests $ \ (Best(name, sched, threads, best, speed)) ->
+	 hPutStrLn hnd$ "    "++ name++ (pads 25 name) ++ 
+			  show sched++   (pad 5 sched) ++ 
+			  show threads++ (pad 5 threads)++ 
+			  show best ++   (pad 15 best) ++
+			  show speed 
+       hPutStrLn hnd$ "\n\n"
+
+ summarize stdout
+ withFile (dropExtension file `addExtension` "summary") WriteMode $ summarize 
+

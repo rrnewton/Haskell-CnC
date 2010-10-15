@@ -118,6 +118,8 @@ upload:
 	unison-2.32 upload_hcnc_datasets -batch -ui text
 	ssh fort.ffh.us '(cd public_html/haskell-cnc/datasets/; tar czvf benchmarks.tgz benchmarks/)'
 
+#fakescale:
+#	ls datasets_NEW/*.dat | xargs -i ./sim_hypothetical_scalable_gc {} 
 
 #====================================================================================================
 

@@ -40,8 +40,7 @@ import Control.Monad
 import Debug.Trace
 import Unsafe.Coerce
 
---import Intel.CncUtil hiding (tests)
-import Intel.CncUtil 
+import Intel.CncUtil hiding (tests)
 
 import System.IO.Unsafe
 import System.Random
@@ -592,22 +591,22 @@ parSched2 graph inittags world =
  
 
 runSomeSteps2 :: Graph -> Collections -> Int -> Chan NewTag -> Bundle () -> [PrimedStep] -> IO (Bundle ())
-runSomeSteps2 g w n c (rec @ B{..}) primed = 
---runSomeSteps2 g w n c rec primed = let ( @ B{..}) = rec in
+runSomeSteps2 g w n c (record@(B{..})) primed = 
+--runSomeSteps2 g w n c record primed = let (B{..}) = record in
  case primed of 
   [] ->
     -- If we're over our limit, we stop even if there's work left.
     -- (But we make sure to finish the already primed steps.)
-    if n <= 0 then return rec else
+    if n <= 0 then return record else
     -- If we run out of (readily available) work we have to stop:
     do b <- isEmptyChan c
-       if b then return rec else
+       if b then return record else
         -- In this case we're out of primed steps, but we have more tags.
         -- We prime a batch of new steps (corresponding to the next tag).
 	do hd <- readChan c 
 	   case hd of 
 	    NT id tag ->
-	     runSomeSteps2 g w n c rec (callSteps g id tag)
+	     runSomeSteps2 g w n c record (callSteps g id tag)
 
   -- In this case we have primed steps and just need to do the real work:
   pstep:tl ->
@@ -615,13 +614,13 @@ runSomeSteps2 g w n c (rec @ B{..}) primed =
    -- Accumulate blocked tokens:
     newb@(Block _ _) -> 
        runSomeSteps2 g w (n-1) c 
-        rec{blocked= newb:blocked, bsteps= pstep:bsteps} tl
+        record{blocked= newb:blocked, bsteps= pstep:bsteps} tl
     -- Alas, we don't know which of these newtags are really
     -- FRESH (seen for the first time) until we merge it back
     -- into the global world state.
     Done newtags newitems ->
        runSomeSteps2 g w (n-1) c
-        rec{outtags=newtags++outtags, items=newitems++items} tl
+        record{outtags=newtags++outtags, items=newitems++items} tl
 
 
 -- ==============================================================================
@@ -747,7 +746,7 @@ distScheduler graph inittags world =
 runSomeSteps :: Graph -> Collections -> Int -> Bundle [NewTag] -> [PrimedStep] -> Bundle [NewTag]
 
 -- If we run out of work we have to stop:
-runSomeSteps _ _ n (rec @ B{intags=[]}) [] = rec
+runSomeSteps _ _ n (record @ B{intags=[]}) [] = record
 --trace ("Out of work.. stopping blocked: "++ show (length blocked)) $ 
 --(blocked,bsteps,[],items)
 
@@ -757,26 +756,26 @@ runSomeSteps _ _ n bundle [] | n <= 0 = bundle
 					     
 -- In this case we're out of primed steps, but we have more tags.
 -- We prime a batch of new steps (corresponding to the next tag).
-runSomeSteps graph w n (rec @ B{intags = hd:tl}) [] = 
+runSomeSteps graph w n (record @ B{intags = hd:tl}) [] = 
 	   case hd of 
 	    NT id tag ->
-	     runSomeSteps graph w n rec{intags=tl} (callSteps graph id tag)
+	     runSomeSteps graph w n record{intags=tl} (callSteps graph id tag)
 
 -- Here's where we do the real work, execute the next primed step:
-runSomeSteps g w n (rec @ B{..}) (pstep:tl) = 
+runSomeSteps g w n (record @ B{..}) (pstep:tl) = 
            -- INVOKE THE STEP!
 	   case pstep w of
 	     -- Accumulate blocked tokens:
 	     newb@(Block _ _) -> 
 		 runSomeSteps g w (n-1) 
-		    rec{blocked= newb:blocked, bsteps= pstep:bsteps} tl
+		    record{blocked= newb:blocked, bsteps= pstep:bsteps} tl
 
              -- Alas, we don't know which of these newtags are really
              -- FRESH (seen for the first time) until we merge it back
              -- into the global world state.
 	     Done newtags newitems ->
 		 runSomeSteps g w (n-1) 
-		    rec{outtags=newtags++outtags, items=newitems++items} tl
+		    record{outtags=newtags++outtags, items=newitems++items} tl
 
 
 --------------------------------------------------------------------------------
@@ -829,7 +828,9 @@ putt col tag = CC $
 -- forkStep stp = CC $ 
 --    \ w tags items -> 
 --       (Just (), Done (NT (TCID 0) stp : tags) items)
-
+--forkStep stp = error "forkStep not implemented yet in CnCPure.hs"
+-- This just does it in serial:
+forkStep stp = do stp; return ()
 
 -- The graph monad captures code that builds graphs:
 instance Monad GraphCode where 

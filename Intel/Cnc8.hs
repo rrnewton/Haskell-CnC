@@ -182,9 +182,9 @@ get (ItemCol icol) tag =
 		 throw EscapeStep
 
 initfin :: String -> StepCode a -> GraphCode a
-initfin str m = do let err = error str
-	           x <- try_stepcode err m
-	           case x of Nothing -> err
+initfin str m = do 
+	           x <- try_stepcode (error str) m
+	           case x of Nothing -> (error str)
 		  	     Just v  -> return v
 
 initialize = initfin "Get failed within initialize action!"

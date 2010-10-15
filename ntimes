@@ -34,7 +34,7 @@
 
 
 # Time out processes after three minutes.
-TIMEOUT=180
+TIMEOUT=1000
 
 # Unfortunately 'tempfile' is not a standard command:
 function mytempfile {
