@@ -19,7 +19,7 @@ import Data.List
 --import Data.Set as S hiding (map, filter, partition)
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.List.Split (splitOn)
+import Data.List.Split (splitOn) -- from 'split' package 
 import Data.Graph
 import Debug.Trace
 
