@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, QuasiQuotes, TypeSynonymInstances, NamedFieldPuns #-}
+{-# LANGUAGE RecordWildCards, QuasiQuotes, NamedFieldPuns #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
 
@@ -47,41 +47,6 @@ step_obj str = "m_" ++ str
 obj_ref a   = (t$ step_obj$ fromAtom a)
 
 
--- The probability of any of the below stuff being reusable is pretty low.
--- (It's very C++ specific. This whole *strategy* of private context generation is probably pretty C++ specific.)
--- But I thought I would begin to at least BEGIN to abstract the syntax-construction operations.
-mkPtr d = d <> t"*"
-deref x y = x <> t"." <> y
-
-
--- initAssign
--- initAssignCast
-assignCast ty x y = ty <+> x <+> t"=" <+> parens ty <> y <> semi
-assign x y =  toDoc x <+> t"=" <+> toDoc y <> semi
-
-app fn ls = toDoc fn <> (parens$ hcat$ intersperse (t", ")$ map toDoc ls)
-thunkapp fn = app fn ([] :: [Doc])
-
-constructor name args inits body = 
-    hangbraces (app name args <+> colon $$ 
-		nest 10 (vcat$ map_but_last (<>t", ")$ map (\ (a,b) -> a <> parens b) inits)) 
-                indent body
-param ty name = ty <+> name
-mkRef tyD = tyD <> t"&"
-mkConstRef tyD = t"const" <+> mkRef tyD
-
-dubquotes d = (t"\"") <> toDoc d <> (t"\"")
-
--- This overloading just supports my laziness:
-class SynChunk a where 
-  toDoc :: a -> Doc
-instance SynChunk String where 
-  toDoc = text
-instance SynChunk Doc where 
-  toDoc = id
-instance SynChunk Atom where 
-  toDoc = text . fromAtom
-
 ----------------------------------------------------------------------------------------------------
 
 --emitCpp :: StringBuilder m => Bool -> Bool -> CncSpec -> m ()
@@ -92,6 +57,7 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 
    -- First we produce the header of the file:
    --------------------------------------------------------------------------------
+   -- TODO: Try quasiquoting for multiline-strings here again when they fix the binary bloating problem:
    putS$ "\n//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"
    putS$ "// This code was GENERATED from a CnC specification, DO NOT MODIFY.\n"
    putS$ "//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n"
@@ -103,6 +69,9 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
    putS  "// For now we use C++ TR1 to provide tuples:\n"
    putS  "#include <tr1/tuple>\n"
    putS "#define cnctup std::tr1\n\n"
+
+   putS  "// This tells cnc.h to define certain things.  TODO: should do this ONLY if tuples are needed!\n"
+   putS  "#define CNC_ASSUME_TR1 \n\n"
 
    putS  "#include <cnc/cnc.h>\n"
    putS  "#include <cnc/debug.h>\n"
@@ -345,7 +314,8 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 
 	   -- Have to wrap tag collections as well just to redirect references to the main context:
 	  )
-
+	putS$ "\n"
+	putS$ "\n"
 
    ------------------------------------------------------------
    -- Execute wrapper methods 
@@ -412,18 +382,6 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
           t"CnC::step_collection< "<> textAtom (head stepls)  <>t" > env(this);\n"
           ]++
 
-	  --------------------------------------------------------------------------------
-	  -- FIXME:
-	  -- This should be completely obsoleted when the API catches up (e.g. trace_all works properly)
-	  (if gentracing then 
-	    ((flip map) (zip3 stepls prescribers tagtys) $ \ (stp,tg,ty) ->
-	       app "CnC::debug::trace" [stepwrapper stp <> parens empty, (dubquotes stp)] <> semi) ++
-	    ((flip map) (AM.toList tags) $ \ (tg,_) -> 
-     	     app "CnC::debug::trace" [textAtom tg, dubquotes tg] <> semi) ++
-	    ((flip map) (AM.toList items) $ \ (it,_) -> 
-	     app "CnC::debug::trace" [textAtom it, dubquotes it] <> semi) 
-	   else []) ++
-	  --------------------------------------------------------------------------------
 	  [t"", 
 
           -- Generate prescribe relations first [mandatory]:
@@ -469,7 +427,21 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 	      assign (tls_key stp) 
 	             (thunkapp "CnC::Internal::CnC_TlsAlloc"))
 
-        ]
+        ] ++
+	--------------------------------------------------------------------------------
+	-- FIXME:
+	-- This should be completely obsoleted when the API catches up (e.g. trace_all works properly)
+	[hangbraces (t"if " <> parens (if gentracing then t"1" else t"0")) indent (vcat $
+	  ((flip map) (zip3 stepls prescribers tagtys) $ \ (stp,tg,ty) ->
+	     app "CnC::debug::trace" [(text$ step_obj$ fromAtom stp), (dubquotes stp)] <> semi) ++
+	  ((flip map) (AM.toList tags) $ \ (tg,_) -> 
+	   app "CnC::debug::trace" [textAtom tg, dubquotes tg] <> semi) ++
+	  ((flip map) (AM.toList items) $ \ (it,_) -> 
+	   app "CnC::debug::trace" [textAtom it, dubquotes it] <> semi) 
+	 )]
+	--------------------------------------------------------------------------------
+
+
           ----------------------------------------
           -- One more thing, turn on debugging if it has been requested.
 

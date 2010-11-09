@@ -393,7 +393,7 @@ main2 argv = do
 		putStrLn$ "Done with visualization, exiting without performing any .cnc spec translation."
 		exitSuccess
 #endif
-         Debug       -> return cfg{ gendebug=True } 
+         Debug       -> return cfg{ gendebug=True, wrapall=True }
          GenTracing  -> return cfg{ gentracing=True } 
          NoStepDefs  -> return cfg{ genstepdefs=False } 
 

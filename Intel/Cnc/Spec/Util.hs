@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, TypeSynonymInstances #-}
 
 ----------------------------------------------------------------------------------------------------
 -- A miscellaneous utility file
@@ -11,6 +11,9 @@ import Text.PrettyPrint.HughesPJClass
 import Control.Monad.State
 import System.IO
 import StringTable.Atom
+
+import Data.List
+import GHC.Exts -- For IsString
 
 -- String Builder
 ----------------------------------------------------------------------------------------------------
@@ -43,21 +46,26 @@ instance StringBuilder (State [String]) where
   putS s = modify (s:)
   runSB m = let (res,ls) = runState m [] 
 	    in (concat$ reverse ls, res)
+
+----------------------------------------------------------------------------------------------------
+-- Simple pretty printing helpers, and C/C++ codegen helpers.
 ----------------------------------------------------------------------------------------------------
 
--- Simple pretty printing helpers:
 vbraces d = lbrace $+$ d $+$ rbrace
 textAtom = text . fromAtom
 angles t = text "<" <+> t <+> text ">"
 commspc = text ", "
 pad t = space <> t <> space
+
+-- Braces-delimited as in C/C++/Java code.
 hangbraces d1 n d2 = sep [d1, vbraces$ nest n d2]
 
+-- Create C++ structs/classes
 struct   title body = (hangbraces (text "struct " <> title) indent body) <> semi
 cppclass title body = (hangbraces (text "class "  <> title) indent body) <> semi
 
--- I am very lazy:
-t = text
+-- Shorthand: I am very lazy.
+t  = text
 
 -- This seems useful:
 collapseMaybe :: Maybe (Maybe t) -> Maybe t
@@ -80,8 +88,57 @@ map_but_last fn [h] = [h]
 map_but_last fn (h:t) = fn h : map_but_last fn t
 
 
+-- The probability of any of the below stuff being reusable is pretty low.
+-- (It's very C++ specific. This whole *strategy* of private context generation is probably pretty C++ specific.)
+-- But I thought I would begin to at least BEGIN to abstract the syntax-construction operations.
+
+-- A few decorations on C++ types:
+mkPtr d = d <> t"*"                      -- Make a type into a pointer
+mkRef tyD = tyD <> t"&"                  -- Make a type into a reference
+mkConstRef tyD = t"const" <+> mkRef tyD  -- Make a type const
+
+-- The dot operator:
+deref x y = x <> t"." <> y
+
+
+-- Create a line of code encompassing assignment commands:
+assignCast ty x y = ty <+> x <+> t"=" <+> parens ty <> y <> semi
+assign x y =  toDoc x <+> t"=" <+> toDoc y <> semi
+
+-- Function application:
+app fn ls = toDoc fn <> (parens$ hcat$ intersperse (t", ")$ map toDoc ls)
+thunkapp fn = app fn ([] :: [Doc])
+
+-- Create a C++ constructor with initializers:
+constructor name args inits body = 
+    hangbraces (app name args <+> colon $$ 
+		nest 10 (vcat$ map_but_last (<>t", ")$ map (\ (a,b) -> a <> parens b) inits)) 
+                indent body
+param ty name = ty <+> name
+
+dubquotes d = (t"\"") <> toDoc d <> (t"\"")
+
+-- This overloading just supports my laziness:
+class SynChunk a where 
+  toDoc :: a -> Doc
+instance SynChunk String where 
+  toDoc = text
+instance SynChunk Doc where 
+  toDoc = id
+instance SynChunk Atom where 
+  toDoc = text . fromAtom
+
+
+-- Also, overloading the string constants themselves is nice:
+instance IsString Doc where
+    fromString s = text s
+instance IsString Atom where
+    fromString s = toAtom s
+
+
 --------------------------------------------------------------------------------
 -- These should be moved to a "globals" file:
+--------------------------------------------------------------------------------
 
 -- "Official" output from our process should be tagged in the following way:
 --cnctag = ""
