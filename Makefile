@@ -1,5 +1,10 @@
 
 
+# WARNING: This Makefile is largely redundant with the .cabal file and will be deleted at some point.
+
+#====================================================================================================
+
+
 all: runtime 
 #all: runtime trans
 
