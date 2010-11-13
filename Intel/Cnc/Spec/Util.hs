@@ -82,7 +82,6 @@ fst3 (a,_,_) = a
 snd3 (_,b,_) = b
 thd3 (_,_,c) = c
 
-
 map_but_last fn [] = []
 map_but_last fn [h] = [h]
 map_but_last fn (h:t) = fn h : map_but_last fn t

@@ -33,7 +33,7 @@ data CncTraceEvent =
  | PutT NameTag NameTag
  | StartStep NameTag 
  | EndStep   NameTag 
- | FAIL String -- For debugging purposes record the failures.
+ | PARSEFAIL String -- For debugging purposes record the failures.
   deriving (Show, Eq)
 
 -- We should parse tags that we can make sense of, namely scalars and tuples.
@@ -52,7 +52,7 @@ defaultStepContext = (toAtom "env","")
 doParse :: Parser CncTraceEvent -> String -> CncTraceEvent
 doParse p input
   = case (parse p "" input) of
-      Left err -> FAIL input
+      Left err -> PARSEFAIL input
       Right x  -> x
 
 tracefile :: [String] -> [CncTraceEvent]
@@ -136,14 +136,14 @@ tryParse :: Parser a -> String -> Maybe a
 tryParse p input
   = case (parse p "" input) of
       Left err -> Nothing
---      Left err -> Just (FAIL input)
+--      Left err -> Just (PARSEFAIL input)
       Right x  -> Just x
 
 
 test_traceVacuum = test $
  let tP = tryParse (traceline defaultStepContext) 
      sample = map (tryParse (traceline defaultStepContext)) sample_trace
-     isfail (Just (FAIL _)) = True
+     isfail (Just (PARSEFAIL _)) = True
      isfail _ = False
  in
  [ "traceline1: parse one line" ~: Just (StartStep (toAtom "fib_step","0"))           ~=? tP "Start step (fib_step: 0)"

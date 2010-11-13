@@ -16,8 +16,10 @@ import Intel.Cnc.Spec.Passes.TypeDef
 import Intel.Cnc.Spec.Passes.ReadHarch
 
 import Data.Maybe ( fromMaybe, fromJust )
+import qualified Data.Map as M
 import Data.IORef
 import Data.List
+import Data.Function
 
 import Control.Monad hiding (when)
 import Control.Exception 
@@ -31,6 +33,7 @@ import System.IO
 import System.IO.Unsafe
 import System.Exit
 
+import Text.Printf
 import Text.PrettyPrint.HughesPJClass
 import Test.HUnit
 
@@ -42,8 +45,11 @@ import Intel.Cnc.Spec.CncViz as Viz
 
 -- TODO: It would be nice to get this from the .cabal file.
 -- That would require some quasiquoting/templating or the C preprocessor.
-version = "0.1.3.99"
+version = "0.1.3.100"
+-- [2010.11.10] Bumping slightly after change to CNC_ASSUME_TR1
     
+----------------------------------------------------------------------------------------------------
+
 data Flag 
     = Verbose Int | Version | Help | Debug | GenTracing | NoStepDefs | SelfTest
     | Cpp | CppOld | Haskell
@@ -119,6 +125,7 @@ trace_options =
      ,  Option []       ["viz"] (NoArg VacuumViz) "use trace to visualize graph execution using ubigraph"
 #endif
      ,  Option []       ["synth"] (ReqArg SynthSpec "FILE") "use trace to synthesize a draft .cnc Spec for the program"
+     ,  Option []       ["debug"] (NoArg Debug)             "print parsed trace to validate parsing"
      ]
 
 
@@ -333,36 +340,95 @@ main2 argv = do
       return ()
 
    ------------------------------------------------------------	       
-   "trace" -> do 
-      forM_ opts $ \ opt -> 
-        case opt of 
+   "trace" -> do
+      handle <- if null files 
+		then do putStrLn$ cnctag++"Reading trace from stdin."
+			return stdin 
+		else do putStrLn$ cnctag++"Reading trace from file "++ show(head files)
+			(openFile (head files) ReadMode)
+      str <- hGetContents handle
+      let thetrace = tracefile $ lines str
+	  fn deb opt = 
+            case opt of 
+	       VacuumViz      -> deb
+	       Debug          -> True
+	       SynthSpec file -> error "Internal error, spec synthesis not implemented yet"
+	       Output    file -> error "Internal error, trace output not implemented yet"
+	       _ -> error$ "Internal error, not handled: "++ show opt
+          debug = foldl fn False opts
+	  alldone = do putStrLn$ cnctag++"Reached end of trace.  Exiting."
+		       exitSuccess
+
+      -- TEMPTOGGLE -- this is just for testing:
+      when (debug) $ do
+	    let fn (GetI _ (_,tag)) = map fst (reads tag :: [((Int,Int,Int),String)])
+		fn _ = [] 
+
+                -- TEMP: TODO: GENERALIZE
+                getname (GetI _ (nm,_)) = [nm]
+		getname _ = []
+                names = concat$ map getname thetrace
+
+                tags = concat$ map fn thetrace
+
+
+		collected = foldl (\ acc tup -> M.insertWith (+) tup 1 acc) M.empty tags
+		keys = M.keys collected
+		bounds keys = ( foldl1 min $ map fst3 keys
+			      , foldl1 min $ map snd3 keys
+			      , foldl1 min $ map thd3 keys
+			      , foldl1 max $ map fst3 keys
+			      , foldl1 max $ map snd3 keys
+			      , foldl1 max $ map thd3 keys)
+		(l1,l2,l3,u1,u2,u3) = bounds keys
+		biggest = foldl1 max $ M.elems collected
+		-- Amount of space needed for biggest number:
+		size = 1 + (ceiling$ log (fromIntegral biggest) / log 10.0)
+		padtail size str = str ++ take (size - length str) (repeat ' ') 
+
+            print collected
+	    putStrLn$ "LOWER BOUNDS: " ++ show (l1,l2,l3)
+	    putStrLn$ "UPPER BOUNDS: " ++ show (u1,u2,u3)
+
+	    putStrLn$ "\n\nTags for collection " ++ show (names !! 3) ++ " have schema (Int,Int,Int)."
+	    putStrLn$ "Observed getcounts were:"
+            forM_ [l3..u3] $ \k -> do
+	        let (i1,i2,_,j1,j2,_) = bounds $ filter ((== k) . thd3) keys
+		--putStrLn$ "\n i/j getcounts grid for k = " ++ show k ++ " i in ["++ show l1 ++","++ show u1 ++"], j in ["++ show l2 ++","++ show u2 ++"]:"
+	        printf "\n i/j getcounts grid for k = %d,  i in [%d,%d], j in [%d,%d]:\n" k i1 i2 j1 j2
+		putStr$ "+-------------------"
+		forM_ [l1..u1] $ \i -> do
+		    putStr$ "\n|"
+		    forM_ [l2..u2] $ \j -> do
+		      case M.lookup (i,j,k) collected of 
+			Nothing -> putStr$ take size (repeat ' ')
+			Just n  -> putStr$ padtail size (show n)
+		putStrLn$ ""
+	    putStrLn$ "\n"
+
+	    --mapM_ print tags
+	    --mapM_ print (sortBy (compare `on` snd) $ M.toList collected)
+
+	    alldone
+
+      -- In debugging mode we just print the parsed trace:
+      when (debug) $ do
+	    mapM_ print thetrace
+	    alldone
+
 #ifdef CNCVIZ
-	 VacuumViz -> 
-	     do handle <- if null files 
-			    then do putStrLn$ cnctag++"Reading trace from stdin."
-				    return stdin 
-			    else do putStrLn$ cnctag++"Reading trace from file "++ show(head files)
-			            (openFile (head files) ReadMode)
-		str <- hGetContents handle
-		let thetrace = tracefile $ lines str
-		    guiactions = traceToGUI thetrace
+      when (VacuumViz `elem` opts) $ do
+	    let guiactions = traceToGUI thetrace
 
-                -- This prints it out ASAP so it doesn't follow the actual playback unfortunately...
-		-- TODO: Push this functionality down into "playback".
-		when (verbosity>1) $ do (forkIO $ mapM_ print guiactions); return ()
-		when (verbosity>1) $ do (forkIO $ mapM_ print thetrace); return ()
+	    -- This prints it out ASAP so it doesn't follow the actual playback unfortunately...
+	    -- TODO: Push this functionality down into "playback".
+	    when (verbosity>1) $ do (forkIO $ mapM_ print guiactions); return ()
+	    when (verbosity>1) $ do (forkIO $ mapM_ print thetrace); return ()
 
-		playback emptyGUIState guiactions
-		 
-		putStrLn$ "Done with trace visualization.  Exiting."
-		exitSuccess
+	    playback emptyGUIState guiactions
+	    alldone
 #endif
-	 SynthSpec file -> error "Internal error, spec synthesis not implemented yet"
-	 Output    file -> error "Internal error, trace output not implemented yet"
 
-	 _ -> error$ "Internal error, not handled: "++ show opt
-
-      defaultErr mode "Trace mode given nothing to do!"
 
    ------------------------------------------------------------	       
    "translate" -> do 

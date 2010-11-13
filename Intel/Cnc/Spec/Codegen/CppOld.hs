@@ -70,6 +70,7 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
    putS  "#include <tr1/tuple>\n"
    putS "#define cnctup std::tr1\n\n"
 
+
    putS  "// This tells cnc.h to define certain things.  TODO: should do this ONLY if tuples are needed!\n"
    putS  "#define CNC_ASSUME_TR1 \n\n"
 

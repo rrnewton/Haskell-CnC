@@ -83,23 +83,6 @@ class (Boolean bool, Eq a bool) => Ord a bool | a -> bool where
     (<), (<=), (>), (>=) :: a -> a -> bool
     max, min             :: a -> a -> a
 
-    -- compare              :: a -> a -> Ordering
-    -- compare x y = conditional (x == y) EQ
-    --               -- NB: must be '<=' not '<' to validate the
-    --               -- above claim about the minimal things that
-    --               -- can be defined for an instance of Ord:
-    --               (conditional (x <= y) LT GT)
-
-    -- x <  y = case compare x y of { LT -> true;  _ -> false }
-    -- x <= y = case compare x y of { GT -> false; _ -> true }
-    -- x >  y = case compare x y of { GT -> true;  _ -> false }
-    -- x >= y = case compare x y of { LT -> false; _ -> true }    
-
-        -- These two default methods use '<=' rather than 'compare'
-        -- because the latter is often more expensive
-    -- max x y = conditional (x <= y) y x
-    -- min x y = conditional (x <= y) x y
-
 -- Need to define precedence because these new operations really have nothing to do with the originals:
 infix  4  ==, /=, <, <=, >=, >
 infixr 3  &&
@@ -186,17 +169,7 @@ addChunk (Syn doc) =
 -- Adds the semi-colon at the end also:
 addLine (Syn doc) = addChunk (Syn$ doc <> semi)
 
-
 --------------------------------------------------------------------------------
-
-{-
-idSyn :: Syntax -> Syntax
-idSyn x = x
-foo1 = funDef "x" [] idSyn
-foo2 = funDef "x" [] (\(x,y) -> x +++ y)
---foo3 = fun "x" [] (\(x,y) -> return (x + y))
-foo3 = funDef "x" [] (\(x, y::Syntax) -> (x + y))
--}
 
 (Syn a) +++ (Syn b) = Syn (a <> b)
 
@@ -284,26 +257,6 @@ instance FunDefable (Syntax,Syntax)               where funDef r n ts fn = funDe
 instance FunDefable (Syntax,Syntax,Syntax)        where funDef r n ts fn = funDefShared r n ts fn (\ [a,b,c] -> (a,b,c))
 instance FunDefable (Syntax,Syntax,Syntax,Syntax) where funDef r n ts fn = funDefShared r n ts fn (\ [a,b,c,d] -> (a,b,c,d))
 
-  -- funDef retty (Syn name) [ty1] fn = 
-  --   do (ls,c) <- S.get 
-  --      arg1 <- forValueOnly$ tmpvar ty1 -- Generate a temp name only.
-  --      let body = runEasyEmit (fn arg1)
-  --      addChunk$ Syn$ hangbraces (dType retty <+> name <> parens (dType ty1 <+> deSyn arg1)) indent body
-  --      addChunk$ "\n"
-  --      return (\ args -> Syn$ name <> (commasep (map deSyn args)))
-  -- funDef _ (Syn name) tys _ = error$ " funDef of "++ show name ++": wrong number of types: "++ show tys
-
-
-  -- funDef retty (Syn name) tyls fn = 
-  --   do (ls,c) <- S.get 
-  --      args@[arg1,arg2] <- mapM (forValueOnly . tmpvar) tyls -- Generate a temp name only.
-  --      let body = runEasyEmit (fn (arg1,arg2))
-  -- 	   formals = map (\ (t,a) -> dType t <+> deSyn a) (zip tyls args)
-  --      addChunk$ Syn$ hangbraces (dType retty <+> name <> commasep formals) indent body
-  --      addChunk$ "\n"
-  --      return (\ args -> Syn$ name <> (commasep (map deSyn args)))
-
-
 
 funDefShared retty (Syn name) tyls fn formTup = 
     do (ls,c) <- S.get 
@@ -316,10 +269,8 @@ funDefShared retty (Syn name) tyls fn formTup =
        return (\ args -> Syn$ name <> (commasep (map deSyn args)))
 
 
--- instance FunDefable ((Syntax,Syntax) -> Syntax) where 
---   funDef name ls fn = fn (name,name)
-
 -- Common case: for loop over a range with integer index:
+------------------------------------------------------------
 forLoopSimple (start,end) fn = 
   do --var <- forValueOnly (tmpvar TInt)
      Syn var <- gensym "i"
@@ -365,8 +316,6 @@ example =
 	 if_ (i == 10 || i > 100)
 	     (app foo [foo [i / 10]])
 	     (app foo [i ? 3 .: 4])
-
---     Return ()
 
    --   cppClass "blah" $ do 
    --       if_ (app f x) x x 
