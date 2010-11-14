@@ -1,5 +1,6 @@
-{-# LANGUAGE RecordWildCards, QuasiQuotes, NamedFieldPuns, OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards, QuasiQuotes, NamedFieldPuns #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
+-- OverloadedStrings -- TODO: currently causes ambiguities with toDoc
 
 
 ----------------------------------------------------------------------------------------------------

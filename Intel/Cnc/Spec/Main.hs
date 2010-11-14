@@ -14,6 +14,7 @@ import Intel.Cnc.Spec.Codegen.CppOld
 import Intel.Cnc.Spec.Codegen.Haskell
 import Intel.Cnc.Spec.Passes.TypeDef
 import Intel.Cnc.Spec.Passes.ReadHarch
+import Intel.Cnc.Spec.Version
 
 import Data.Maybe ( fromMaybe, fromJust )
 import qualified Data.Map as M
@@ -43,11 +44,6 @@ import Test.HUnit
 import Intel.Cnc.Spec.CncViz as Viz
 #endif
 
--- TODO: It would be nice to get this from the .cabal file.
--- That would require some quasiquoting/templating or the C preprocessor.
-version = "0.1.3.100"
--- [2010.11.10] Bumping slightly after change to CNC_ASSUME_TR1
-    
 ----------------------------------------------------------------------------------------------------
 
 data Flag 
@@ -144,6 +140,7 @@ printHeader = do
 --  putStrLn$ "Intel(R) Concurrent Collections Specification Tool, version "++ version
   putStrLn$ "The fabulous, multi-purpose CnC Specification Tool, version "++ version
   putStrLn$ "Part of the Intel(R) Concurrent Collections (CnC) Project"
+  putStrLn$ "Built on: " ++ builddate
   putStrLn$ "Copyright 2010 Intel Corporation."
 
 when b action = if b then action else return ()
