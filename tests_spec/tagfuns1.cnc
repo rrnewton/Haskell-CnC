@@ -1,4 +1,7 @@
 
+// A meaningless .cnc file just to test handling of the various constructions.
+//================================================================================
+
 // Here we test some tag functions
 
 tags <(int,int)>      T1;

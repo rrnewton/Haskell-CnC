@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, QuasiQuotes, NamedFieldPuns #-}
+{-# LANGUAGE RecordWildCards, QuasiQuotes, NamedFieldPuns, OverloadedStrings #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
 
@@ -33,6 +33,7 @@ import Debug.Trace
 
 import qualified StringTable.AtomMap as AM
 import qualified StringTable.AtomSet as AS
+
 
 ----------------------------------------------------------------------------------------------------
 
