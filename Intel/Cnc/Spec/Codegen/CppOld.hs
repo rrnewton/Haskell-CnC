@@ -235,10 +235,11 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 	   (vcat $ 
 	    (flip map) (AM.toList items) $ \ (it,Just (ty1,ty2)) -> 
 
-	    let -- A reused bit of syntax for wrapper methods:
+	    let -- A reused bit of syntax for wrapper get/put methods:
  	        -- (This is one of those things that you don't want to duplicate, 
 		--  but it has too many arguments and is poorly abstracted.)
 	        wrapGP doret retty nm args isPut = 
+		       -- First let's put together the function's arguments:
                        let args' = map (\ (tyD,v) -> tyD <+> text v) args 
 			   decls = hcat$ intersperse (t", ") args'
 			   vars  = hcat$ intersperse (t", ") $ map (text . snd) args
@@ -274,7 +275,9 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 				  (if doret then t"return " else t"") <>
 				  t "m_"<> textAtom it <> t"." <> t nm <> parens vars <> semi) 
 
-		basicGP nm isPut = wrapGP False "void" nm [(mkConstRef (dType ty1), "tag"), (mkRef (dType ty2), "ref")] isPut
+                -- Basic get or put:
+		basicGP nm isPut = wrapGP False "void" nm [(mkConstRef (dType ty1), "tag"), 
+							   ((if isPut then mkConstRef else mkRef) (dType ty2) , "ref")] isPut
 
 	        wrapper = textAtom it <> t"_wrapper"
 	        member  = t"m_" <> textAtom it
@@ -292,8 +295,10 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 		                   (assign "m_context" "c"))  $$ 
 		      -- Just three methods: two variants of get and one put.
 		      basicGP "get" False $$ 
-		      basicGP "put" True $$ 
-		      wrapGP True  (dType ty2) "get" [(mkConstRef (dType ty1),"tag")] False) $$
+		      basicGP "put" True 
+		      -- [2010.11.14] TEMPTOGGLE: Disabling the one-argument version of get:
+		      -- wrapGP True  (dType ty2) "get" [(mkConstRef (dType ty1),"tag")] False
+		      ) $$
             t "") $$
 
            -- Declare MEMBERS
