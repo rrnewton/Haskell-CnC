@@ -6,6 +6,7 @@
 
 module Intel.Cnc.Spec.Passes.TypeDef where
 
+import Intel.Cnc.Spec.Util
 import StringTable.Atom
 import qualified StringTable.AtomMap as AM
 
@@ -88,7 +89,7 @@ strange3 = fmap (+1) (0,0)
 
 
 test_desugarTypeDefs = 
-  test ["basic desugarTypeDefs test"  ~: result ~=?  desugarTypeDefs input]
+  test [testCase "TypeDef" "basic desugarTypeDefs test"$  result ~=?  desugarTypeDefs input]
  where 
       pair   = toAtom "pair"
       triple = toAtom "triple"

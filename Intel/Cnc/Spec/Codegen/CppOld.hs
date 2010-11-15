@@ -56,6 +56,9 @@ obj_ref a   = (t$ step_obj$ fromAtom a)
 emitCpp :: StringBuilder m => CodeGenConfig -> CncSpec -> m ()
 --emitCpp CGC{..} (spec @ CncSpec{..}) = do 
 emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = do 
+-- HOWTO READ the below code:
+-- This code emits a series of strings/docs to build up a file.
+-- Some of the more complex looking bits are building up large lists of type [Doc].
 
    -- First we produce the header of the file:
    --------------------------------------------------------------------------------
@@ -200,9 +203,9 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
      --   -- 	t"delete " <> (t$ step_obj$ fromAtom stp) <> semi)
      -- ]
 
-   ------------------------------------------------------------
-   -- Emit private contexts for each step:
-   ------------------------------------------------------------   
+   --------------------------------------------------------------------------------
+   -- Emit private contexts for each step.  This means building wrappers.
+   --------------------------------------------------------------------------------
    
    -- INVARIANT! Due to error checking above, we can omit some error checking here:
    when (wrapall && not old_05_api) $ do 

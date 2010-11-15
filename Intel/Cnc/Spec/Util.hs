@@ -15,6 +15,9 @@ import StringTable.Atom
 import Data.List
 import GHC.Exts -- For IsString
 
+import qualified Test.HUnit as HU
+import Debug.Trace
+
 -- String Builder
 ----------------------------------------------------------------------------------------------------
 -- We abstract the process of creating strings so that we can make our
@@ -167,3 +170,18 @@ default_codegen_config =
 
 -- Constant: indentation used across all code generators.
 indent = 4
+
+-- HUnit convenience function (used by other modules):
+-- There's a problem with quickcheck where it doesn't
+-- newline-terminate the "Cases: N" report message.
+--testCase str io = HU.TestLabel str $ HU.TestCase$ do putStrLn$ "\n *** Running unit test: "++str; io; putStrLn ""
+
+-- Tag a little bit more verbose output to the tests:
+testCase prefix str tst = HU.TestLabel lab (trace (tag++ lab) tst)
+ where lab = prefix ++ ": " ++ str
+--       tag = " *** "
+       tag = " [run] "
+
+-- Likewise, identify the per-module sub-groups of tests
+testSet name ls = 
+    trace ("\nRunning tests for module "++name) (HU.TestList ls)

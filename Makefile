@@ -140,7 +140,9 @@ HSOURCE=SrcLoc.hs Main.hs GatherGraph.hs AST.hs Codegen/CppOld.hs Codegen/Haskel
 
 HCNCNAME=cnc
 
-install: Intel/Cnc/Spec/Version.hs $(HCNCNAME).stripped
+install: 
+	rm -f Intel/Cnc/Spec/Version.hs
+	$(MAKE) Intel/Cnc/Spec/Version.hs $(HCNCNAME).stripped
 	cp $(HCNCNAME).stripped `which $(HCNCNAME)`
 
 trans: 
@@ -150,7 +152,7 @@ trans:
 	@echo ================================================================================
 	$(MAKE) $(HCNCNAME)
 
-Intel/Cnc/Spec/Version.hs: haskell-cnc.cabal extract_version.hs
+Intel/Cnc/Spec/Version.hs: 
 	runhaskell extract_version.hs
 
 release: $(HCNCNAME).release

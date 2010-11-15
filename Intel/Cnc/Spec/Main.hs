@@ -11,6 +11,9 @@ import Intel.Cnc.Spec.GatherGraph
 import Intel.Cnc.Spec.Util hiding(t)
 import Intel.Cnc.Spec.TraceVacuum
 import Intel.Cnc.Spec.Codegen.CppOld
+
+import qualified  Intel.Cnc.EasyEmit as EE -- TEMPTOGGLE
+
 import Intel.Cnc.Spec.Codegen.Haskell
 import Intel.Cnc.Spec.Passes.TypeDef
 import Intel.Cnc.Spec.Passes.ReadHarch
@@ -504,13 +507,17 @@ main2 argv = do
 -- Testing 
 ------------------------------------------------------------------------------------------------------------------------
 
-
-all_unit_tests = test $ 
+-- Aggregate the unit tests from all the modules that provide them:
+all_unit_tests = 
+ --test $ 
+ TestLabel "All cnc tool unit tests" $ TestList $
  [ test_desugarTypeDefs
  , test_traceVacuum
+ , EE.tests_easyemit
  ]
 
 cncRunAllTests = runTestTT all_unit_tests
+
 t = cncRunAllTests -- Lazy shorthand
 
 {-

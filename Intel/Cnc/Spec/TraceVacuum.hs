@@ -11,6 +11,8 @@
 
 module Intel.Cnc.Spec.TraceVacuum where
 
+import Intel.Cnc.Spec.Util
+
 import Data.Maybe
 import Control.Monad
 import Text.Parsec
@@ -139,25 +141,26 @@ tryParse p input
 --      Left err -> Just (PARSEFAIL input)
       Right x  -> Just x
 
-
-test_traceVacuum = test $
+test_traceVacuum = 
+-- TestLabel "TraceVacuum Tests" $ TestList $
+ testSet "TraceVacuum" $ 
  let tP = tryParse (traceline defaultStepContext) 
      sample = map (tryParse (traceline defaultStepContext)) sample_trace
      isfail (Just (PARSEFAIL _)) = True
      isfail _ = False
+     tC = testCase "TraceVacuum"
  in
- [ "traceline1: parse one line" ~: Just (StartStep (toAtom "fib_step","0"))           ~=? tP "Start step (fib_step: 0)"
- , "traceline2: parse one line" ~: Just (PutT (toAtom "env","") (toAtom "tags","10")) ~=? tP "Put tag <tags: 10>"
- , "traceline3: parse one line" ~: Nothing                                            ~=? tP "__Put tag <tags: 10>"
- , "traceline4: parse one line" ~: Just (Prescribe (toAtom "control_S1") (toAtom "kj_compute"))
-                               ~=? tP  "Prescribe control_S1 kj_compute"
+ [ tC "traceline1: parse one line"$ Just (StartStep (toAtom "fib_step","0"))           ~=? tP "Start step (fib_step: 0)"
+ , tC "traceline2: parse one line"$ Just (PutT (toAtom "env","") (toAtom "tags","10")) ~=? tP "Put tag <tags: 10>"
+ , tC "traceline3: parse one line"$ Nothing                                            ~=? tP "__Put tag <tags: 10>"
+ , tC "traceline4: parse one line"$ Just (Prescribe (toAtom "control_S1") (toAtom "kj_compute"))
+                                      ~=? tP  "Prescribe control_S1 kj_compute"
 
- , "sample trace: #fail"    ~:    0 ~=? length (filter isfail sample)
- , "sample trace: #success" ~:  111 ~=? length (filter (not . isfail) sample)
- , "sample trace: #noparse" ~:   16 ~=? length (filter (==Nothing) sample)
+ , tC "sample trace: #fail"   $    0 ~=? length (filter isfail sample)
+ , tC "sample trace: #success"$  111 ~=? length (filter (not . isfail) sample)
+ , tC "sample trace: #noparse"$   16 ~=? length (filter (==Nothing) sample)
 
- , "balanced nesting"       ~:  Just"foo (a) (b c) bar" ~=? tryParse (balanced_nest '(' ')') "foo (a) (b c) bar) baz"
-		              
+ , tC "balanced nesting"      $  Just"foo (a) (b c) bar" ~=? tryParse (balanced_nest '(' ')') "foo (a) (b c) bar) baz"		              
  ]
 
 sample_trace = 

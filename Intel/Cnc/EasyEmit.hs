@@ -24,80 +24,13 @@ import Data.List
 import GHC.Exts -- For IsString
 
 import qualified  Control.Monad.State.Strict as S 
-import Debug.Trace
+--import Debug.Trace
+import Test.HUnit
 
 import qualified Prelude as P
 import Prelude hiding ((&&), (||), (==), (/=), not, Eq
 		       , Ord, (<), (<=), (>), (>=), max, min -- , compare
 		      )
-
--- data Type =
---    TInt
---  | TFloat
---  -- An abstract type not intpreted by CnC:
---  | TSym Atom
---  | TPtr Type
---  | TDense Type -- Density annotations.
---  | TTuple [Type]
---  deriving (P.Eq, P.Ord, Show,Data,Typeable)
-
-dType ty = case ty of 
-  TInt   -> t "int"
-  TFloat -> t "float"
-  TSym s -> textAtom s
-  TPtr ty -> dType ty <> t "*"
-
-  -- This doesn't affect the C-type, any influence has already taken place.
-  TDense ty -> dType ty 
-
-  -- Here is the convention for representing tuples in C++.
-  --TTuple [a,b]   -> t "Pair"   <> angles (hcat$ punctuate commspc (map dType [a,b]))
-  --TTuple [a,b,c] -> t "Triple" <> angles (hcat$ punctuate commspc (map dType [a,b,c]))
-  TTuple ls -> t "cnctup::tuple" <> angles (hcat$ punctuate commspc$ map dType ls)
-  --TTuple ls -> error$ "CppOld codegen: Tuple types of length "++ show (length ls) ++" not standardized yet!"
-
-
-
-----------------------------------------------------------------------------------------------------
--- Overloaded booleans and predicates from Lennart Augustsson:
-----------------------------------------------------------------------------------------------------
-
--- | Generalization of the 'Bool' type.  Used by the generalized 'Eq' and 'Ord'.
-class Boolean bool where
-    (&&)  :: bool -> bool -> bool   -- ^Logical conjunction.
-    (||)  :: bool -> bool -> bool   -- ^Logical disjunction.
-    not   :: bool -> bool           -- ^Locical negation.
-    false :: bool                   -- ^Truth.
-    true  :: bool                   -- ^Falsity.
-    fromBool :: Bool -> bool        -- ^Convert a 'Bool' to the generalized Boolean type.
-    fromBool b = if b then true else false
-
--- Why not just make this part of the above class?
--- | Generalization of the @if@ construct.
---class (Boolean bool) => Conditional bool a where -- orig
---class (Boolean bool) => Conditional bool where
---    conditional :: bool -> a -> a -> a -- ^Pick the first argument if the 'Boolean' value is true, otherwise the second argument.
-
-
---class (Boolean bool) => Eq a bool {- x | a -> bool -} where
-class (Boolean bool) => Eq a bool | a -> bool where
-    (==) :: a -> a -> bool
-    (/=) :: a -> a -> bool
-
-    x /= y  =  not (x == y)
-    x == y  =  not (x /= y)
-
-
---class (Conditional bool Ordering, Eq a bool) => Ord a bool | a -> bool where
---class (Conditional bool, Eq a bool) => Ord a bool | a -> bool where
-class (Boolean bool, Eq a bool) => Ord a bool | a -> bool where
-    (<), (<=), (>), (>=) :: a -> a -> bool
-    max, min             :: a -> a -> a
-
--- Need to define precedence because these new operations really have nothing to do with the originals:
-infix  4  ==, /=, <, <=, >=, >
-infixr 3  &&
-infixr 2  ||
 
 
 ----------------------------------------------------------------------------------------------------
@@ -304,11 +237,72 @@ forLoopSimple (start,end) fn =
 --cppClass name m = ...
 
 
+----------------------------------------------------------------------------------------------------
+
+-- Converting types to C++ concrete syntax.
+dType :: Type -> Doc
+dType ty = case ty of 
+  TInt   -> t "int"
+  TFloat -> t "float"
+  TSym s -> textAtom s
+  TPtr ty -> dType ty <> t "*"
+
+  -- This doesn't affect the C-type, any influence has already taken place.
+  TDense ty -> dType ty 
+
+  -- Here is the convention for representing tuples in C++.
+  --TTuple [a,b]   -> t "Pair"   <> angles (hcat$ punctuate commspc (map dType [a,b]))
+  --TTuple [a,b,c] -> t "Triple" <> angles (hcat$ punctuate commspc (map dType [a,b,c]))
+  TTuple ls -> t "cnctup::tuple" <> angles (hcat$ punctuate commspc$ map dType ls)
+  --TTuple ls -> error$ "CppOld codegen: Tuple types of length "++ show (length ls) ++" not standardized yet!"
+
+
+----------------------------------------------------------------------------------------------------
+-- Overloaded booleans and predicates from Lennart Augustsson:
+----------------------------------------------------------------------------------------------------
+
+-- | Generalization of the 'Bool' type.  Used by the generalized 'Eq' and 'Ord'.
+class Boolean bool where
+    (&&)  :: bool -> bool -> bool   -- ^Logical conjunction.
+    (||)  :: bool -> bool -> bool   -- ^Logical disjunction.
+    not   :: bool -> bool           -- ^Locical negation.
+    false :: bool                   -- ^Truth.
+    true  :: bool                   -- ^Falsity.
+    fromBool :: Bool -> bool        -- ^Convert a 'Bool' to the generalized Boolean type.
+    fromBool b = if b then true else false
+
+-- Why not just make this part of the above class?
+-- | Generalization of the @if@ construct.
+--class (Boolean bool) => Conditional bool a where -- orig
+--class (Boolean bool) => Conditional bool where
+--    conditional :: bool -> a -> a -> a -- ^Pick the first argument if the 'Boolean' value is true, otherwise the second argument.
+
+
+--class (Boolean bool) => Eq a bool {- x | a -> bool -} where
+class (Boolean bool) => Eq a bool | a -> bool where
+    (==) :: a -> a -> bool
+    (/=) :: a -> a -> bool
+
+    x /= y  =  not (x == y)
+    x == y  =  not (x /= y)
+
+
+--class (Conditional bool Ordering, Eq a bool) => Ord a bool | a -> bool where
+--class (Conditional bool, Eq a bool) => Ord a bool | a -> bool where
+class (Boolean bool, Eq a bool) => Ord a bool | a -> bool where
+    (<), (<=), (>), (>=) :: a -> a -> bool
+    max, min             :: a -> a -> a
+
+-- Need to define precedence because these new operations really have nothing to do with the originals:
+infix  4  ==, /=, <, <=, >=, >
+infixr 3  &&
+infixr 2  ||
+
 
 ----------------------------------------------------------------------------------------------------
 
-example :: EasyEmit ()
-example = 
+ee_example :: EasyEmit ()
+ee_example = 
   do 
      comm "\nFirst some global vars:\n "
      y <- tmpvar TInt
@@ -332,3 +326,8 @@ example =
    --       if_ (app f x) x x 
    -- --      funDef "method" [TInt, TFloat] $ \(y,z) -> y + z
 
+ee_test1 = testCase "EasyEmit" "Code emission example"$ 
+	   (length$ render$ runEasyEmit ee_example) ~=? 376
+
+
+tests_easyemit = TestList [ee_test1]
