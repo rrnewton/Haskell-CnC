@@ -120,6 +120,7 @@ constructor name args inits body =
                 indent body
 param ty name = ty <+> name
 
+dubquotes :: SynChunk a => a -> Doc
 dubquotes d = (t"\"") <> toDoc d <> (t"\"")
 
 -- This overloading just supports my laziness:

@@ -4,7 +4,10 @@
 
 FLAGS= -I$(CNC_INSTALL_DIR)/include -L$(CNC_INSTALL_DIR)/lib/$(CNC_ARCH_PLATFORM) -ltbbmalloc -ltbb -lcnc 
 
-# FLAGS+= -m32 
+ifeq (Darwin,$(shell uname))
+  FLAGS+= -m32 
+endif
+
 
 all: tagfun_checking_valid.exe
 

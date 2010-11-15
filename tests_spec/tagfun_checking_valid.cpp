@@ -5,8 +5,7 @@
 template < class ctxt > 
 int S::execute( const int & tag, ctxt & c) const {
     printf("Step exec with tag %d\n", tag);
-
-    c.I.put(tag+1, (tag * 3.33)); 
+    c.I.put(tag + 2, (tag * 3.33)); 
     return CnC::CNC_Success;    
 }
 

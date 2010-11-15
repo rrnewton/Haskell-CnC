@@ -200,11 +200,12 @@ app fn ls = addLine$ fn ls
 (Syn x) -= (Syn n) = addLine$ Syn$ x <+> "-=" <+> n
 
 -- Comments:
-comm :: Doc -> EasyEmit ()
+--comm :: Doc -> EasyEmit ()
+comm :: String -> EasyEmit ()
 comm x  = addChunk$ Syn$ txt
  where 
    txt = text$ init$ unlines lns -- init strips the last newline
-   lns = map fn $ lines (render x)
+   lns = map fn $ lines x --(render x)
    fn "" = ""
    fn other = "// " ++ other
 
@@ -216,6 +217,10 @@ if_ (Syn a) m1 m2 =
      addChunk$ Syn$ hangbraces (empty) indent bod2
 
 ret (Syn x) = addLine$ Syn$ "return " <> x
+
+assert (Syn exp) = 
+ do addLine$ Syn ("assert" <> pcommasep [exp])
+
 
 ------------------------------------------------------------
 -- C++ Definitions & Declarations
@@ -247,8 +252,14 @@ funDefShared retty (Syn name) tyls fn formTup =
 -- This is a normal function defined elsewhere:
 function :: String -> [Syntax] -> Syntax
 function name = 
-  \ args -> Syn$ t name <> parens (pcommasep$ map deSyn args)
-     
+  \ args -> Syn$ t name <> (pcommasep$ map deSyn args)
+
+-- Use a C++ constant 
+constant :: String -> Syntax
+constant = fromString
+
+stringconst :: String -> Syntax
+stringconst str = Syn$ dubquotes str
 
 -- Common case: for loop over a range with integer index:
 ------------------------------------------------------------

@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, QuasiQuotes, NamedFieldPuns #-}
+{-# LANGUAGE RecordWildCards, QuasiQuotes, NamedFieldPuns, ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 -- OverloadedStrings -- TODO: currently causes ambiguities with toDoc
 
@@ -17,7 +17,7 @@ module Intel.Cnc.Spec.Codegen.CppOld where
 import Intel.Cnc.Spec.AST hiding (commacat)
 import Intel.Cnc.Spec.CncGraph
 --import Intel.Cnc.Spec.GatherGraph
-import Intel.Cnc.Spec.Util 
+import Intel.Cnc.Spec.Util as U
 
 import qualified Intel.Cnc.EasyEmit as EE
 import Intel.Cnc.EasyEmit hiding (app, not, (&&), (==))
@@ -26,6 +26,7 @@ import Control.Monad.State
 import StringTable.Atom
 
 import Text.PrettyPrint.HughesPJClass 
+import Text.Printf
 
 -- QuasiQuoting is too expensive in final binary size:
 -- import Text.InterpolatedString.QQ
@@ -58,6 +59,9 @@ oldstyle_get_method = False
 
 commacat ls = hcat (intersperse (text ", ") $ ls)
 
+instance FromAtom Doc where
+  fromAtom = text . fromAtom
+
 ----------------------------------------------------------------------------------------------------
 
 
@@ -68,6 +72,15 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 -- HOWTO READ the below code:
 -- This code emits a series of strings/docs to build up a file.
 -- Some of the more complex looking bits are building up large lists of type [Doc].
+--
+-- [2010.11.15] NOTE: This will get more complex for a little while
+-- because I am IN THE MIDDLE OF switching to use EasyEmit functionality.
+
+   -- Prelude: set up some bindings for EasyEmit functions:
+   --------------------------------------------------------------------------------
+   let fprintf = function "fprintf"
+       abort   = function "abort"
+       stderr  = constant "stderr"
 
    -- First we produce the header of the file:
    --------------------------------------------------------------------------------
@@ -107,6 +120,7 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
    let -- Don't include builtins (e.g. "env"):
        stepls = filter (\ x -> not$ x `elem` builtinSteps) $
 		AS.toList steps
+       stepls_with_types = zip stepls tagtys
        prescribers = map (getStepPrescriber spec) stepls
        tagtys = map (\ name -> case tags AM.! name of 
 		                  Nothing -> error$ "Tag collection '"++ show name ++"' missing type, needed for C++ codegen!"
@@ -116,7 +130,7 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
        privcontext_member stp = t"m_priv_" <> privcontext stp 
        tls_key stp = privcontext stp <> t"_tls_key"
 		
-   forM_ (zip stepls tagtys) $ \ (stp,ty) ->
+   forM_ stepls_with_types $ \ (stp,ty) ->
      do emitStep appname (fromAtom stp) ty 
         putS "\n\n"
    when (not genstepdefs)$ putS  "*/\n"
@@ -138,7 +152,7 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
      putS  "// Forward declaration of the context class (also known as graph)\n"
      putD$ t"struct " <> maincontext <> t";\n\n"
      putS$ "// Type definitions for wrappers around steps.\n"
-     forM_ (zip stepls tagtys) $ \ (stp,ty) -> do
+     forM_ stepls_with_types $ \ (stp,ty) -> do
 	putD$ struct (stepwrapper stp) $ 
 	  textAtom stp <+> t"m_step" <> semi $$
 	  --stepwrapper stp <> parens empty <> semi
@@ -220,7 +234,7 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
    when (wrapall && not old_05_api) $ do 
      putS$ "\n\n// Next we define 'private contexts'.\n"
      putS$ "// These allow steps to exist in their own little universes with special properties:\n" 
-     forM_ stepls $ \stp -> do
+     forM_ stepls_with_types $ \ (stp,stpty) -> do
 	putD$ 
  	 cppclass (privcontext stp) -- <+> colon <+> t"public CnC::context" <> angles (privcontext stp) )
 	  (--t "\n  private:" $$
@@ -229,7 +243,9 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 
            t"\n  public:" $$
 
-           t"  int m_scratchpad; // TEMP, testing\n" $$
+           t"  int m_scratchpad; // TEMP, testing" $$
+	   t"  const "<> (cppType$ TPtr stpty) <+> t"tag" <> semi $$
+
 
            ------------------------------------------------------------   
 	   -- Wrap tag collections:
@@ -247,7 +263,9 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 	   (vcat $ 
 	    (flip map) (AM.toList items) $ \ (it,Just (ty1,ty2)) -> 
 
-	    let -- A reused bit of syntax for wrapper get/put methods:
+	    let tagty = cppType ty1
+
+	        -- A reused bit of syntax for wrapper get/put methods:
  	        -- (This is one of those things that you don't want to duplicate, 
 		--  but it has too many arguments and is poorly abstracted.)
 	        wrapGP doret retty nm args isPut = 
@@ -270,22 +288,31 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 	 			            -- [(_,tf)] = filter (\ (nd,lab) -> nd == stpnd)$  lpre' gctxt				            
 				            --[(_,tf)] = trace (" LENGTH "++ show (length ls) ++" "++ show stpnd ++" "++ show itemnd++" "++ show lnhbrs) ls
 				        in 
+				           runEasyEmit$
 				           case ls of 
 				             -- If we have no relationship to that collection its an error to access it:
-				             -- [] -> do fprintf [stderr, dubquotes$ printf "CnC graph violation: should not access collection '%s' from '%s'" 
-					     -- 		                                 (graphNodeName target)  (show stp)]
-				             --          abort[]
 
-                                             [] -> t$"fprintf(stderr, \"CnC graph violation: should not access collection '"
-				                     ++ graphNodeName target ++"' from step '"++ show stp ++"'\\n\"); abort();"
-				             [(_,Nothing)] -> t"// No tag function to check..."
+				             [] -> do let str = printf "CnC graph violation: should not access collection '%s' from '%s'" 
+							               (graphNodeName target :: String) (show stp) 
+						      EE.app fprintf [stderr, stringconst$ str]
+				                      EE.app abort[]
+
+				             [(_,Nothing)] -> comm "No tag function to check..."
+
 				             --((_,Just (TF args exps)) : []) -> 
-				             ((_,Just (TF args exps)) : tl) ->  -- TEMPTOGGLE ... permissive, ignoring additional tag functions!
-				               t("// CHECK args "++ show args) $$
-				               t("// exps "++ show exps)
+					     
+				             ((_,Just (TF args exps)) : tl) -> -- TEMPTOGGLE ... permissive, ignoring additional tag functions!
+					       case (args,exps) of 
+					         ([arg], [exp]) -> 
+						    do comm ("Checking tag function "++ show arg ++" -> "++ show exp)
+						       -- TODO: use normal variable decl here:
+						       putD$ tagty <+> (fromAtom arg) <+> t"=" <+> t"* m_context->tag" <> semi
+						       assert (Syn (t"tag") EE.== Syn (pPrint exp))
+						 _ -> error "internal error: tag function correctness not fully implemented yet.  Finish me."
+
 				             _ -> error$ "internal error: tag function correctness codegen: \n "++show ls
-				  in
-				  (if gendebug
+				  in				  
+				  (if gendebug -- Optionally include debugging assertions.
         	  	            then checkTagFun stp (CGItems it) (if isPut then lpre' else lsuc') 
 				    else empty) $$
 				  --------------------------------------------------------------------------------
@@ -293,7 +320,7 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 				  t "m_"<> textAtom it <> t"." <> t nm <> parens vars <> semi) 
 
                 -- Basic get or put:
-		basicGP nm isPut = wrapGP False "void" nm [(mkConstRef (cppType ty1), "tag"), 
+		basicGP nm isPut = wrapGP False "void" nm [(mkConstRef tagty, "tag"), 
 							   ((if isPut then mkConstRef else mkRef) (cppType ty2) , "ref")] isPut
 
 	        wrapper = textAtom it <> t"_wrapper"
@@ -302,14 +329,17 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 	    t "// The item collection wrapper: A 'NoOp' wrapper class that does nothing: "$$
 	    cppclass wrapper
 	             (t "public:" $$  
-		      mkPtr (privcontext stp) <> t" m_context;\n" $$ 
+		      mkPtr (privcontext stp) <> t" m_context;" $$ 
+		      mkPtr maincontext <> t" parent_context;\n" $$ 
+
 		      t"CnC::item_collection" <> angles (cppType ty1 <>commspc<> cppType ty2) <> t" & " <> member <> semi $$ t"" $$
                       t "// The constructor here needs to grab a reference from the main context:" $$
 		      (constructor wrapper 
 		                   [param (mkRef maincontext)      (t"p"),
 				    param (mkPtr$ privcontext stp) (t"c")]
 		                   [(member, t"p." <> textAtom it)]
-		                   (assign "m_context" "c"))  $$ 
+		                   (assign "m_context" "c" $$ 
+		                    assign "parent_context" "&p"))  $$ 
 		      -- Just three methods: two variants of get and one put.
 		      basicGP "get" False $$ 
 		      basicGP "put" True $$
@@ -349,22 +379,23 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 
    when (wrapall) $ do
      putS$ "\n\n// Execute method wrappers for each step that uses a privaate context:\n"
-     forM_ (zip stepls tagtys) $ \ (stp,ty) -> do
+     forM_ stepls_with_types $ \ (stp,ty) -> do
       putD$ hangbraces 
 	(t"int "<> stepwrapper stp <> t"::execute(" <+> constRefType ty <+> t "tag," <+> maincontext <> t" & c) const")
 	indent $
 
         assignCast (mkPtr$ privcontext stp) (t"ptr") 
-		   (app "CnC::Internal::CnC_TlsGetValue" [deref (t"c") (tls_key stp)]) $$ 
+		   (U.app "CnC::Internal::CnC_TlsGetValue" [deref (t"c") (tls_key stp)]) $$ 
 
 	hangbraces (t"if " <> parens (t"!ptr")) indent
-		   (assign "ptr" (t"new " <> app (privcontext stp) ["c"]) $$
-		    app "CnC::Internal::CnC_TlsSetValue" [deref (t"c") (tls_key stp), t"ptr" ] 
+		   (assign "ptr" (t"new " <> U.app (privcontext stp) ["c"]) $$
+		    U.app "CnC::Internal::CnC_TlsSetValue" [deref (t"c") (tls_key stp), t"ptr" ] 
 		    <> semi) $$
 
+        t"ptr->tag = &tag;\n" $$
 	-- t"printf(\"PTR %p\\n\", ptr);" $$
 
-	t"return" <+> app "m_step.execute" ["tag", "*ptr"] <> semi
+	t"return" <+> U.app "m_step.execute" ["tag", "*ptr"] <> semi
 	-- privcontext stp <> t"* ptr = ("<> privcontext stp 
         --  <> t"*) CnC::Internal::CnC_TlsGetValue" <> parens (t"c." <> tls_key stp) <> semi
 
@@ -459,11 +490,11 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 	-- This should be completely obsoleted when the API catches up (e.g. trace_all works properly)
 	[hangbraces (t"if " <> parens (if gentracing then t"1" else t"0")) indent (vcat $
 	  ((flip map) (zip3 stepls prescribers tagtys) $ \ (stp,tg,ty) ->
-	     app "CnC::debug::trace" [(text$ step_obj$ fromAtom stp), (dubquotes stp)] <> semi) ++
+	     U.app "CnC::debug::trace" [(text$ step_obj$ fromAtom stp), (dubquotes stp)] <> semi) ++
 	  ((flip map) (AM.toList tags) $ \ (tg,_) -> 
-	   app "CnC::debug::trace" [textAtom tg, dubquotes tg] <> semi) ++
+	   U.app "CnC::debug::trace" [textAtom tg, dubquotes tg] <> semi) ++
 	  ((flip map) (AM.toList items) $ \ (it,_) -> 
-	   app "CnC::debug::trace" [textAtom it, dubquotes it] <> semi) 
+	   U.app "CnC::debug::trace" [textAtom it, dubquotes it] <> semi) 
 	 )]
 	--------------------------------------------------------------------------------
 
