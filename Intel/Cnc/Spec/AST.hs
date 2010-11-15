@@ -121,6 +121,25 @@ instance Pretty (Type) where
  pPrint (TDense ty) = text "dense" <+> pPrint ty 
  pPrint (TTuple ty) = text "(" <> commacat ty <> text ")"
 
+
+-- Converting types to C++ concrete syntax.
+cppType :: Type -> Doc
+cppType ty = case ty of 
+  TInt   -> t "int"
+  TFloat -> t "float"
+  TSym s -> textAtom s
+  TPtr ty -> cppType ty <> t "*"
+
+  -- This doesn't affect the C-type, any influence has already taken place.
+  TDense ty -> cppType ty 
+
+  -- Here is the convention for representing tuples in C++.
+  --TTuple [a,b]   -> t "Pair"   <> angles (hcat$ punctuate commspc (map cppType [a,b]))
+  --TTuple [a,b,c] -> t "Triple" <> angles (hcat$ punctuate commspc (map cppType [a,b,c]))
+  TTuple ls -> t "cnctup::tuple" <> angles (hcat$ punctuate commspc$ map cppType ls)
+  --TTuple ls -> error$ "CppOld codegen: Tuple types of length "++ show (length ls) ++" not standardized yet!"
+
+
 ----------------------------------------------------------------------------------------------------
 -- Top level Statements in a .cnc file:
 ----------------------------------------------------------------------------------------------------

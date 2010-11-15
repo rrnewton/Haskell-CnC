@@ -6,7 +6,7 @@
    This is an AST-free method!  It doesn't define a complete model for
    C++ code, just an easier way of emitting concretes syntax than
    using strings.
-
+   
  -}
 
 module Intel.Cnc.EasyEmit where
@@ -37,10 +37,11 @@ import Prelude hiding ((&&), (||), (==), (/=), not, Eq
 -- Monad plus HOAS for C++
 ----------------------------------------------------------------------------------------------------
 
--- A monad for generating syntax:
--- The state consists of an accumulator for lines of syntax, plus a counter for temporary variables.
+-- | A monad for generating syntax:
+--   The state consists of an accumulator for lines of syntax, plus a counter for temporary variables.
 type EasyEmit a = S.State ([Doc], Int) a
 
+-- | Run a syntax-emitting computation and render it to a document.
 runEasyEmit :: EasyEmit () -> Doc
 runEasyEmit m = vcat (reverse ls)
  where 
@@ -80,8 +81,9 @@ instance IsString Syntax where
 -- instance IsString Doc where
 --     fromString s = (text s)
 
--- Comma separate Docs either horizontally or vertically
-commasep ls = parens$ fcat$ intersperse (text", ") ls
+-- Comma separate Docs either horizontally or vertically:
+-- (This version includes parens)
+pcommasep ls = parens$ fcat$ intersperse (text", ") ls
 
 
 --------------------------------------------------------------------------------
@@ -122,8 +124,8 @@ instance Ord Syntax Syntax where
     (Syn a) > (Syn b) = Syn (parens $ a <> " > " <> b )
     (Syn a) <= (Syn b) = Syn (parens $ a <> " <= " <> b )
     (Syn a) >= (Syn b) = Syn (parens $ a <> " >= " <> b )
-    max (Syn a) (Syn b) = Syn ("max" <> commasep [a,b] )
-    min (Syn a) (Syn b) = Syn ("min" <> commasep [a,b] )
+    max (Syn a) (Syn b) = Syn ("max" <> pcommasep [a,b] )
+    min (Syn a) (Syn b) = Syn ("min" <> pcommasep [a,b] )
 
 --   conditional (Syn a) b c = Syn (parens $ a <> " ? " <> b <> ":" <> c )
 
@@ -137,12 +139,12 @@ instance Eq Syntax Syntax where
 
 -- With names:
 var :: Type -> Syntax -> EasyEmit Syntax
-var ty (Syn name) = do addLine (Syn (dType ty <+> name ))
+var ty (Syn name) = do addLine (Syn (cppType ty <+> name ))
 		       return (Syn name)
 -- Without names:
 tmpvar :: Type -> EasyEmit Syntax
 tmpvar ty = do Syn name <- gensym "tmp"
-	       addLine (Syn (dType ty <+> name ))
+	       addLine (Syn (cppType ty <+> name ))
 	       return (Syn name)
 
 gensym root = 
@@ -154,7 +156,7 @@ gensym root =
 -- With initialization expression:
 varinit :: Type -> Syntax -> Syntax -> EasyEmit Syntax
 varinit ty (Syn name) (Syn rhs) = 
-   do addLine (Syn (dType ty <+> name <+> "=" <+> rhs))
+   do addLine (Syn (cppType ty <+> name <+> "=" <+> rhs))
       return (Syn name)
 
 
@@ -214,11 +216,17 @@ funDefShared retty (Syn name) tyls fn formTup =
        --args <- mapM (forValueOnly . tmpvar) tyls -- Generate temp names only (emit nothing).
        args <- sequence$ take (length tyls) (repeat$ gensym "arg") -- Generate temp names only (emit nothing).
        let body = runEasyEmit (fn$ formTup args)
-	   formals = map (\ (t,a) -> dType t <+> deSyn a) (zip tyls args)
-       addChunk$ Syn$ hangbraces (dType retty <+> name <> commasep formals) indent body
+	   formals = map (\ (t,a) -> cppType t <+> deSyn a) (zip tyls args)
+       addChunk$ Syn$ hangbraces (cppType retty <+> name <> pcommasep formals) indent body
        addChunk$ "\n"
-       return (\ args -> Syn$ name <> (commasep (map deSyn args)))
+       return (\ args -> Syn$ name <> (pcommasep (map deSyn args)))
 
+
+-- This is a normal function defined elsewhere:
+function :: String -> [Syntax] -> Syntax
+function name = 
+  \ args -> Syn$ t name <> parens (pcommasep$ map deSyn args)
+     
 
 -- Common case: for loop over a range with integer index:
 ------------------------------------------------------------
@@ -227,7 +235,7 @@ forLoopSimple (start,end) fn =
      Syn var <- gensym "i"
      --init <- runEasyEmit varinit TInt "i" (int start)
      let body = runEasyEmit$ fn (Syn var)
-     addChunk$ Syn$ hangbraces ("for " <> parens ( dType TInt <+> var <+> "=" <+> int start <> semi <+>
+     addChunk$ Syn$ hangbraces ("for " <> parens ( cppType TInt <+> var <+> "=" <+> int start <> semi <+>
 						   var <+> "<" <+> int end <> semi <+>
 						   var <> "++"
 						 )) indent $
@@ -239,22 +247,6 @@ forLoopSimple (start,end) fn =
 
 ----------------------------------------------------------------------------------------------------
 
--- Converting types to C++ concrete syntax.
-dType :: Type -> Doc
-dType ty = case ty of 
-  TInt   -> t "int"
-  TFloat -> t "float"
-  TSym s -> textAtom s
-  TPtr ty -> dType ty <> t "*"
-
-  -- This doesn't affect the C-type, any influence has already taken place.
-  TDense ty -> dType ty 
-
-  -- Here is the convention for representing tuples in C++.
-  --TTuple [a,b]   -> t "Pair"   <> angles (hcat$ punctuate commspc (map dType [a,b]))
-  --TTuple [a,b,c] -> t "Triple" <> angles (hcat$ punctuate commspc (map dType [a,b,c]))
-  TTuple ls -> t "cnctup::tuple" <> angles (hcat$ punctuate commspc$ map dType ls)
-  --TTuple ls -> error$ "CppOld codegen: Tuple types of length "++ show (length ls) ++" not standardized yet!"
 
 
 ----------------------------------------------------------------------------------------------------
@@ -317,6 +309,11 @@ ee_example =
 	 x -= 4
 	 ret x
 
+     let baz  = function "baz"
+	 quux = fromString "quux"
+
+     app baz [quux, quux]
+
      forLoopSimple (0,10) $ \i -> do
 	 if_ (i == 10 || i > 100)
 	     (app foo [foo [i / 10]])
@@ -327,7 +324,7 @@ ee_example =
    -- --      funDef "method" [TInt, TFloat] $ \(y,z) -> y + z
 
 ee_test1 = testCase "" "Code emission example"$ 
-	   (length$ render$ runEasyEmit ee_example) ~=? 376
+	   (length$ render$ runEasyEmit ee_example) ~=? 395
 
 
 tests_easyemit = testSet "EasyEmit" [ee_test1]

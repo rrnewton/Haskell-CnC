@@ -14,10 +14,14 @@
 
 module Intel.Cnc.Spec.Codegen.CppOld where
 
-import Intel.Cnc.Spec.AST
+import Intel.Cnc.Spec.AST hiding (commacat)
 import Intel.Cnc.Spec.CncGraph
 --import Intel.Cnc.Spec.GatherGraph
 import Intel.Cnc.Spec.Util 
+
+import qualified Intel.Cnc.EasyEmit as EE
+import Intel.Cnc.EasyEmit hiding (app, not, (&&), (==))
+
 import Control.Monad.State
 import StringTable.Atom
 
@@ -48,6 +52,11 @@ step_obj str = "m_" ++ str
 --obj_ref a   = t"*" <> (t$ step_obj$ fromAtom a)
 obj_ref a   = (t$ step_obj$ fromAtom a)
 
+
+-- [2010.11.14] TEMPTOGGLE: Disabling the one-argument version of get:
+oldstyle_get_method = False
+
+commacat ls = hcat (intersperse (text ", ") $ ls)
 
 ----------------------------------------------------------------------------------------------------
 
@@ -163,7 +172,7 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
      ((flip map) (AM.toList tags) $ \ (tg,mty) -> 
        case mty of 
          Nothing -> error$ "CppOld Codegen: tag collection without type: "++ (fromAtom tg)
-         Just ty -> text "CnC::tag_collection" <> angles (dType ty) <+> textAtom tg <> semi
+         Just ty -> text "CnC::tag_collection" <> angles (cppType ty) <+> textAtom tg <> semi
      ) ++ 
 
      [space, t "// Item collections members:" ] ++
@@ -175,9 +184,9 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
                            let extra = 
                                 case ty1 of  
                                   -- In the case where the tag type is dense in all dimensions, turn on CNC_VECTOR:
-                                  TDense _ -> commspc<> t"CnC::cnc_tag_hash_compare" <> angles (dType ty1) <>commspc<> t"CnC::CNC_VECTOR"
+                                  TDense _ -> commspc<> t"CnC::cnc_tag_hash_compare" <> angles (cppType ty1) <>commspc<> t"CnC::CNC_VECTOR"
                                   _        -> empty
-                           in angles (dType ty1 <>commspc<> dType ty2 <> extra) <+> textAtom it <> semi
+                           in angles (cppType ty1 <>commspc<> cppType ty2 <> extra) <+> textAtom it <> semi
      ) ++ 
 
      [space, t "// Pointers to (children) private contexts:" ] ++
@@ -227,7 +236,7 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
            ------------------------------------------------------------   
 	   t "// Tag collections are simply aliases to the parents':" $$ 
 	   (vcat$ (flip map) (AM.toList tags) $ \ (tg, Just ty) -> 
-	    text "CnC::tag_collection" <> angles (dType ty) <> t" & " <> textAtom tg <> semi
+	    text "CnC::tag_collection" <> angles (cppType ty) <> t" & " <> textAtom tg <> semi
 	   ) $$ 
 
            ------------------------------------------------------------   
@@ -244,8 +253,8 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 	        wrapGP doret retty nm args isPut = 
 		       -- First let's put together the function's arguments:
                        let args' = map (\ (tyD,v) -> tyD <+> text v) args 
-			   decls = hcat$ intersperse (t", ") args'
-			   vars  = hcat$ intersperse (t", ") $ map (text . snd) args
+			   decls = commacat args'
+			   vars  = commacat $ map (text . snd) args
 		       in
 		       hangbraces (t "inline "<> toDoc retty <+> t nm <> parens decls) 
 	                         indent 
@@ -262,11 +271,16 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 				            --[(_,tf)] = trace (" LENGTH "++ show (length ls) ++" "++ show stpnd ++" "++ show itemnd++" "++ show lnhbrs) ls
 				        in 
 				           case ls of 
-				             [] -> t$"fprintf(stderr, \"CnC graph violation: should not access collection '"
+				             -- If we have no relationship to that collection its an error to access it:
+				             -- [] -> do fprintf [stderr, dubquotes$ printf "CnC graph violation: should not access collection '%s' from '%s'" 
+					     -- 		                                 (graphNodeName target)  (show stp)]
+				             --          abort[]
+
+                                             [] -> t$"fprintf(stderr, \"CnC graph violation: should not access collection '"
 				                     ++ graphNodeName target ++"' from step '"++ show stp ++"'\\n\"); abort();"
 				             [(_,Nothing)] -> t"// No tag function to check..."
 				             --((_,Just (TF args exps)) : []) -> 
-				             ((_,Just (TF args exps)) : tl) ->  -- TEMPTOGGLE ... permissive
+				             ((_,Just (TF args exps)) : tl) ->  -- TEMPTOGGLE ... permissive, ignoring additional tag functions!
 				               t("// CHECK args "++ show args) $$
 				               t("// exps "++ show exps)
 				             _ -> error$ "internal error: tag function correctness codegen: \n "++show ls
@@ -279,8 +293,8 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 				  t "m_"<> textAtom it <> t"." <> t nm <> parens vars <> semi) 
 
                 -- Basic get or put:
-		basicGP nm isPut = wrapGP False "void" nm [(mkConstRef (dType ty1), "tag"), 
-							   ((if isPut then mkConstRef else mkRef) (dType ty2) , "ref")] isPut
+		basicGP nm isPut = wrapGP False "void" nm [(mkConstRef (cppType ty1), "tag"), 
+							   ((if isPut then mkConstRef else mkRef) (cppType ty2) , "ref")] isPut
 
 	        wrapper = textAtom it <> t"_wrapper"
 	        member  = t"m_" <> textAtom it
@@ -289,7 +303,7 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 	    cppclass wrapper
 	             (t "public:" $$  
 		      mkPtr (privcontext stp) <> t" m_context;\n" $$ 
-		      t"CnC::item_collection" <> angles (dType ty1 <>commspc<> dType ty2) <> t" & " <> member <> semi $$ t"" $$
+		      t"CnC::item_collection" <> angles (cppType ty1 <>commspc<> cppType ty2) <> t" & " <> member <> semi $$ t"" $$
                       t "// The constructor here needs to grab a reference from the main context:" $$
 		      (constructor wrapper 
 		                   [param (mkRef maincontext)      (t"p"),
@@ -298,9 +312,10 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 		                   (assign "m_context" "c"))  $$ 
 		      -- Just three methods: two variants of get and one put.
 		      basicGP "get" False $$ 
-		      basicGP "put" True 
-		      -- [2010.11.14] TEMPTOGGLE: Disabling the one-argument version of get:
-		      -- wrapGP True  (dType ty2) "get" [(mkConstRef (dType ty1),"tag")] False
+		      basicGP "put" True $$
+		      if oldstyle_get_method 
+		      then wrapGP True  (cppType ty2) "get" [(mkConstRef (cppType ty1),"tag")] False
+		      else empty
 		      ) $$
             t "") $$
 
@@ -404,7 +419,7 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
      				       else obj_ref stp] 
 				     -- [2010.08.19] Revamp: don't need tuner/private context here anymore:
 				     -- if old_05_api then [] else 
-				     -- [t"CnC::default_tuner< " <> dType ty <>commspc<> privcontext stp <> t" >" <> parens empty
+				     -- [t"CnC::default_tuner< " <> cppType ty <>commspc<> privcontext stp <> t" >" <> parens empty
 				     --  , t"*" <> privcontext_member stp 
      				     --  --,  privcontext stp <> parens (t"this")
      				     -- ]
@@ -479,22 +494,9 @@ emitStep appname name ty = putD$
 	 )
 
 
-constRefType ty = t "const" <+> dType ty <+> t "&"
-
-dType ty = case ty of 
-  TInt   -> t "int"
-  TFloat -> t "float"
-  TSym s -> textAtom s
-  TPtr ty -> dType ty <> t "*"
-
-  -- This doesn't affect the C-type, any influence has already taken place.
-  TDense ty -> dType ty 
-
-  -- Here is the convention for representing tuples in C++.
-  --TTuple [a,b]   -> t "Pair"   <> angles (hcat$ punctuate commspc (map dType [a,b]))
-  --TTuple [a,b,c] -> t "Triple" <> angles (hcat$ punctuate commspc (map dType [a,b,c]))
-  TTuple ls -> t "cnctup::tuple" <> angles (hcat$ punctuate commspc$ map dType ls)
-  --TTuple ls -> error$ "CppOld codegen: Tuple types of length "++ show (length ls) ++" not standardized yet!"
+-- Make a type both const and a reference.
+-- TODO: add some error checking here to see if it is already const or reference...
+constRefType ty = t "const" <+> cppType ty <+> t "&"
 
 
 
