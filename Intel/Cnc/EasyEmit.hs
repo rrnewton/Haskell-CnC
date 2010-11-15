@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, OverloadedStrings, FlexibleInstances, ScopedTypeVariables, MultiParamTypeClasses, FunctionalDependencies #-}
+{-# LANGUAGE DeriveDataTypeable, OverloadedStrings, FlexibleInstances, ScopedTypeVariables, MultiParamTypeClasses, FunctionalDependencies, TypeSynonymInstances #-}
 
 {-|
    This module provides a simple way to use HOAS (higher order abstract syntax) to emit C++ code.
@@ -11,20 +11,19 @@
 
 module Intel.Cnc.EasyEmit where
 
-import Control.Monad 
 
 import Intel.Cnc.Spec.Util hiding (app)
 import Intel.Cnc.Spec.AST  hiding (commasep)
 
-import Text.PrettyPrint.HughesPJ
-import StringTable.Atom
+import Control.Monad 
+import qualified  Control.Monad.State.Strict as S 
 
 import Data.Data
 import Data.List
 import GHC.Exts -- For IsString
 
-import qualified  Control.Monad.State.Strict as S 
---import Debug.Trace
+import StringTable.Atom
+import Text.PrettyPrint.HughesPJ
 import Test.HUnit
 
 import qualified Prelude as P
@@ -39,26 +38,50 @@ import Prelude hiding ((&&), (||), (==), (/=), not, Eq
 
 -- | A monad for generating syntax:
 --   The state consists of an accumulator for lines of syntax, plus a counter for temporary variables.
-type EasyEmit a = S.State ([Doc], Int) a
+newtype EasyEmit a = EE (S.State EEState a)
+type EEState = ([Doc],Int)
 
 -- | Run a syntax-emitting computation and render it to a document.
 runEasyEmit :: EasyEmit () -> Doc
-runEasyEmit m = vcat (reverse ls)
+runEasyEmit (EE m) = vcat (reverse ls)
  where 
   (a,(ls,_)) = S.runState m ([], 0)
 
 -- This runs a subcomputation only for value -- discards its emission side effects.
 forValueOnly :: EasyEmit a -> EasyEmit a
-forValueOnly m =
+forValueOnly (EE m) =
  do (ls,c) <- S.get 
     let (val,(_,c2)) = S.runState m ([], c)
     S.put (ls,c2)
     return val
 
+-- BOILERPLATE, because of newtype rather than type synonym for EasyEmit:
+instance Monad EasyEmit where
+  -- Whew, need to verify that this has no perfermance overhead:
+  (EE ma) >>= fn = EE (ma >>= (\x -> case fn x of EE m -> m))
+  return x       = EE (return x)
+instance S.MonadState EEState EasyEmit where
+  get   = EE S.get
+  put x = EE (S.put x)
+
+instance StringBuilder EasyEmit where 
+--instance StringBuilder (S.State ([Doc], Int)) where 
+  putS s = S.modify (\ (ls,cnt) -> (text s:ls, cnt) )
+  runSB (EE m) = 
+      let (res, (ls,cnt)) = S.runState m ([],0) 
+      in (render$ vcat$ reverse ls, res)
+
+
+
+--------------------------------------------------------------------------------
+-- First, simple helpers / utilities:
+--------------------------------------------------------------------------------
+
 instance P.Eq Doc where
   -- Would be nice to memoize this!
   a == b  =  render a P.== render b
 
+-- | The EasyEmit monad uses this Syntax type internally:
 data Syntax = Syn Doc
   deriving (Show, P.Eq)
 
@@ -72,7 +95,6 @@ addChunk (Syn doc) =
 
 -- Adds the semi-colon at the end also:
 addLine (Syn doc) = addChunk (Syn$ doc <> semi)
-
 
 -- Also, overloading the string constants themselves is nice:
 instance IsString Syntax where

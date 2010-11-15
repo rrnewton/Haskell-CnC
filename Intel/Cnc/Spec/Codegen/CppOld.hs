@@ -60,10 +60,10 @@ commacat ls = hcat (intersperse (text ", ") $ ls)
 
 ----------------------------------------------------------------------------------------------------
 
---emitCpp :: StringBuilder m => Bool -> Bool -> CncSpec -> m ()
--- emitCpp old_05_api genstepdefs (spec @ CncSpec{..}) = do 
-emitCpp :: StringBuilder m => CodeGenConfig -> CncSpec -> m ()
---emitCpp CGC{..} (spec @ CncSpec{..}) = do 
+
+--emitCpp :: StringBuilder m => CodeGenConfig -> CncSpec -> m ()
+emitCpp :: CodeGenConfig -> CncSpec -> EasyEmit ()
+
 emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = do 
 -- HOWTO READ the below code:
 -- This code emits a series of strings/docs to build up a file.

@@ -21,7 +21,7 @@ import Debug.Trace
 -- String Builder
 ----------------------------------------------------------------------------------------------------
 -- We abstract the process of creating strings so that we can make our
--- code generation more efficient when we feel like it.
+-- code generation more efficient when we feel like it (later).
 --
 -- I couldn't find a nice simple version of this in hackage or the
 -- standard libraries so here we roll our own (trivial) StringBuilder class.
@@ -36,7 +36,7 @@ class Monad m => StringBuilder m where
   -- Default inefficient implementation:
   putS s = putD (text s)
   putD d = putS (show d)
-  writeSB h m = let (s,a) = runSB m in 
+  writeSB h m = let (s,a) = runSB m in  -- This appends the whole string... it shouldn't.
 		do hPutStr h s
 		   return a
 
@@ -50,9 +50,11 @@ instance StringBuilder (State [String]) where
   runSB m = let (res,ls) = runState m [] 
 	    in (concat$ reverse ls, res)
 
+
 ----------------------------------------------------------------------------------------------------
 -- Simple pretty printing helpers, and C/C++ codegen helpers.
 ----------------------------------------------------------------------------------------------------
+-- These operate on and produce Doc types:
 
 vbraces d = lbrace $+$ d $+$ rbrace
 textAtom = text . fromAtom

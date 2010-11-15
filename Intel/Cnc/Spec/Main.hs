@@ -483,16 +483,16 @@ main2 argv = do
       case codegenmode of
 	CppOld -> 
 	   toFile (base ++ ".h") "header (legacy CnC 0.5 API)"
-		  (emitCpp config graph :: SimpleBuilder ())
+		  (emitCpp config graph :: EE.EasyEmit ())
 --True (GenStepDefs `elem` opts)
 	Cpp ->        
 	   toFile (base ++ ".h") "header"
-		  (emitCpp config graph :: SimpleBuilder ())
+		  (emitCpp config graph :: EE.EasyEmit ())
 --False (GenStepDefs `elem` opts)
 
 	Haskell -> 
 	   toFile (base ++ "_heaader.hs") "header"
-		  (emitHaskell graph :: SimpleBuilder ())
+		  (emitHaskell graph :: EE.EasyEmit ())
 
 	_ -> error$ "Not a codegen mode: "++ show codegenmode
 
