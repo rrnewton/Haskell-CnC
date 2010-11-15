@@ -142,13 +142,12 @@ tryParse p input
       Right x  -> Just x
 
 test_traceVacuum = 
--- TestLabel "TraceVacuum Tests" $ TestList $
  testSet "TraceVacuum" $ 
  let tP = tryParse (traceline defaultStepContext) 
      sample = map (tryParse (traceline defaultStepContext)) sample_trace
      isfail (Just (PARSEFAIL _)) = True
      isfail _ = False
-     tC = testCase "TraceVacuum"
+     tC = testCase ""
  in
  [ tC "traceline1: parse one line"$ Just (StartStep (toAtom "fib_step","0"))           ~=? tP "Start step (fib_step: 0)"
  , tC "traceline2: parse one line"$ Just (PutT (toAtom "env","") (toAtom "tags","10")) ~=? tP "Put tag <tags: 10>"

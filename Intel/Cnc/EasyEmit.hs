@@ -326,8 +326,8 @@ ee_example =
    --       if_ (app f x) x x 
    -- --      funDef "method" [TInt, TFloat] $ \(y,z) -> y + z
 
-ee_test1 = testCase "EasyEmit" "Code emission example"$ 
+ee_test1 = testCase "" "Code emission example"$ 
 	   (length$ render$ runEasyEmit ee_example) ~=? 376
 
 
-tests_easyemit = TestList [ee_test1]
+tests_easyemit = testSet "EasyEmit" [ee_test1]

@@ -516,7 +516,11 @@ all_unit_tests =
  , EE.tests_easyemit
  ]
 
-cncRunAllTests = runTestTT all_unit_tests
+cncRunAllTests = 
+--    runTestText (putTextToHandle stdout True) all_unit_tests
+    runTestText (PutText myPut ()) all_unit_tests
+ where myPut msg True  () = do putStrLn ""; putStrLn$ msg
+       myPut msg False () = return ()
 
 t = cncRunAllTests -- Lazy shorthand
 

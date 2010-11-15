@@ -178,10 +178,14 @@ indent = 4
 
 -- Tag a little bit more verbose output to the tests:
 testCase prefix str tst = HU.TestLabel lab (trace (tag++ lab) tst)
- where lab = prefix ++ ": " ++ str
+ where lab = if prefix == ""
+             then str
+	     else prefix ++ ": " ++ str
 --       tag = " *** "
-       tag = " [run] "
+       tag = " [test] "
 
 -- Likewise, identify the per-module sub-groups of tests
 testSet name ls = 
-    trace ("\nRunning tests for module "++name) (HU.TestList ls)
+    trace ("\n"++header ++"\n"++ spacer) (HU.TestList ls)
+ where header = "Running tests for module " ++ show name 
+       spacer = (take (length header) $ repeat '=')

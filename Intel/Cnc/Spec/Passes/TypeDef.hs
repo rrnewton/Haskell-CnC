@@ -89,7 +89,8 @@ strange3 = fmap (+1) (0,0)
 
 
 test_desugarTypeDefs = 
-  test [testCase "TypeDef" "basic desugarTypeDefs test"$  result ~=?  desugarTypeDefs input]
+  testSet "TypeDef"
+    [testCase "" "basic desugarTypeDefs test"$  result ~=?  desugarTypeDefs input]
  where 
       pair   = toAtom "pair"
       triple = toAtom "triple"
