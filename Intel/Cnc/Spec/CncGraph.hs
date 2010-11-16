@@ -28,8 +28,11 @@ data CncSpec = CncSpec {
   -- Might as well cache this after it is extracted:
   nodemap :: NodeMap CncGraphNode,
   -- Annoyingly, nodemaps are essentially unreadable and useless:
-  realmap :: Map CncGraphNode Node
+  realmap :: Map CncGraphNode Node,
+  -- We store the graph in a "flat" form and separately keep a tree of partitions:
+  harchtree :: ()
 }
+
 
 type CncGraph = (Gr CncGraphNode (Maybe TagFun))
 

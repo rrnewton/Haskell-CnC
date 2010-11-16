@@ -514,6 +514,7 @@ all_unit_tests =
  [ test_desugarTypeDefs
  , test_traceVacuum
  , EE.tests_easyemit
+ , test_readharch
  ]
 
 cncRunAllTests = 

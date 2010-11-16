@@ -869,7 +869,6 @@ testCase str io = TestLabel str $ TestCase$ do putStrLn$ "\n *** Running unit te
 
 test1 = testCase "Spot check list lengths"$ assertEqual "splitN" [[1,2], [3,4,5]] (splitN 2 [1..5]) 
 
-
 -- [2010.05.31] I don't have quickcheck working under 6.13.xx
 -- test2 = testCase "Quickcheck splitN - varying split size"$ 
 -- 	quickCheck$ (\ (n::Int) -> n>0 ==> 

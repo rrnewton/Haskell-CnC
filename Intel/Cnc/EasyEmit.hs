@@ -357,7 +357,6 @@ ee_example =
    -- --      funDef "method" [TInt, TFloat] $ \(y,z) -> y + z
 
 ee_test1 = testCase "" "Code emission example"$ 
-	   (length$ render$ runEasyEmit ee_example) ~=? 395
-
+	   (length$ render$ runEasyEmit ee_example) ~=? 393
 
 tests_easyemit = testSet "EasyEmit" [ee_test1]

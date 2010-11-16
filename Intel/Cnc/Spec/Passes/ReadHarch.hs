@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, TupleSections #-}
+{-# LANGUAGE RecordWildCards, TupleSections, ScopedTypeVariables #-}
 
 ----------------------------------------------------------------------------------------------------
 -- Read .harch profiled/partitioned graph files.
@@ -6,9 +6,18 @@
 -- Original Author: Ryan Newton
 ----------------------------------------------------------------------------------------------------
 
-module Intel.Cnc.Spec.Passes.ReadHarch where
+module Intel.Cnc.Spec.Passes.ReadHarch 
+    -- (
+    --   readHarchFile,
+    --   HarchNode (..),
+    --   test_readharch
+    -- ) 
+  where
 
 import Intel.Cnc.Spec.CncGraph
+import Intel.Cnc.Spec.Util
+
+import Test.HUnit 
 import Text.Parsec
 import Text.Parsec.Char
 import Text.Parsec.Combinator
@@ -22,8 +31,8 @@ import qualified Data.Set as Set
 import Data.List.Split (splitOn) -- from 'split' package 
 import Data.Graph
 import Debug.Trace
-
 import Data.Function
+import qualified Control.Exception as CE
 
 import qualified  Data.Graph.Inductive as G
 import Data.Graph.Inductive.Query.Monad (mapFst, mapSnd)
@@ -204,42 +213,44 @@ convertHarchGraph parsednodes =
 
 
 ----------------------------------------------------------------------------------------------------
--- Testing 
-
---map (map (\ (a,b) -> (tail a, b))) $ 
---groupBy (\ a b -> head (fst a) == head (fst b)) $ 
-
+-- Testing: Or at least some miscellaneous unit tests.
+----------------------------------------------------------------------------------------------------
 
 runPr prs str = print (run prs str)
 
-foo = do whitespc; newline
-bar = do char '\n'
-
-t1 = runPr prop$ "name=foo;"
-
-t2 = runPr props$ "name=foo; direction=01;" -- No spcs at start end
-t3 = runPr props$ "name=foo;" 
-
-t4 = runPr props$ "name=foo; blah=baz; " 
-
+t1 = run prop$ "name=foo;"
+t2 = run props$ "name=foo; direction=01;" -- No spcs at start end
+t3 = run props$ "name=foo;" 
+t4 = run props$ "name=foo; blah=baz; " 
 
 l1 = "% HARCHNODE name=blah; direction=01;\n"
 --t5 = runPr debug$ l1
 --t5 = runPr nodeHeader l1
-
 l2 = " 0 1 2 "
-t6 = runPr numbers$ l2
---t6 = runPr edgeline  l2 
-
-t7 = runPr foo "   \n"
-t8 = runPr foo "\n"
-t9 = runPr bar "\n"
-
-
-
---t11 = runPr harchnode$ "% HARCHNODE name=blah; direction=01;\nw% HARCHNODE name=blah; direction=01; 0 1 2"
+t6 = run numbers$ l2
+foo = do whitespc; newline
+bar = do char '\n'
+t7 = run foo "   \n"
+t8 = run foo "\n"
+t9 = run bar "\n"
 t11 = runPr harchnode$ l1 ++ l2 ++ "\n"
 
-tests = sequence_ [t1,t2,t3, t7,t8,t9, t11]
+test_readharch = 
+  testSet "ReadHarch" $
+  [
+    testCase "" "simple parse test 1"$ ("name","foo")                      ~=? t1
+  , testCase "" "simple parse test 2"$ [("name","foo"),("direction","01")] ~=? t2
+  , testCase "" "simple parse test 3"$ [("name","foo")]                    ~=? t3 
+  , testCase "" "simple parse test 4"$ [("name","foo"),("blah","baz")]     ~=? t4 
+  , testCase "" "parse numbers"$ [0,1,2]     ~=? t6
+  , testCase "" "whitespace newline 1"$ '\n' ~=? t7
+  , testCase "" "whitespace newline 2"$ '\n' ~=? t8
+  , testCase "" "whitespace newline 3"$ '\n' ~=? t9
+  , testCase "" "expected parse error"$ TestCase $ do
+      CE.catch (do t11; assertFailure "Parse of incorrect syntax must return an error")
+               (\ (e :: CE.SomeException) -> return ())
+
+  ]
+
 
 ----------------------------------------------------------------------------------------------------
