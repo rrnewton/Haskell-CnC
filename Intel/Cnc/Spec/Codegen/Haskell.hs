@@ -34,7 +34,7 @@ import Control.Monad
 
 -- #define USE_GMAP
 -- #define MEMOIZE
-#include <haskell_cnc.h>
+  #include <haskell_cnc.h>
 
 type Pair = (Int16, Int16)
 

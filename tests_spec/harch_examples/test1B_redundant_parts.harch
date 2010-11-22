@@ -1,0 +1,9 @@
+4 3 10
+% HARCHNODE name=foo; directions=11; partitions=0; index=1;
+1 2 3
+% HARCHNODE name=bar; directions=; partitions=0:0; index=2;
+1 
+% HARCHNODE name=baz; directions=1; partitions=0:1; index=3;
+1 4 
+% HARCHNODE name=baz2; directions=; partitions=0:1; index=4;
+1 

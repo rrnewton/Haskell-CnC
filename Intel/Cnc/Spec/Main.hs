@@ -327,8 +327,9 @@ main2 argv = do
 #ifdef CNCVIZ
 	 HarchViz file -> 
 	     do putStrLn$ "Reading (and visualizing) harch file from: "++ file
-		g <- readHarchFile file
-		simple_graphviz name g
+		spec@(HarchSpec g _) <- readHarchFile file
+--		simple_graphviz name g
+		harch_graphviz name spec
 		putStrLn$ "Done with visualization, exiting without performing any .cnc spec translation."
 		exitSuccess
 #endif

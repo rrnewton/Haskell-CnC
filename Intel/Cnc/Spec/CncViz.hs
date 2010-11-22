@@ -1,7 +1,8 @@
 {-# LANGUAGE RecordWildCards, NamedFieldPuns, ScopedTypeVariables #-}
 
 ----------------------------------------------------------------------------------------------------
--- This module includes visualization code which depends on various libraries.
+-- This module includes visualization code which has numerous extra
+-- dependencies compared to the rest of the spec tool's code.
 ----------------------------------------------------------------------------------------------------
 module Intel.Cnc.Spec.CncViz where
 
@@ -9,12 +10,16 @@ import Intel.Cnc.Spec.TraceVacuum
 import Intel.Cnc.Spec.CncGraph
 import Intel.Cnc.Spec.Curses
 import Intel.Cnc.Spec.Util
+import qualified Intel.Cnc.Spec.Passes.ReadHarch as H
 
 import qualified Data.Graph.Inductive as G
 import Data.Graph.Inductive.Query.DFS
 import Data.Maybe
 import Data.Char
 import qualified Data.Map as M
+import qualified Data.IntMap as IM
+import qualified Data.Set as S
+import qualified Data.List as L
 
 import qualified StringTable.AtomSet as AS
 import qualified StringTable.AtomMap as AM
@@ -48,7 +53,7 @@ default_server_url = "http://127.0.0.1:20738/RPC2"
 -- Draw a cnc spec through graphviz:
 cncGraphviz = 
   -- This is easy because the graphviz wrapper uses fgl.
-  undefined
+  error "TODO: IMPLEMENT ME"
 
 
 --------------------------------------------------------------------------------
@@ -139,7 +144,7 @@ cncUbigraph interactive gr =
    R.lift$ putStrLn "Going into interactive CnC/Ubigraph visualization shell:"
    
 
-
+-- | Visualize any FGL graph in a window using GraphViz.
 simple_graphviz :: (nd1 -> String) -> G.Gr nd1 edge -> IO Gv.RunResult
 simple_graphviz lablNode gr = 
 --  runGraphvizCanvas Dot dot Gtk
@@ -151,6 +156,57 @@ simple_graphviz lablNode gr =
   --params ::  GraphvizParams nd1 edge () nd1
   --params = defaultParams { fmtNode= nodeAttrs }
   params = Gv.nonClusteredParams { Gv.fmtNode= nodeAttrs }
+  nodeAttrs (node, x) =
+    [ Gv.Label $ Gv.StrLabel $ lablNode x
+    , Gv.Shape Gv.Circle
+  --  , Color [colors !! a]
+  --  , FillColor $ colors !! a
+    , Gv.Style [Gv.SItem Gv.Filled []]
+    ]
+
+-- | Using GraphViz, display a CnC graph with Harch partitioning info.
+harch_graphviz ::  (H.HarchNode -> String) -> H.HarchSpec -> IO Gv.RunResult
+harch_graphviz lablNode (H.HarchSpec gr tree) = 
+     Gv.runGraphvizCanvas Gv.Dot (Gv.graphToDot params gr) Gv.Xlib
+ where 
+  params :: Gv.GraphvizParams H.HarchNode () [Int] H.HarchNode
+  params = Gv.defaultParams 
+	   { Gv.fmtNode= nodeAttrs
+	   , Gv.clusterBy = lookup_clusters
+	   , Gv.clusterID = \ ls -> Just$ Gv.Str (show ls)
+	   , Gv.fmtCluster = clusterAttrs
+	   }
+
+  -- We must take care here... there are two different numbering
+  -- schemes.  The FGL graph has a node ID, an the HarchNode has the
+  -- number from the original harch file.  It would be nice to
+  -- guarantee these are the same, or to make them disjoint so that
+  -- confusion is impossible.
+  lookup_clusters :: (G.LNode H.HarchNode) -> Gv.LNodeCluster [Int] H.HarchNode
+  lookup_clusters (ind, nd) = 
+      case IM.lookup (H.num nd) all_clusters of
+	Nothing -> error$ "harch_graphviz: node that did not appear in the harch tree: "++ show nd
+	Just set -> 
+	  -- Convert the set using the C/N constructors:
+	  S.fold (Gv.C) (Gv.N (ind,nd)) set
+
+  all_clusters = walk_tree [] tree
+
+  -- Walk over the tree to build a map from nodes -> partitions.
+  -- Partitions are named by the tree-index.
+  walk_tree :: [Int] -> H.HarchTreeOrdered -> IM.IntMap (S.Set [Int])
+  walk_tree ind (H.HT part children) = 
+    let 
+	chldmaps = L.zipWith (\ i -> walk_tree (ind++[i]) ) 
+	           [0..] children
+	combined = L.foldl' (IM.unionWith S.union) IM.empty chldmaps
+
+	insert acc node = IM.insertWith S.union node (S.singleton ind) acc
+    in L.foldl' insert combined part
+
+  clusterAttrs intls = 
+     [ Gv.GraphAttrs [Gv.Label$ Gv.StrLabel$ H.showTreePath intls ] ]
+
   nodeAttrs (node, x) =
     [ Gv.Label $ Gv.StrLabel $ lablNode x
     , Gv.Shape Gv.Circle
