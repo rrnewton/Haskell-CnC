@@ -66,13 +66,27 @@ s = Syn . text
 instance FromAtom Doc where
   fromAtom = text . fromAtom
 
+-- If a block of text is nonempty, then preface it with a comment:
+maybeCommentDoc ls txt = 
+  if txt == t""
+  then txt
+  else vcat (map (\ comm -> if comm == t"" then comm else t"// "<> comm) ls) $$ txt
+
+maybeComment ls m = 
+  let doc = execEasyEmit m in
+  if doc == t""
+  then return ()
+  else putD$ maybeCommentDoc ls doc
+
 ----------------------------------------------------------------------------------------------------
 
 -- This predicate determines whether we can successfully determine all
 -- the data dependencies of a step, for example to generate a depends function.
-all_tagfuns_tractible :: Atom -> CncGraph -> Bool
-all_tagfuns_tractible step graph =
+all_tagfuns_tractible :: CncGraph -> Atom -> Bool
+all_tagfuns_tractible graph step =
   True
+ -- FIXME -- TODO -- FINISH THIS!!!
+
 
 ----------------------------------------------------------------------------------------------------
 
@@ -87,17 +101,38 @@ emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, re
 -- [2010.11.15] NOTE: This will get more complex for a little while
 -- because I am IN THE MIDDLE OF switching to use EasyEmit functionality.
 
-   -- Prelude: set up some bindings for EasyEmit functions:
+   --------------------------------------------------------------------------------
+   -- Prelude: set up some bindings for EasyEmit functions and other helpers:
    --------------------------------------------------------------------------------
    let fprintf = function "fprintf"
        abort   = function "abort"
        stderr  = constant "stderr"
 
-       -- This predicate determines whether any 
+       -- Don't include builtins (e.g. "env"):
+       stepls = filter (\ x -> not$ x `elem` builtinSteps) $
+		AS.toList steps
+       stepls_with_types = zip stepls tagtys
+
+       -- This predicate determines whether there is any requirement to wrap a particular step collection:
        shouldWrapStep stpname = 
-	 wrapall || any (\ cgh -> hooksPredicate cgh stpname ) plugins
+	 wrapall || any (\ cgh -> hooksPredicate cgh stpname ) plugins       
+       areAnyWrapped = wrapall || any shouldWrapStep stepls
+
+       tractible_depends_steps = AS.fromList (filter (all_tagfuns_tractible graph) stepls)
+
+       prescribers = map (getStepPrescriber spec) stepls
+       tagtys = map (\ name -> case tags AM.! name of 
+		                  Nothing -> error$ "Tag collection '"++ show name ++"' missing type, needed for C++ codegen!"
+		                  Just ty -> ty)
+		prescribers  
+       privcontext stp = textAtom stp <> t"_context"
+       privcontext_member stp = t"m_priv_" <> privcontext stp 
+       tls_key stp = privcontext stp <> t"_tls_key"
+
+       tuner_name stp = toDoc stp <> t"_tuner"
 
 
+   --------------------------------------------------------------------------------
    -- First we produce the header of the file:
    --------------------------------------------------------------------------------
    -- TODO: Try quasiquoting for multiline-strings here again when they fix the binary bloating problem:
@@ -119,7 +154,7 @@ emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, re
 
    putS  "#include <cnc/cnc.h>\n"
    putS  "#include <cnc/debug.h>\n"
-   putS  "#include <cnc/internal/tls.h>\n"
+   when areAnyWrapped$ putS  "#include <cnc/internal/tls.h>\n"
 
    -- [2010.08.16] This is an INSUFFICIENT forward declaration:
 
@@ -133,18 +168,6 @@ emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, re
      putS  "// be in scope before this header is included.\n"
      putS  "// As a hint, the below are valid example definitions:\n"
      putS  "/*\n"
-   let -- Don't include builtins (e.g. "env"):
-       stepls = filter (\ x -> not$ x `elem` builtinSteps) $
-		AS.toList steps
-       stepls_with_types = zip stepls tagtys
-       prescribers = map (getStepPrescriber spec) stepls
-       tagtys = map (\ name -> case tags AM.! name of 
-		                  Nothing -> error$ "Tag collection '"++ show name ++"' missing type, needed for C++ codegen!"
-		                  Just ty -> ty)
-		prescribers  
-       privcontext stp = textAtom stp <> t"_context"
-       privcontext_member stp = t"m_priv_" <> privcontext stp 
-       tls_key stp = privcontext stp <> t"_tls_key"
 		
    forM_ stepls_with_types $ \ (stp,ty) ->
      do emitStep appname (fromAtom stp) ty 
@@ -153,9 +176,10 @@ emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, re
 
 
    when (not old_05_api) $ do 
-     putS$ "\n\n// Forward declarations for private contexts.\n"
-     forM_ stepls $ \stp -> do
-	putD$ t"class " <> privcontext stp <> semi <> t"\n"
+     maybeComment [t"", t"", t"Forward declarations for private contexts."] $
+	forM_ stepls $ \stp -> 
+	   when (shouldWrapStep stp) $
+	     putD$ t"class " <> privcontext stp <> semi <> t"\n"
      putS$ "\n"
 
    ------------------------------------------------------------
@@ -165,16 +189,15 @@ emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, re
    let stepwrapper stp = textAtom stp <> t"_step_wrapper"
 
    when (not old_05_api)$ do
-     putS  "// Forward declaration of the context class (also known as graph)\n"
-     putD$ t"struct " <> maincontext <> t";\n\n"
-     putS$ "// Type definitions for wrappers around steps.\n"
-     forM_ stepls_with_types $ \ (stp,ty) -> when (shouldWrapStep stp) $ do
-	putD$ struct (stepwrapper stp) $ 
-	  textAtom stp <+> t"m_step" <> semi $$
-	  --stepwrapper stp <> parens empty <> semi
-	  t"int execute(" <+> constRefType ty <+> t "tag," <+> maincontext <> t" & c) const;"
-	putS$ "\n"
-
+     putS  "// Forward declaration of the context class (representing the CnC graph)\n"
+     putD$ t"struct " <> maincontext <> t";\n"
+     maybeComment [t"", t"Type definitions for wrappers around steps."]
+	(forM_ stepls_with_types $ \ (stp,ty) -> when (shouldWrapStep stp) $ do
+	    putD$ struct (stepwrapper stp) $ 
+	      textAtom stp <+> t"m_step" <> semi $$
+	      --stepwrapper stp <> parens empty <> semi
+	      t"int execute(" <+> constRefType ty <+> t "tag," <+> maincontext <> t" & c) const;"
+	    putS$ "\n")
 
    ------------------------------------------------------------
    -- Emit the main context class
@@ -219,14 +242,11 @@ emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, re
                                   _        -> empty
                            in angles (cppType ty1 <>commspc<> cppType ty2 <> extra) <+> textAtom it <> semi
      ) ++ 
-
-     [space, t "// Pointers to (children) private contexts:" ] ++
-     ((flip map) stepls $ \ stp -> 
-       t "// "<>privcontext stp <> t"*" <+> privcontext_member stp <> semi
-      )++ 
      
-     [space, t "// Keys for thread local storage:" ] ++
-     ((flip map) stepls $ \stp -> t"int "<> tls_key stp <> semi) ++ 
+     [execEasyEmit$ 
+       maybeComment [t"", t"// Keys for thread local storage:"] 
+         (forM_ stepls $ \stp -> 
+	   when (shouldWrapStep stp) (putD$ t"int "<> tls_key stp <> semi))] ++ 
 
      [space, t "// The context class constructor (prototype:) "] ++
      [maincontext <> parens empty <> semi]
@@ -247,35 +267,34 @@ emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, re
    -- Emit the tuner for each step collection:
    ------------------------------------------------------------   
 
-   putS  "\n// Automatically generated tuners, where possible.\n"
-   when gendepends $ 
-     forM_ stepls_with_types $ \ (stp,ty) -> 
-       when (all_tagfuns_tractible stp graph) $
-       do
-          let tuner_name = toDoc stp <> t"_tuner"
---	      cname = 
-          putD$ struct (tuner_name <> t"public CnC::default_tuner< int, tagfun_depends_context >") $ 
-	    t"bool preschedule() const { return false; }" $$
-            t"template< class dependency_consumer >" $$
-	    (execEasyEmit$ 
-	       funDef (TSym$ toAtom "void") (s"depends") 
-	              [TRef$ ty, 
-		       TRef$ TSym$ toAtom$ render maincontext, 
-		       TRef$ TSym$ toAtom$ "dependency_consumer"] $ 
-	              \ (Syn tag, contextref, deps) -> do
-	                comm "BODY"
-	                let dep = function$ synToStr$ deps `dot` s"depends"
-	                -- Now iterate through all data collections connected to the step collection:
-	                forM_ (lpre graph$ realmap M.! (CGSteps stp)) $ \ (nd, tgfn) -> 
-	                  case lab graph nd of 
-	                   Just (CGItems it) -> do
-	                     comm$ "Dependency on collection "++ (graphNodeName$ fromJust$ lab graph nd) ++", tagfun " ++ show tgfn
-	                     case tgfn of 
-	                       Just fn -> forM_ (applyTagFun fn tag) $ \ resulttag -> 
-	                                    EE.app dep [contextref `dot` Syn (toDoc it), Syn resulttag]
-	                       Nothing -> comm "Ack.. tag function not available..."
-	                   _ -> return ()
-	     )
+   maybeComment [t"", t"Automatically generated tuners, where possible."]$
+     when gendepends $ 
+       forM_ stepls_with_types $ \ (stp,ty) -> 
+	 when (AS.member stp tractible_depends_steps) $
+	 do
+  --	      cname = 
+	    putD$ struct (tuner_name stp <> t" : public CnC::default_tuner< int, tagfun_depends_context >") $ 
+	      t"bool preschedule() const { return false; }" $$
+	      t"template< class dependency_consumer >" $$
+	      (execEasyEmit$ 
+		 constFunDef (TSym$ toAtom "void") (s"depends") 
+			[TConst$ TRef$ ty, 
+			 TRef$ TSym$ toAtom$ render maincontext, 
+			 TRef$ TSym$ toAtom$ "dependency_consumer"] $ 
+			\ (Syn tag, contextref, deps) -> do
+			  comm "BODY"
+			  let dep = function$ synToStr$ deps `dot` s"depends"
+			  -- Now iterate through all data collections connected to the step collection:
+			  forM_ (lpre graph$ realmap M.! (CGSteps stp)) $ \ (nd, tgfn) -> 
+			    case lab graph nd of 
+			     Just (CGItems it) -> do
+			       comm$ "Dependency on collection "++ (graphNodeName$ fromJust$ lab graph nd) ++", tagfun " ++ show tgfn
+			       case tgfn of 
+				 Just fn -> forM_ (applyTagFun fn tag) $ \ resulttag -> 
+					      EE.app dep [contextref `dot` Syn (toDoc it), Syn resulttag]
+				 Nothing -> comm "Ack.. tag function not available..."
+			     _ -> return ()
+	       )
 
 -- public CnC::default_tuner< int, tagfun_depends_context > // TODO3: derive from default tuner
 
@@ -286,9 +305,9 @@ emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, re
    
    -- INVARIANT! Due to error checking above, we can omit some error checking here:
    when (not old_05_api) $ do 
-     putS$ "\n\n// Next we define 'private contexts'.\n"
-     putS$ "// These allow steps to exist in their own little universes with special properties:\n" 
-     forM_ stepls_with_types $ \ (stp,stpty) -> when (shouldWrapStep stp) $ do
+     maybeComment [t"", t"", t"Next we define 'private contexts'.",
+                   t"These allow steps to exist in their own little universes with special properties:"] $
+      forM_ stepls_with_types $ \ (stp,stpty) -> when (shouldWrapStep stp) $ do
 	putD$ 
  	 cppclass (privcontext stp) -- <+> colon <+> t"public CnC::context" <> angles (privcontext stp) )
 	  (--t "\n  private:" $$
@@ -296,15 +315,19 @@ emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, re
 	   --maincontext <> t" & m_parent;"  $$ 
 
            t"\n  public:" $$
+	   t"// First, state for the private context.  Note one private context object is instantiated for EACH thread."$$
+	   t"  const "<> (cppType$ TPtr stpty) <+> t"tag" <> semi <> t" // Cache the tag for each step instance." $$
 
-           t"  int m_scratchpad; // TEMP, testing" $$
-	   t"  const "<> (cppType$ TPtr stpty) <+> t"tag" <> semi $$
+           -- Execute plugin hooks:
+	   maybeCommentDoc [t"",t"Next, state used/generated by plugins:"]
+		           (execEasyEmit$ forM_ plugins $ \pg -> addState pg stp) $$
 
+	   t"" $$
 
            ------------------------------------------------------------   
 	   -- Wrap tag collections:
            ------------------------------------------------------------   
-	   t "// Tag collections are simply aliases to the parents':" $$ 
+	   t "// Tag collections are simply aliases to the parents' (NO WRAPPING YET):" $$ 
 	   (vcat$ (flip map) (AM.toList tags) $ \ (tg, Just ty) -> 
 	    text "CnC::tag_collection" <> angles (cppType ty) <> t" & " <> textAtom tg <> semi
 	   ) $$ 
@@ -327,6 +350,7 @@ emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, re
                        let args' = map (\ (tyD,v) -> tyD <+> text v) args 
 			   decls = commacat args'
 			   vars  = commacat $ map (text . snd) args
+			   doplugs project = execEasyEmit$ forM_ plugins $ \pg -> project pg stp (Syn$ t$ snd$ head args) (Syn$ t$ snd$ head$tail args)
 		       in
 		       hangbraces (t "inline "<> toDoc retty <+> t nm <> parens decls) 
 	                         indent 
@@ -364,14 +388,27 @@ emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, re
 						       assert (Syn (t"tag") EE.== Syn (pPrint exp))
 						 _ -> error "internal error: tag function correctness not fully implemented yet.  Finish me."
 
-				             _ -> error$ "internal error: tag function correctness codegen: \n "++show ls
+				             _ -> error$ "internal error: tag function correctness codegen: \n w"++show ls
 				  in				  
 				  (if gendebug -- Optionally include debugging assertions.
         	  	            then checkTagFun stp (CGItems it) (if isPut then lpre' else lsuc') 
 				    else empty) $$
 				  --------------------------------------------------------------------------------
+				  -- TODO: Factor tagfun correctness into a Plugin
+				  --------------------------------------------------------------------------------
+				  -- Execute plugin hooks:
+				  -- FIXME: This should be put OR get..
+				  (if isPut 
+				   then doplugs beforeItemPut
+				   else doplugs beforeItemGet) $$
+				  --------------------------------------------------------------------------------
 				  (if doret then t"return " else t"") <>
-				  t "m_"<> textAtom it <> t"." <> t nm <> parens vars <> semi) 
+				  t "m_"<> textAtom it <> t"." <> t nm <> parens vars <> semi $$
+				  --------------------------------------------------------------------------------
+				  (if isPut 
+				   then doplugs afterItemPut
+				   else doplugs afterItemGet)
+				 )
 
                 -- Basic get or put:
 		basicGP nm isPut = wrapGP False "void" nm [(mkConstRef tagty, "tag"), 
@@ -431,24 +468,28 @@ emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, re
    -- Execute wrapper methods 
    ------------------------------------------------------------   
 
-   putS$ "\n\n// Execute method wrappers for each step that uses a private context:\n"
-   forM_ stepls_with_types $ \ (stp,ty) -> when (shouldWrapStep stp) $ do
-    putD$ hangbraces 
-      (t"int "<> stepwrapper stp <> t"::execute(" <+> constRefType ty <+> t "tag," <+> maincontext <> t" & c) const")
-      indent $
+   maybeComment [t"", t"", t"Execute method wrappers for each step that uses a private context:"] $
+    forM_ stepls_with_types $ \ (stp,ty) -> when (shouldWrapStep stp) $ do
+      putD$ hangbraces 
+	(t"int "<> stepwrapper stp <> t"::execute(" <+> constRefType ty <+> t "tag," <+> maincontext <> t" & c) const")
+	indent $
+	t"// To access the (thread local) state we fetch a pointer to the private context object:"$$
+	assignCast (mkPtr$ privcontext stp) (t"ptr") 
+		   (U.app "CnC::Internal::CnC_TlsGetValue" [deref (t"c") (tls_key stp)]) $$ 
 
-      assignCast (mkPtr$ privcontext stp) (t"ptr") 
-		 (U.app "CnC::Internal::CnC_TlsGetValue" [deref (t"c") (tls_key stp)]) $$ 
+	hangbraces (t"if " <> parens (t"!ptr")) indent
+		   (assign "ptr" (t"new " <> U.app (privcontext stp) ["c"]) $$
+		    U.app "CnC::Internal::CnC_TlsSetValue" [deref (t"c") (tls_key stp), t"ptr" ] 
+		    <> semi) $$
 
-      hangbraces (t"if " <> parens (t"!ptr")) indent
-		 (assign "ptr" (t"new " <> U.app (privcontext stp) ["c"]) $$
-		  U.app "CnC::Internal::CnC_TlsSetValue" [deref (t"c") (tls_key stp), t"ptr" ] 
-		  <> semi) $$
+	t"ptr->tag = &tag;\n" $$
+	-- t"printf(\"PTR %p\\n\", ptr);" $$
 
-      t"ptr->tag = &tag;\n" $$
-      -- t"printf(\"PTR %p\\n\", ptr);" $$
+	(execEasyEmit$ forM_ plugins $ \pg -> beforeStepExecute pg stp (Syn$ t"tag")) $$
+	t"int result = " <+> U.app "m_step.execute" ["tag", "*ptr"] <> semi $$
+	(execEasyEmit$ forM_ plugins $ \pg -> afterStepExecute pg stp (Syn$ t"tag")) $$
+	t"return result;"
 
-      t"return" <+> U.app "m_step.execute" ["tag", "*ptr"] <> semi
       -- privcontext stp <> t"* ptr = ("<> privcontext stp 
       --  <> t"*) CnC::Internal::CnC_TlsGetValue" <> parens (t"c." <> tls_key stp) <> semi
 
@@ -457,7 +498,8 @@ emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, re
    -- Main Context constructor
    ------------------------------------------------------------
    putS "\n\n"
-   when (not old_05_api)$ putS "// Finally, define the constructor for the main context AFTER the private contexts are defined:\n"
+   putS "// Finally, define the constructor for the main context:\n"
+   when (areAnyWrapped && not old_05_api)$ putS "// (Note that this occurs AFTER the private contexts are defined.)\n"
    putD $ 
      (hangbraces 
        (maincontext <> t"::" <> maincontext <> parens empty <+> colon $$
@@ -467,8 +509,9 @@ emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, re
          (if old_05_api then [] else  
      	   t "// Initialize step collections" :
            ((flip map) stepls $ \ stp -> 
-	      -- For now ALWAYS use a private context
-	      t"// "<> privcontext_member stp <> parens (t"new "<> privcontext stp <> parens (t"*this")) <> commspc $$
+	      -- Disabling this:
+	      -- t"// "<> privcontext_member stp <> parens (t"new "<> privcontext stp <> parens (t"*this")) <> commspc $$
+
      	      (t$ step_obj$ fromAtom stp) <> parens (t"this") 
      	   )) ++
 
@@ -501,6 +544,9 @@ emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, re
      				     , if old_05_api 
      				       then textAtom stp <> parens empty
      				       else obj_ref stp] 
+				     ++ if gendepends && AS.member stp tractible_depends_steps
+				        then [thunkapp (tuner_name stp)]
+				        else []
 				     -- [2010.08.19] Revamp: don't need tuner/private context here anymore:
 				     -- if old_05_api then [] else 
 				     -- [t"CnC::default_tuner< " <> cppType ty <>commspc<> privcontext stp <> t" >" <> parens empty
@@ -534,8 +580,9 @@ emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, re
 
           t"", 
           (vcat$ (flip map) stepls $ \ stp -> 
-	      assign (tls_key stp) 
-	             (thunkapp "CnC::Internal::CnC_TlsAlloc"))
+	      if shouldWrapStep stp
+	      then assign (tls_key stp) (thunkapp "CnC::Internal::CnC_TlsAlloc")
+	      else empty)
 
         ] ++
 	--------------------------------------------------------------------------------

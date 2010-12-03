@@ -241,23 +241,30 @@ assert (Syn exp) =
 -- returning a Haskell function that can be used to construct
 -- applications of that function.
 class FunDefable args where
-  funDef :: Type -> Syntax -> [Type] -> (args -> EasyEmit ()) -> EasyEmit ([Syntax] -> Syntax)
+  __funDef :: Syntax -> Type -> Syntax -> [Type] -> (args -> EasyEmit ()) -> EasyEmit ([Syntax] -> Syntax)
 
-instance FunDefable Syntax                        where funDef r n ts fn = funDefShared r n ts fn (\ [a] -> a)
-instance FunDefable (Syntax,Syntax)               where funDef r n ts fn = funDefShared r n ts fn (\ [a,b] -> (a,b))
-instance FunDefable (Syntax,Syntax,Syntax)        where funDef r n ts fn = funDefShared r n ts fn (\ [a,b,c] -> (a,b,c))
-instance FunDefable (Syntax,Syntax,Syntax,Syntax) where funDef r n ts fn = funDefShared r n ts fn (\ [a,b,c,d] -> (a,b,c,d))
+  -- Terrible ugliness just to deal with those darn const qualifiers:
+  funDef      :: Type -> Syntax -> [Type] -> (args -> EasyEmit ()) -> EasyEmit ([Syntax] -> Syntax)
+  constFunDef :: Type -> Syntax -> [Type] -> (args -> EasyEmit ()) -> EasyEmit ([Syntax] -> Syntax)
 
+  funDef      = __funDef ""
+  constFunDef = __funDef "const"
 
-funDefShared retty (Syn name) tyls fn formTup = 
+instance FunDefable Syntax                        where __funDef quals r n ts fn = funDefShared quals r n ts fn (\ [a] -> a)        
+instance FunDefable (Syntax,Syntax)               where __funDef quals r n ts fn = funDefShared quals r n ts fn (\ [a,b] -> (a,b))         
+instance FunDefable (Syntax,Syntax,Syntax)        where __funDef quals r n ts fn = funDefShared quals r n ts fn (\ [a,b,c] -> (a,b,c))     
+instance FunDefable (Syntax,Syntax,Syntax,Syntax) where __funDef quals r n ts fn = funDefShared quals r n ts fn (\ [a,b,c,d] -> (a,b,c,d)) 
+
+funDefShared postqualifiers retty (Syn name) tyls fn formTup  = 
     do (ls,c) <- S.get 
        --args <- mapM (forValueOnly . tmpvar) tyls -- Generate temp names only (emit nothing).
        args <- sequence$ take (length tyls) (repeat$ gensym "arg") -- Generate temp names only (emit nothing).
        let body = execEasyEmit (fn$ formTup args)
 	   formals = map (\ (t,a) -> cppType t <+> deSyn a) (zip tyls args)
-       addChunk$ Syn$ hangbraces (cppType retty <+> name <> pcommasep formals) indent body
+       addChunk$ Syn$ hangbraces (cppType retty <+> name <> pcommasep formals <+> (deSyn postqualifiers)) indent body
        addChunk$ "\n"
        return (\ args -> Syn$ name <> (pcommasep (map deSyn args)))
+
 
 
 -- This is a normal function defined elsewhere:

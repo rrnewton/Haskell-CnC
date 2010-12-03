@@ -1,4 +1,5 @@
 
+// This Test illustrates generation of a depends function.
 
 #include<tagfun_depends.h>
 

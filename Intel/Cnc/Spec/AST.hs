@@ -109,7 +109,8 @@ data Type =
  -- An abstract type not intpreted by CnC:
  | TSym Atom
  | TPtr Type
- | TRef Type -- quite annoying, used for C++
+ | TRef   Type -- quite annoying, used for C++
+ | TConst Type -- quite annoying, used for C++
  | TDense Type -- Density annotations.
  | TTuple [Type]
  deriving (Eq,Ord,Show,Data,Typeable)
@@ -121,6 +122,7 @@ instance Pretty (Type) where
  pPrint (TPtr ty)   = pPrint ty <> text "*"
  pPrint (TRef ty)   = pPrint ty <> text "&"
  pPrint (TDense ty) = text "dense" <+> pPrint ty 
+ pPrint (TConst ty) = text "const" <+> pPrint ty 
  pPrint (TTuple ty) = text "(" <> commacat ty <> text ")"
 
 
@@ -132,6 +134,7 @@ cppType ty = case ty of
   TSym s -> textAtom s
   TPtr ty -> cppType ty <> t "*"
   TRef ty -> cppType ty <> t " &"
+  TConst ty -> t"const" <+> cppType ty 
 
   -- This doesn't affect the C-type, any influence has already taken place.
   TDense ty -> cppType ty 
