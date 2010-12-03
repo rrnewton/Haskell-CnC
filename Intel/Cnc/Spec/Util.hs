@@ -157,6 +157,7 @@ data CodeGenConfig =
       , old_05_api  :: Bool
       , genstepdefs :: Bool
       , gentracing  :: Bool
+      , gendepends  :: Bool
       , gendebug    :: Bool
       , wrapall     :: Bool -- wrap all collections
       }
@@ -167,6 +168,7 @@ default_codegen_config =
       , old_05_api  = False
       , genstepdefs = True
       , gentracing  = False
+      , gendepends  = False
       , gendebug    = False
       , wrapall     = False
      }

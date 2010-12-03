@@ -47,6 +47,7 @@ desugarTypeDefs input =
 		    Nothing -> TSym atom
 		    Just ty -> ty -- Easy, no constructor application
      TPtr ty   -> TPtr   $ doTy ty
+     TRef ty   -> TRef   $ doTy ty
      TDense ty -> TDense $ doTy ty
      TTuple ls -> TTuple $ map doTy ls
 

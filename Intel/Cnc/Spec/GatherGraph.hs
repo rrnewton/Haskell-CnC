@@ -114,6 +114,7 @@ mergeTy name ty amap =
      [ty1,ty2] -> if ty1 == ty2  -- Types are nominal at the moment, no unification:
      		  then Just ty1
      		  else error$ "mergeTy: different types for "++fromAtom name++" "++ show(pp ty1) ++" and "++ show(pp ty2)
+     _ -> error "mergTy, internal error"
 
 ----------------------------------------------------------------------------------------------------
     
@@ -199,10 +200,11 @@ seedWorld =
   CncSpec {  steps= AS.fromList builtinSteps
 	  ,  tags=  AM.empty
 	  ,  items= AM.empty
-	  ,  graph  = error "CncSpec: graph uninitialized"
-	  ,  nodemap= error "CncSpec: nodemap uninitialized"
-	  ,  appname= error "CncSpec: appname uninitialized"
-	  ,  realmap= error "CncSpec: realmap uninitialized"
+	  ,  graph    = error "CncSpec: graph uninitialized"
+	  ,  nodemap  = error "CncSpec: nodemap uninitialized"
+	  ,  appname  = error "CncSpec: appname uninitialized"
+	  ,  realmap  = error "CncSpec: realmap uninitialized"
+	  ,  harchtree= error "CncSpec: harchtree uninitialized"
 	  }
 
 example =   

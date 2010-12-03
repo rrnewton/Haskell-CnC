@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable  #-}
+{-# LANGUAGE DeriveDataTypeable, ScopedTypeVariables  #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
 module Intel.Cnc.Spec.AST where 
@@ -109,6 +109,7 @@ data Type =
  -- An abstract type not intpreted by CnC:
  | TSym Atom
  | TPtr Type
+ | TRef Type -- quite annoying, used for C++
  | TDense Type -- Density annotations.
  | TTuple [Type]
  deriving (Eq,Ord,Show,Data,Typeable)
@@ -118,6 +119,7 @@ instance Pretty (Type) where
  pPrint (TFloat)    = text "float"
  pPrint (TSym str)  = text (fromAtom str)
  pPrint (TPtr ty)   = pPrint ty <> text "*"
+ pPrint (TRef ty)   = pPrint ty <> text "&"
  pPrint (TDense ty) = text "dense" <+> pPrint ty 
  pPrint (TTuple ty) = text "(" <> commacat ty <> text ")"
 
@@ -129,6 +131,7 @@ cppType ty = case ty of
   TFloat -> t "float"
   TSym s -> textAtom s
   TPtr ty -> cppType ty <> t "*"
+  TRef ty -> cppType ty <> t " &"
 
   -- This doesn't affect the C-type, any influence has already taken place.
   TDense ty -> cppType ty 
@@ -284,15 +287,16 @@ instance Decorated CollectionInstance where
 -- Tag expressions are distinct from Exp and much more restrictive.
 -- (For example, conditionals are not allowed.)
 
-data TagExp = 
-   TEVar Atom
+data TagExp var = 
+   TEVar var
  | TEInt Int -- Is there any conceivable need for arbitrary precision here?
- | TEApp Atom [TagExp]
+ | TEApp Atom [TagExp var]
  deriving (Eq,Ord,Show,Data,Typeable)
 
-instance Pretty TagExp where 
+instance Pretty var => Pretty (TagExp var) where 
   pPrint te =  case te of
-    TEVar s  -> text (fromAtom s)
+--    TEVar s  -> text (fromAtom s)
+    TEVar v  -> pPrint v
     TEInt n  -> text (show n)
 --    TEApp s rands -> text (fromAtom s) <> parens (commacat rands)
     TEApp rat rands -> 
@@ -302,7 +306,7 @@ instance Pretty TagExp where
        _ ->  text (fromAtom rat) <> (parens $ commasep rands)
 
 -- A tag function of dimension N has N formal parameters and N "bodies".
-data TagFun = TF [Atom] [TagExp]
+data TagFun = TF [Atom] [TagExp Atom]
   deriving (Eq, Ord)
 
 instance Pretty TagFun where 
@@ -337,6 +341,28 @@ mkTagFun exps1 exps2 =
 
     else error$ "Presently the tag expressions indexing step collections must be simple variables, not: " 
 	        ++ (show$ pp exps1)
+
+instance Functor TagExp where
+  fmap f (TEVar v) = TEVar (f v)
+  fmap _ (TEInt i) = TEInt i 
+  fmap f (TEApp op ls) = TEApp op $ map (fmap f) ls
+
+
+substTagExp :: Eq a => a -> a -> TagExp a -> TagExp a
+substTagExp old new exp = 
+  case exp of 
+   TEVar v | v == old  -> TEVar new
+	   | otherwise -> TEVar v
+   TEInt i -> TEInt i
+   TEApp op ls -> TEApp op $ map (substTagExp old new) ls
+
+
+
+applyTagFun :: TagFun -> Doc -> [Doc]
+applyTagFun (TF [formal] [body]) arg =
+  [pPrint$ substTagExp formal (toAtom$ render arg) body]
+
+applyTagFun _ _ = error "TODO: applyTagFun implement multidimensional"
 
 isTEVar (TEVar _) = True
 isTEVar _ = False

@@ -50,7 +50,7 @@ import Intel.Cnc.Spec.CncViz as Viz
 ----------------------------------------------------------------------------------------------------
 
 data Flag 
-    = Verbose Int | Version | Help | Debug | GenTracing | NoStepDefs | SelfTest
+    = Verbose Int | Version | Help | Debug | GenTracing | GenDepends | NoStepDefs | SelfTest
     | Cpp | CppOld | Haskell
  -- | Input String  | LibDir String
     | Output String
@@ -95,6 +95,7 @@ translate_options =
      , Option []        ["harch"]   (ReqArg HarchPart "FILE") "read Harch graph metadata from FILE (used for translation)"
      , Option []        ["debug"]   (NoArg Debug)             "generate extra code for correctness checking"
      , Option []        ["tracing"] (NoArg GenTracing)        "generate code in which tracing is on by default"
+     , Option []        ["depends"] (NoArg GenDepends)        "generate depends functions from spec where possible"
 
 --     , Option []        ["defsteps"] (NoArg GenTracing)$  "[c++] rather than the user defining custom types for each step,\n"++
 --	                                                  "      emit default versions within the generated header"
@@ -462,6 +463,7 @@ main2 argv = do
 #endif
          Debug       -> return cfg{ gendebug=True, wrapall=True }
          GenTracing  -> return cfg{ gentracing=True } 
+         GenDepends  -> return cfg{ gendepends=True } 
          NoStepDefs  -> return cfg{ genstepdefs=False } 
 
 	 m | codegenmode_option m -> return cfg

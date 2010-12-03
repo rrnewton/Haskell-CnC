@@ -59,11 +59,20 @@ oldstyle_get_method = False
 
 commacat ls = hcat (intersperse (text ", ") $ ls)
 
+s = Syn . text 
+
 instance FromAtom Doc where
   fromAtom = text . fromAtom
 
 ----------------------------------------------------------------------------------------------------
 
+-- This predicate determines whether we can successfully determine all
+-- the data dependencies of a step, for example to generate a depends function.
+all_tagfuns_tractible :: Atom -> CncGraph -> Bool
+all_tagfuns_tractible step graph =
+  True
+
+----------------------------------------------------------------------------------------------------
 
 --emitCpp :: StringBuilder m => CodeGenConfig -> CncSpec -> m ()
 emitCpp :: CodeGenConfig -> CncSpec -> EasyEmit ()
@@ -159,6 +168,7 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 	  t"int execute(" <+> constRefType ty <+> t "tag," <+> maincontext <> t" & c) const;"
 	putS$ "\n"
 
+
    ------------------------------------------------------------
    -- Emit the main context class
    ------------------------------------------------------------   
@@ -226,6 +236,43 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
      --   -- 	t"delete " <> (t$ step_obj$ fromAtom stp) <> semi)
      -- ]
 
+   ------------------------------------------------------------
+   -- Emit the tuner for each step collection:
+   ------------------------------------------------------------   
+
+   putS  "\n// Automatically generated tuners, where possible.\n"
+   when gendepends $ 
+     forM_ stepls_with_types $ \ (stp,ty) -> 
+       when (all_tagfuns_tractible stp graph) $
+       do
+          let tuner_name = toDoc stp <> t"_tuner"
+--	      cname = 
+          putD$ struct (tuner_name <> t"public CnC::default_tuner< int, tagfun_depends_context >") $ 
+	    t"bool preschedule() const { return false; }" $$
+            t"template< class dependency_consumer >" $$
+	    (execEasyEmit$ 
+	       funDef (TSym$ toAtom "void") (s"depends") 
+	              [TRef$ ty, 
+		       TRef$ TSym$ toAtom$ render maincontext, 
+		       TRef$ TSym$ toAtom$ "dependency_consumer"] $ 
+	              \ (Syn tag, contextref, deps) -> do
+	                comm "BODY"
+	                let dep = function$ synToStr$ deps `dot` s"depends"
+	                -- Now iterate through all data collections connected to the step collection:
+	                forM_ (lpre graph$ realmap M.! (CGSteps stp)) $ \ (nd, tgfn) -> 
+	                  case lab graph nd of 
+	                   Just (CGItems it) -> do
+	                     comm$ "Dependency on collection "++ (graphNodeName$ fromJust$ lab graph nd) ++", tagfun " ++ show tgfn
+	                     case tgfn of 
+	                       Just fn -> forM_ (applyTagFun fn tag) $ \ resulttag -> 
+	                                    EE.app dep [contextref `dot` Syn (toDoc it), Syn resulttag]
+	                       Nothing -> comm "Ack.. tag function not available..."
+	                   _ -> return ()
+	     )
+
+-- public CnC::default_tuner< int, tagfun_depends_context > // TODO3: derive from default tuner
+
+
    --------------------------------------------------------------------------------
    -- Emit private contexts for each step.  This means building wrappers.
    --------------------------------------------------------------------------------
@@ -288,7 +335,7 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 	 			            -- [(_,tf)] = filter (\ (nd,lab) -> nd == stpnd)$  lpre' gctxt				            
 				            --[(_,tf)] = trace (" LENGTH "++ show (length ls) ++" "++ show stpnd ++" "++ show itemnd++" "++ show lnhbrs) ls
 				        in 
-				           runEasyEmit$
+				           execEasyEmit$
 				           case ls of 
 				             -- If we have no relationship to that collection its an error to access it:
 
@@ -302,7 +349,7 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
 				             --((_,Just (TF args exps)) : []) -> 
 					     
 				             ((_,Just (TF args exps)) : tl) -> -- TEMPTOGGLE ... permissive, ignoring additional tag functions!
-					       case (args,exps) of 
+					       case (args,exps) of  
 					         ([arg], [exp]) -> 
 						    do comm ("Checking tag function "++ show arg ++" -> "++ show exp)
 						       -- TODO: use normal variable decl here:
@@ -378,7 +425,7 @@ emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = 
    ------------------------------------------------------------   
 
    when (wrapall) $ do
-     putS$ "\n\n// Execute method wrappers for each step that uses a privaate context:\n"
+     putS$ "\n\n// Execute method wrappers for each step that uses a private context:\n"
      forM_ stepls_with_types $ \ (stp,ty) -> do
       putD$ hangbraces 
 	(t"int "<> stepwrapper stp <> t"::execute(" <+> constRefType ty <+> t "tag," <+> maincontext <> t" & c) const")

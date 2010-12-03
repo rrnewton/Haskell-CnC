@@ -42,10 +42,17 @@ newtype EasyEmit a = EE (S.State EEState a)
 type EEState = ([Doc],Int)
 
 -- | Run a syntax-emitting computation and render it to a document.
-runEasyEmit :: EasyEmit () -> Doc
-runEasyEmit (EE m) = vcat (reverse ls)
+runEasyEmit :: EasyEmit a -> (a,Doc)
+runEasyEmit (EE m) = (a, vcat (reverse ls))
  where 
   (a,(ls,_)) = S.runState m ([], 0)
+
+execEasyEmit :: EasyEmit a -> Doc
+execEasyEmit = snd . runEasyEmit
+
+evalEasyEmit :: EasyEmit a -> a
+evalEasyEmit = fst . runEasyEmit 
+
 
 -- This runs a subcomputation only for value -- discards its emission side effects.
 forValueOnly :: EasyEmit a -> EasyEmit a
@@ -86,7 +93,11 @@ data Syntax = Syn Doc
   deriving (Show, P.Eq)
 
 deSyn (Syn s) = s
+synToStr = render . deSyn 
 (Syn a) +++ (Syn b) = Syn (a <> b)
+
+
+(Syn a) `dot` (Syn b) = Syn (a <> text "." <> b)
 
 -- Adds implicit newline at the end:
 addChunk (Syn doc) = 
@@ -210,8 +221,8 @@ comm x  = addChunk$ Syn$ txt
    fn other = "// " ++ other
 
 if_ (Syn a) m1 m2 = 
-  do let bod1 = runEasyEmit m1
-	 bod2 = runEasyEmit m2
+  do let bod1 = execEasyEmit m1
+	 bod2 = execEasyEmit m2
      addChunk$ Syn$ hangbraces ("if " <> parens a) indent bod1
      addChunk$ Syn$ "else"
      addChunk$ Syn$ hangbraces (empty) indent bod2
@@ -242,7 +253,7 @@ funDefShared retty (Syn name) tyls fn formTup =
     do (ls,c) <- S.get 
        --args <- mapM (forValueOnly . tmpvar) tyls -- Generate temp names only (emit nothing).
        args <- sequence$ take (length tyls) (repeat$ gensym "arg") -- Generate temp names only (emit nothing).
-       let body = runEasyEmit (fn$ formTup args)
+       let body = execEasyEmit (fn$ formTup args)
 	   formals = map (\ (t,a) -> cppType t <+> deSyn a) (zip tyls args)
        addChunk$ Syn$ hangbraces (cppType retty <+> name <> pcommasep formals) indent body
        addChunk$ "\n"
@@ -266,8 +277,8 @@ stringconst str = Syn$ dubquotes str
 forLoopSimple (start,end) fn = 
   do --var <- forValueOnly (tmpvar TInt)
      Syn var <- gensym "i"
-     --init <- runEasyEmit varinit TInt "i" (int start)
-     let body = runEasyEmit$ fn (Syn var)
+     --init <- execEasyEmit varinit TInt "i" (int start)
+     let body = execEasyEmit$ fn (Syn var)
      addChunk$ Syn$ hangbraces ("for " <> parens ( cppType TInt <+> var <+> "=" <+> int start <> semi <+>
 						   var <+> "<" <+> int end <> semi <+>
 						   var <> "++"
@@ -275,8 +286,23 @@ forLoopSimple (start,end) fn =
 	            body
 
 -- TODO: 
---cppClass name m = ...
+cppClass :: Syntax -> Syntax -> EasyEmit () -> EasyEmit ()
+cppClass (Syn name) (Syn inherits) m = 
+  do 
+     putD name
+     putS " : "
+     putD inherits
+     addChunk ""
+     block m
 
+-- Curly-brace delimited, indented block:
+-- TODO: Implement this by tracking the indent level in the monad:
+block :: EasyEmit () -> EasyEmit ()
+block m = 
+  do let body = execEasyEmit m
+     addChunk "{"
+     addChunk$ Syn$ nest indent body
+     addChunk "}"
 
 ----------------------------------------------------------------------------------------------------
 
@@ -325,6 +351,9 @@ infixr 2  ||
 
 
 ----------------------------------------------------------------------------------------------------
+-- Testing:
+
+t1 = cppClass "foo" "bar" $ comm "body"
 
 ee_example :: EasyEmit ()
 ee_example = 
@@ -357,6 +386,6 @@ ee_example =
    -- --      funDef "method" [TInt, TFloat] $ \(y,z) -> y + z
 
 ee_test1 = testCase "" "Code emission example"$ 
-	   (length$ render$ runEasyEmit ee_example) ~=? 393
+	   (length$ render$ execEasyEmit ee_example) ~=? 393
 
 tests_easyemit = testSet "EasyEmit" [ee_test1]
