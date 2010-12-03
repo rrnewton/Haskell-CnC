@@ -13,7 +13,7 @@ data CodeGenConfig = CodeGenConfig
       , gentracing  :: Bool
       , gendepends  :: Bool
       , gendebug    :: Bool
-      , wrapall     :: Bool -- wrap all collections
+      , wrapall     :: Bool -- wrap ALL collections no matter what
       , plugins     :: [CodeGenHooks]
       }
   deriving Show
@@ -40,6 +40,9 @@ default_codegen_config =
 -- some of our different extensions into modular plugins.
 data CodeGenHooks = CodeGenHooks 
     {
+      -- This predicate determines which steps to which the hooks are applied.
+      hooksPredicate :: ColName -> Bool,
+
       -- Takes collection name, reference to tag, reference to item.
       beforeItemPut :: Maybe (ColName -> Syntax -> Syntax -> EasyEmit ()),
       afterItemPut  :: Maybe (ColName -> Syntax -> Syntax -> EasyEmit ()),
@@ -64,6 +67,7 @@ instance Show (a -> b) where
 
 defaultCodeGenHooks = CodeGenHooks
   {
+      hooksPredicate    = const False,
       beforeItemPut     = Nothing,
       afterItemPut      = Nothing,
       beforeReducerPut  = Nothing,

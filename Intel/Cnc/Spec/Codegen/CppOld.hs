@@ -22,7 +22,7 @@ import Intel.Cnc.Spec.CncGraph
 import Intel.Cnc.Spec.Util as U
 
 import qualified Intel.Cnc.EasyEmit as EE
-import Intel.Cnc.EasyEmit hiding (app, not, (&&), (==))
+import Intel.Cnc.EasyEmit hiding (app, not, (&&), (==), (||))
 
 import Control.Monad.State
 import StringTable.Atom
@@ -93,6 +93,11 @@ emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, re
        abort   = function "abort"
        stderr  = constant "stderr"
 
+       -- This predicate determines whether any 
+       shouldWrapStep stpname = 
+	 wrapall || any (\ cgh -> hooksPredicate cgh stpname ) plugins
+
+
    -- First we produce the header of the file:
    --------------------------------------------------------------------------------
    -- TODO: Try quasiquoting for multiline-strings here again when they fix the binary bloating problem:
@@ -159,11 +164,11 @@ emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, re
    let maincontext = t$ appname++"_context"   
    let stepwrapper stp = textAtom stp <> t"_step_wrapper"
 
-   when (wrapall && not old_05_api)$ do
+   when (not old_05_api)$ do
      putS  "// Forward declaration of the context class (also known as graph)\n"
      putD$ t"struct " <> maincontext <> t";\n\n"
      putS$ "// Type definitions for wrappers around steps.\n"
-     forM_ stepls_with_types $ \ (stp,ty) -> do
+     forM_ stepls_with_types $ \ (stp,ty) -> when (shouldWrapStep stp) $ do
 	putD$ struct (stepwrapper stp) $ 
 	  textAtom stp <+> t"m_step" <> semi $$
 	  --stepwrapper stp <> parens empty <> semi
@@ -190,7 +195,7 @@ emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, re
      (if old_05_api then [] else  
        t "// Step collections members:" : 
        ((flip map) stepls $ \ stp -> 
-         t "CnC::step_collection" <> angles (if wrapall then stepwrapper stp else textAtom stp) 
+         t "CnC::step_collection" <> angles (if shouldWrapStep stp then stepwrapper stp else textAtom stp)
 	   <+> (t$ step_obj$ fromAtom stp) <> semi
        )) ++      
 
@@ -280,10 +285,10 @@ emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, re
    --------------------------------------------------------------------------------
    
    -- INVARIANT! Due to error checking above, we can omit some error checking here:
-   when (wrapall && not old_05_api) $ do 
+   when (not old_05_api) $ do 
      putS$ "\n\n// Next we define 'private contexts'.\n"
      putS$ "// These allow steps to exist in their own little universes with special properties:\n" 
-     forM_ stepls_with_types $ \ (stp,stpty) -> do
+     forM_ stepls_with_types $ \ (stp,stpty) -> when (shouldWrapStep stp) $ do
 	putD$ 
  	 cppclass (privcontext stp) -- <+> colon <+> t"public CnC::context" <> angles (privcontext stp) )
 	  (--t "\n  private:" $$
@@ -426,27 +431,26 @@ emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, re
    -- Execute wrapper methods 
    ------------------------------------------------------------   
 
-   when (wrapall) $ do
-     putS$ "\n\n// Execute method wrappers for each step that uses a private context:\n"
-     forM_ stepls_with_types $ \ (stp,ty) -> do
-      putD$ hangbraces 
-	(t"int "<> stepwrapper stp <> t"::execute(" <+> constRefType ty <+> t "tag," <+> maincontext <> t" & c) const")
-	indent $
+   putS$ "\n\n// Execute method wrappers for each step that uses a private context:\n"
+   forM_ stepls_with_types $ \ (stp,ty) -> when (shouldWrapStep stp) $ do
+    putD$ hangbraces 
+      (t"int "<> stepwrapper stp <> t"::execute(" <+> constRefType ty <+> t "tag," <+> maincontext <> t" & c) const")
+      indent $
 
-        assignCast (mkPtr$ privcontext stp) (t"ptr") 
-		   (U.app "CnC::Internal::CnC_TlsGetValue" [deref (t"c") (tls_key stp)]) $$ 
+      assignCast (mkPtr$ privcontext stp) (t"ptr") 
+		 (U.app "CnC::Internal::CnC_TlsGetValue" [deref (t"c") (tls_key stp)]) $$ 
 
-	hangbraces (t"if " <> parens (t"!ptr")) indent
-		   (assign "ptr" (t"new " <> U.app (privcontext stp) ["c"]) $$
-		    U.app "CnC::Internal::CnC_TlsSetValue" [deref (t"c") (tls_key stp), t"ptr" ] 
-		    <> semi) $$
+      hangbraces (t"if " <> parens (t"!ptr")) indent
+		 (assign "ptr" (t"new " <> U.app (privcontext stp) ["c"]) $$
+		  U.app "CnC::Internal::CnC_TlsSetValue" [deref (t"c") (tls_key stp), t"ptr" ] 
+		  <> semi) $$
 
-        t"ptr->tag = &tag;\n" $$
-	-- t"printf(\"PTR %p\\n\", ptr);" $$
+      t"ptr->tag = &tag;\n" $$
+      -- t"printf(\"PTR %p\\n\", ptr);" $$
 
-	t"return" <+> U.app "m_step.execute" ["tag", "*ptr"] <> semi
-	-- privcontext stp <> t"* ptr = ("<> privcontext stp 
-        --  <> t"*) CnC::Internal::CnC_TlsGetValue" <> parens (t"c." <> tls_key stp) <> semi
+      t"return" <+> U.app "m_step.execute" ["tag", "*ptr"] <> semi
+      -- privcontext stp <> t"* ptr = ("<> privcontext stp 
+      --  <> t"*) CnC::Internal::CnC_TlsGetValue" <> parens (t"c." <> tls_key stp) <> semi
 
 
    ------------------------------------------------------------
