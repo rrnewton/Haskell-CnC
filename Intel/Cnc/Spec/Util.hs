@@ -1,7 +1,8 @@
 {-# LANGUAGE FlexibleInstances, TypeSynonymInstances #-}
 
 ----------------------------------------------------------------------------------------------------
--- A miscellaneous utility file
+-- A miscellaneous utility file used by the CnC Spec tool.
+--
 -- Original Author: Ryan Newton
 ----------------------------------------------------------------------------------------------------
 
@@ -141,38 +142,6 @@ instance IsString Atom where
     fromString s = toAtom s
 
 
---------------------------------------------------------------------------------
--- These should be moved to a "globals" file:
---------------------------------------------------------------------------------
-
--- "Official" output from our process should be tagged in the following way:
---cnctag = ""
-cnctag = "[CnC] "
-
-hcnc_name = "hcnc"
---appname = "cnc"
-
-data CodeGenConfig = 
-  CGC { cgverbosity :: Bool 
-      , old_05_api  :: Bool
-      , genstepdefs :: Bool
-      , gentracing  :: Bool
-      , gendepends  :: Bool
-      , gendebug    :: Bool
-      , wrapall     :: Bool -- wrap all collections
-      }
-  deriving Show
-
-default_codegen_config = 
- CGC {  cgverbosity = False 
-      , old_05_api  = False
-      , genstepdefs = True
-      , gentracing  = False
-      , gendepends  = False
-      , gendebug    = False
-      , wrapall     = False
-     }
-
 -- Constant: indentation used across all code generators.
 indent = 4
 
@@ -194,3 +163,18 @@ testSet name ls =
     trace ("\n"++header ++"\n"++ spacer) (HU.TestList ls)
  where header = "Running tests for module " ++ show name 
        spacer = (take (length header) $ repeat '=')
+
+
+--------------------------------------------------------------------------------
+-- These should be moved to a "globals" file:
+--------------------------------------------------------------------------------
+
+-- "Official" output from our process should be tagged in the following way:
+--cnctag = ""
+cnctag = "[CnC] "
+
+--hcnc_name = "hcnc"
+hcnc_name = "cnc"
+
+
+

@@ -10,7 +10,10 @@ import Intel.Cnc.Spec.CncGraph
 import Intel.Cnc.Spec.GatherGraph
 import Intel.Cnc.Spec.Util hiding(t)
 import Intel.Cnc.Spec.TraceVacuum
+
+import Intel.Cnc.Spec.Codegen.CodegenShared
 import Intel.Cnc.Spec.Codegen.CppOld
+
 
 import qualified  Intel.Cnc.EasyEmit as EE -- TEMPTOGGLE
 

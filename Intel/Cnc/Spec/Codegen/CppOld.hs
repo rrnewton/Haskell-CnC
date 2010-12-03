@@ -14,6 +14,8 @@
 
 module Intel.Cnc.Spec.Codegen.CppOld where
 
+import Intel.Cnc.Spec.Codegen.CodegenShared
+
 import Intel.Cnc.Spec.AST hiding (commacat)
 import Intel.Cnc.Spec.CncGraph
 --import Intel.Cnc.Spec.GatherGraph
@@ -77,7 +79,7 @@ all_tagfuns_tractible step graph =
 --emitCpp :: StringBuilder m => CodeGenConfig -> CncSpec -> m ()
 emitCpp :: CodeGenConfig -> CncSpec -> EasyEmit ()
 
-emitCpp CGC{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = do 
+emitCpp CodeGenConfig{..} (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) = do 
 -- HOWTO READ the below code:
 -- This code emits a series of strings/docs to build up a file.
 -- Some of the more complex looking bits are building up large lists of type [Doc].
