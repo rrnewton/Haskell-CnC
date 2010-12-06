@@ -96,6 +96,7 @@ deSyn (Syn s) = s
 synToStr = render . deSyn 
 
 atomToSyn = Syn . text . fromAtom
+strToSyn  = Syn . text 
 
 (Syn a) +++ (Syn b) = Syn (a <> b)
 
@@ -107,6 +108,13 @@ atomToSyn = Syn . text . fromAtom
 addChunk (Syn doc) = 
   do (ls,c) <- S.get
      S.put (doc : ls, c)
+
+-- A bit ugly, this adds the chunk to the end of the previous line.
+addChunkPrevLine (Syn doc) = 
+  do (ls,c) <- S.get
+     S.put $ case ls of 
+              []      -> (doc : ls, c)
+	      (hd:tl) -> (hd <> doc : tl, c)
 
 -- Adds the semi-colon at the end also:
 addLine (Syn doc) = addChunk (Syn$ doc <> semi)
@@ -219,7 +227,9 @@ app fn ls = addLine$ fn ls
 comm :: String -> EasyEmit ()
 comm x  = addChunk$ Syn$ txt
  where 
-   txt = text$ init$ unlines lns -- init strips the last newline
+   txt = text$ maybeInit$ unlines lns -- init strips the last newline
+   maybeInit [] = []
+   maybeInit ls = init ls
    lns = map fn $ lines x --(render x)
    fn "" = ""
    fn other = "// " ++ other
@@ -296,17 +306,34 @@ forLoopSimple (start,end) fn =
 						 )) indent $
 	            body
 
--- TODO: 
-cppClass :: Syntax -> Syntax -> EasyEmit () -> EasyEmit ()
-cppClass (Syn name) (Syn inherits) m = 
+-- This creates a class-decl-like pattern with a ':'
+-- It is parameterized by a little prefix which could be "class" or "struct" or anything else.
+-- Similarly, there's a postfix which is usually ";".
+classLike :: String -> String -> Syntax -> Syntax -> EasyEmit () -> EasyEmit ()
+classLike prefix postfix (Syn name) (Syn inherits) m = 
   do 
-     putD name
-     putS " : "
-     putD inherits
-     addChunk ""
+     putD$ t prefix <+> 
+	   hsep (if inherits P.== empty
+		 then [name]
+		 else [name <+> colon, inherits])
+     -- putD 
+     -- putS " : "
+     -- putD inherits
+     -- addChunk ""
      block m
+     addChunkPrevLine$ strToSyn postfix 
+
+cppClass :: Syntax -> Syntax -> EasyEmit () -> EasyEmit ()
+cppClass = classLike "class" ";"
+
+-- cppStruct :: Syntax -> Syntax -> EasyEmit () -> EasyEmit ()
+-- cppStruct = classLike "struct" ";"
+
+cppConstructor :: Syntax -> Syntax -> EasyEmit () -> EasyEmit ()
+cppConstructor = classLike "" ""
 
 -- Curly-brace delimited, indented block:
+-- POSSIBLY INEFFICIENT!
 -- TODO: Implement this by tracking the indent level in the monad:
 block :: EasyEmit () -> EasyEmit ()
 block m = 
