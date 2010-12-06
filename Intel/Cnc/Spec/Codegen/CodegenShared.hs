@@ -7,7 +7,6 @@ import StringTable.Atom
 import qualified Data.Graph.Inductive as G
 import Data.List
 import Data.Maybe
-
 import Control.Monad
 
 import Intel.Cnc.Spec.AST 
@@ -17,9 +16,9 @@ import qualified Intel.Cnc.EasyEmit as E
 import Intel.Cnc.EasyEmit  hiding (not, (||))
 import Intel.Cnc.Spec.Util hiding (app)
 import Intel.Cnc.Spec.CncGraph (ColName) -- hiding (app, not, (&&), (==))
-import Prelude hiding ((&&), (==))
+import Prelude hiding ((&&), (==), (<=))
 import qualified Prelude as P
-
+import Debug.Trace
 
 data CodeGenConfig = CodeGenConfig 
       { cgverbosity :: Bool 
@@ -57,9 +56,9 @@ default_codegen_config =
 
 -- Each hook takes two groups of argument:
 --  (1) Graph context: the CnCGraph and names of relevant collections
---                     plus bits of syntax that refer to the private/main contexts.
+--                     PLUS two bits of syntax that refer to the private/main contexts.
 --  (2) Arguments: bits of syntax that refer to the relevant values.
-
+--
 -- Graph context.  In the following the two collection names represent
 -- the "from" and "to" collections.
 type GrCtxt1 = (CncSpec, Syntax, Syntax, ColName)
@@ -239,7 +238,8 @@ doneCountingPlugin =
       do comm "[autodone] Decrement the counter that tracks these instances:"
 	 x <- tmpvar TInt 
          set x (function (main `dot` (countername stpC) `dot` "fetch_and_decrement") [])
-	 if_ (x == 1)
+	 app (function "printf") [stringconst$ " [autodone] "++show stpC++" Decremented refcount from %d\n", x]
+	 if_ (x <= 1) -- TEMP FIXME!!!!! CHANGE ME BACK TO (==)
 	     (do comm " If we transition to a zero count we check our upstreams to see if we are really done."
 	         let upstream = filter isStepC $ upstreamNbrs spec (CGSteps stpC)
 	         if_ (if null upstream
@@ -248,13 +248,16 @@ doneCountingPlugin =
 		           map (\ (CGSteps stp) -> main `dot` (flagname stp)) upstream)
 	             (do comm "Upstream are all done, and now so are we:"
 		         set (main `dot` (flagname stpC)) 1
-		         app (function$ "printf") [stringconst$ "Yep, we're done, deps met..."++show (upstreamNbrs spec (CGSteps stpC))++"\n"])
-	             (app (function "printf") [stringconst$ "NOT DONE\n"]))
+		         app (function$ "printf") [stringconst$ " [autodone] "++show stpC++" Yep, we're done, deps met..."
+						   ++show (upstreamNbrs spec (CGSteps stpC))++"\n"])
+	             (app (function "printf") [stringconst$ " [autodone] "++show stpC++" NOT DONE\n"]))
 	     (return ())
   , beforeTagPut = \ (spec, priv,main, stpC,tgC) tag -> 
       do comm "[autodone] Increment the counter that tracks downstream step instances:"
-	 let downstream = map graphNodeName $ filter isStepC $ downstreamNbrs spec (CGSteps tgC)
+	 let downstream = map graphNodeName $ filter isStepC $ downstreamNbrs spec (CGTags tgC)
 	 forM_ downstream $ \ destC -> do
-             app (function (main `dot` (countername destC) `dot` "fetch_and_increment")) []
+	    app (function "printf") [stringconst$ " [autodone] "++show stpC++" Incrementing refcount from %d\n", 
+				     "(int)" +++ main `dot` (countername destC)]
+            app (function (main `dot` (countername destC) `dot` "fetch_and_increment")) []
 
   }

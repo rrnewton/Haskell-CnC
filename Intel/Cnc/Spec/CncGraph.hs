@@ -98,28 +98,21 @@ isStepC _           = False
 -- This routine sees *through* tag collections.
 -- Returns a list of STEP and ITEM collections.
 upstreamNbrs :: CncSpec -> CncGraphNode -> [CncGraphNode]
-upstreamNbrs (spec@CncSpec{..}) nodelab = 
-    L.concat$ L.map process labs
- where 
-    (nd,_) = mkNode_ nodemap nodelab
-    preds = pre graph nd
-    labs  = catMaybes$ L.map (lab graph) preds
-    process x@(CGSteps _) = [x]
-    process x@(CGItems _) = [x]
-    -- Tags are essentially aliasses for the previous step collections.
-    process x@(CGTags a) = upstreamNbrs spec x
-
+upstreamNbrs = nbrHelper pre
 
 -- | Get downstream neighbors in the CnC graph.
 -- This routine sees *through* tag collections.
 -- Returns a list of STEP and ITEM collections.
 downstreamNbrs :: CncSpec -> CncGraphNode -> [CncGraphNode]
-downstreamNbrs (spec@CncSpec{..}) nodelab = L.concat$ L.map process labs
+downstreamNbrs = nbrHelper suc
+
+nbrHelper adjacent (spec@CncSpec{..}) nodelab = 
+    if gelem nd graph 
+    then L.concat$ L.map process labs
+    else error$ "upstream/downstream: cannot find neighbors because node is not in graph: "++ show nodelab
  where 
     (nd,_) = mkNode_ nodemap nodelab
-    succs = suc graph nd
-    labs  = catMaybes$ L.map (lab graph) succs
+    labs  = catMaybes$ L.map (lab graph) (adjacent graph nd)
     process x@(CGSteps _) = [x]
     process x@(CGItems _) = [x]
-    process x@(CGTags _) = downstreamNbrs spec x
-
+    process x@(CGTags _) = nbrHelper adjacent spec x

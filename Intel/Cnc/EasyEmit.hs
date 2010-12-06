@@ -126,9 +126,14 @@ instance IsString Syntax where
 -- instance IsString Doc where
 --     fromString s = (text s)
 
+
 -- Comma separate Docs either horizontally or vertically:
+-- TEMP: MAKING THIS HCAT FOR NOW UNTIL I CAN FIGURE OUT SOME OF THE INDENTATION PROBELMS:
+commasep ls = hcat$ intersperse (text", ") ls
+
 -- (This version includes parens)
-pcommasep ls = parens$ fcat$ intersperse (text", ") ls
+--pcommasep = parens . commasep
+pcommasep ls = parens$ fcat$ intersperse (text", ") ls 
 
 
 --------------------------------------------------------------------------------
@@ -255,28 +260,38 @@ assert (Syn exp) =
 -- returning a Haskell function that can be used to construct
 -- applications of that function.
 class FunDefable args where
-  __funDef :: Syntax -> Type -> Syntax -> [Type] -> (args -> EasyEmit ()) -> EasyEmit ([Syntax] -> Syntax)
+  -- This is VERY painful, but need to expose separate keywords for pre- and post- the function name/args.
+  funDefAttr :: String -> String -> Type -> Syntax -> [Type] -> (args -> EasyEmit ()) -> EasyEmit ([Syntax] -> Syntax)
 
-  -- Terrible ugliness just to deal with those darn const qualifiers:
-  funDef      :: Type -> Syntax -> [Type] -> (args -> EasyEmit ()) -> EasyEmit ([Syntax] -> Syntax)
-  constFunDef :: Type -> Syntax -> [Type] -> (args -> EasyEmit ()) -> EasyEmit ([Syntax] -> Syntax)
+instance FunDefable ()                            where funDefAttr pre post r n ts fn = funDefShared pre post r n ts fn (\ [] -> ())
+instance FunDefable Syntax                        where funDefAttr pre post r n ts fn = funDefShared pre post r n ts fn (\ [a] -> a)        
+instance FunDefable (Syntax,Syntax)               where funDefAttr pre post r n ts fn = funDefShared pre post r n ts fn (\ [a,b] -> (a,b))         
+instance FunDefable (Syntax,Syntax,Syntax)        where funDefAttr pre post r n ts fn = funDefShared pre post r n ts fn (\ [a,b,c] -> (a,b,c))     
+instance FunDefable (Syntax,Syntax,Syntax,Syntax) where funDefAttr pre post r n ts fn = funDefShared pre post r n ts fn (\ [a,b,c,d] -> (a,b,c,d)) 
 
-  funDef      = __funDef ""
-  constFunDef = __funDef "const"
 
-instance FunDefable Syntax                        where __funDef quals r n ts fn = funDefShared quals r n ts fn (\ [a] -> a)        
-instance FunDefable (Syntax,Syntax)               where __funDef quals r n ts fn = funDefShared quals r n ts fn (\ [a,b] -> (a,b))         
-instance FunDefable (Syntax,Syntax,Syntax)        where __funDef quals r n ts fn = funDefShared quals r n ts fn (\ [a,b,c] -> (a,b,c))     
-instance FunDefable (Syntax,Syntax,Syntax,Syntax) where __funDef quals r n ts fn = funDefShared quals r n ts fn (\ [a,b,c,d] -> (a,b,c,d)) 
+-- Terrible ugliness just to deal with those darn const qualifiers:
+funDef       :: FunDefable args => Type -> Syntax -> [Type] -> (args -> EasyEmit ()) -> EasyEmit ([Syntax] -> Syntax)
+constFunDef  :: FunDefable args => Type -> Syntax -> [Type] -> (args -> EasyEmit ()) -> EasyEmit ([Syntax] -> Syntax)
+inlineFunDef :: FunDefable args => Type -> Syntax -> [Type] -> (args -> EasyEmit ()) -> EasyEmit ([Syntax] -> Syntax)
 
-funDefShared postqualifiers retty (Syn name) tyls fn formTup  = 
+funDef       = funDefAttr "" ""
+constFunDef  = funDefAttr "" "const"
+inlineFunDef = funDefAttr "inline" ""
+
+
+-- Internal helper function used above:
+funDefShared pre postqualifiers retty (Syn name) tyls fn formTup  = 
     do (ls,c) <- S.get 
        --args <- mapM (forValueOnly . tmpvar) tyls -- Generate temp names only (emit nothing).
        args <- sequence$ take (length tyls) (repeat$ gensym "arg") -- Generate temp names only (emit nothing).
        let body = execEasyEmit (fn$ formTup args)
 	   formals = map (\ (t,a) -> cppType t <+> deSyn a) (zip tyls args)
-       addChunk$ Syn$ hangbraces (cppType retty <+> name <> pcommasep formals <+> (deSyn postqualifiers)) indent body
-       addChunk$ "\n"
+       addChunk$ Syn$ 
+          hangbraces ((if pre P.== "" then empty else text (pre++" ")) <> 
+		      cppType retty <+> name <> pcommasep formals <+> (text postqualifiers)) 
+	             indent body
+--       addChunk$ "\n"
        return (\ args -> Syn$ name <> (pcommasep (map deSyn args)))
 
 
@@ -306,13 +321,18 @@ forLoopSimple (start,end) fn =
 						 )) indent $
 	            body
 
+-- Helper used below:
+a <++> b | a P.== "" = b
+a <++> b | b P.== "" = a
+a <++> b             = a <+> b
+
 -- This creates a class-decl-like pattern with a ':'
 -- It is parameterized by a little prefix which could be "class" or "struct" or anything else.
 -- Similarly, there's a postfix which is usually ";".
 classLike :: String -> String -> Syntax -> Syntax -> EasyEmit () -> EasyEmit ()
 classLike prefix postfix (Syn name) (Syn inherits) m = 
   do 
-     putD$ t prefix <+> 
+     putD$ t prefix <++> 
 	   hsep (if inherits P.== empty
 		 then [name]
 		 else [name <+> colon, inherits])
@@ -329,8 +349,11 @@ cppClass = classLike "class" ";"
 -- cppStruct :: Syntax -> Syntax -> EasyEmit () -> EasyEmit ()
 -- cppStruct = classLike "struct" ";"
 
-cppConstructor :: Syntax -> Syntax -> EasyEmit () -> EasyEmit ()
-cppConstructor = classLike "" ""
+cppConstructor :: Syntax -> [Syntax] -> [(Syntax,Syntax)] -> EasyEmit () -> EasyEmit ()
+cppConstructor (Syn name) args inits body = 
+    classLike "" "" (Syn$ name <> parens (commasep$ map deSyn args)) 
+		    (Syn$ commasep$ map (\ (a,b) -> deSyn a <> parens (deSyn b)) inits)
+	      body
 
 -- Curly-brace delimited, indented block:
 -- POSSIBLY INEFFICIENT!
@@ -393,6 +416,12 @@ infixr 2  ||
 ----------------------------------------------------------------------------------------------------
 
 t1 = cppClass "foo" "bar" $ comm "body"
+
+t2 = execEasyEmit$ funDef TInt "foo" [TInt] $ \(Syn y) -> 
+       do comm "Body"
+	  funDef TInt "nested" [] $ \ () -> comm "Inner body"
+	  return ()
+
 
 ee_example :: EasyEmit ()
 ee_example = 

@@ -118,6 +118,10 @@ app fn ls = toDoc fn <> (parens$ hcat$ intersperse (t", ")$ map toDoc ls)
 thunkapp fn = app fn ([] :: [Doc])
 
 -- Create a C++ constructor with initializers:
+--constructor :: Int -> Int -> Int -> Int -> Int
+
+constructor :: (SynChunk a, SynChunk a1) =>
+	       a -> [a1]  -> [(Doc, Doc)] -> Doc -> Doc
 constructor name args inits body = 
     hangbraces (app name args <+> colon $$ 
 		nest 10 (vcat$ map_but_last (<>t", ")$ map (\ (a,b) -> a <> parens b) inits)) 
