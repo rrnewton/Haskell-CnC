@@ -94,10 +94,14 @@ data Syntax = Syn Doc
 
 deSyn (Syn s) = s
 synToStr = render . deSyn 
+
+atomToSyn = Syn . text . fromAtom
+
 (Syn a) +++ (Syn b) = Syn (a <> b)
 
 
-(Syn a) `dot` (Syn b) = Syn (a <> text "." <> b)
+(Syn a) `dot`   (Syn b) = Syn (a <> text "." <> b)
+(Syn a) `arrow` (Syn b) = Syn (a <> text "->" <> b)
 
 -- Adds implicit newline at the end:
 addChunk (Syn doc) = 
@@ -268,16 +272,16 @@ funDefShared postqualifiers retty (Syn name) tyls fn formTup  =
 
 
 -- This is a normal function defined elsewhere:
-function :: String -> [Syntax] -> Syntax
-function name = 
-  \ args -> Syn$ t name <> (pcommasep$ map deSyn args)
+function :: Syntax -> [Syntax] -> Syntax
+function (Syn name) = 
+  \ args -> Syn$ name <> (pcommasep$ map deSyn args)
 
 -- Use a C++ constant 
 constant :: String -> Syntax
 constant = fromString
 
 stringconst :: String -> Syntax
-stringconst str = Syn$ dubquotes str
+stringconst str = Syn$ dubquotes$ escapeString str
 
 -- Common case: for loop over a range with integer index:
 ------------------------------------------------------------

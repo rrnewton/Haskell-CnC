@@ -14,6 +14,7 @@ import System.IO
 import StringTable.Atom
 
 import Data.List
+import Data.Char
 import GHC.Exts -- For IsString
 
 import qualified Test.HUnit as HU
@@ -56,6 +57,8 @@ instance StringBuilder (State [String]) where
 -- Simple pretty printing helpers, and C/C++ codegen helpers.
 ----------------------------------------------------------------------------------------------------
 -- These operate on and produce Doc types:
+
+escapeString = foldr showLitChar ""
 
 vbraces d = lbrace $+$ d $+$ rbrace
 textAtom = text . fromAtom

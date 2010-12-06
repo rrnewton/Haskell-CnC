@@ -16,6 +16,7 @@ import StringTable.AtomSet as AS
 import Text.PrettyPrint.HughesPJClass hiding (Style)
 import Data.Graph.Inductive as G
 
+import Debug.Trace
 
 -- The total "Spec" includes the graph and other metadata.
 -- Collect a global set of all collection names.
@@ -76,16 +77,49 @@ verifySpec spec =
 -- Get the name of the tag collection that prescribes a given step.
 getStepPrescriber :: CncSpec -> ColName -> ColName
 getStepPrescriber (CncSpec{..}) atom = 
-  case L.filter isTags labs of 
+  case L.filter isTagC labs of 
     [CGTags t] -> t
     ls -> error$ "getStepPrescriber step "++ (fromAtom atom) ++ 
 	         " should have exactly one prescribing tag collection, not "++ show (length ls)
  where 
     (nd,_) = mkNode_ nodemap (CGSteps atom)
-    (pred,_,l,succ) = context graph nd
     preds = pre graph nd
     labs  = catMaybes$ L.map (lab graph) preds
-    isTags (CGTags _) = True
-    isTags _ = False
 
+isTagC (CGTags _) = True
+isTagC _          = False
+isItemC (CGItems _) = True
+isItemC _           = False
+isStepC (CGSteps _) = True
+isStepC _           = False
+
+
+-- | Get upstream neighbors in the CnC graph.
+-- This routine sees *through* tag collections.
+-- Returns a list of STEP and ITEM collections.
+upstreamNbrs :: CncSpec -> CncGraphNode -> [CncGraphNode]
+upstreamNbrs (spec@CncSpec{..}) nodelab = 
+    L.concat$ L.map process labs
+ where 
+    (nd,_) = mkNode_ nodemap nodelab
+    preds = pre graph nd
+    labs  = catMaybes$ L.map (lab graph) preds
+    process x@(CGSteps _) = [x]
+    process x@(CGItems _) = [x]
+    -- Tags are essentially aliasses for the previous step collections.
+    process x@(CGTags a) = upstreamNbrs spec x
+
+
+-- | Get downstream neighbors in the CnC graph.
+-- This routine sees *through* tag collections.
+-- Returns a list of STEP and ITEM collections.
+downstreamNbrs :: CncSpec -> CncGraphNode -> [CncGraphNode]
+downstreamNbrs (spec@CncSpec{..}) nodelab = L.concat$ L.map process labs
+ where 
+    (nd,_) = mkNode_ nodemap nodelab
+    succs = suc graph nd
+    labs  = catMaybes$ L.map (lab graph) succs
+    process x@(CGSteps _) = [x]
+    process x@(CGItems _) = [x]
+    process x@(CGTags _) = downstreamNbrs spec x
 
