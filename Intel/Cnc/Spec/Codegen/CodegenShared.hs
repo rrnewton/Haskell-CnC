@@ -50,30 +50,27 @@ default_codegen_config =
 -- Here's a convenient Plugin architecture that uses EasyEmit
 ----------------------------------------------------------------------------------------------------
 
--- This represents a collection of hooks that can be used by a codegen to inject
--- code before/after steps and puts/gets.  This is an attempt to make
--- some of our different extensions into modular plugins.
+-- A "plugin" represents a collection of hooks that can be used by a
+-- codegen backend to inject code before/after steps, puts, and gets.
+-- This is an attempt to convert some of our different extensions into
+-- modular plugins.
+--
+-- The "constructor" for each plugin object takes a spec and then the name of the step collection.
+-- It returns a methodtable full of hooks IF the plugin applies to the given step, and Nothing otherwise.
+type CodeGenPlugin = CncSpec -> ColName -> Maybe HooksTable
 
 -- Each hook takes two groups of argument:
---  (1) Graph context: the CnCGraph and names of relevant collections
+--  (1) Graph context: names of relevant collections (other than the host step)
 --                     PLUS two bits of syntax that refer to the private/main contexts.
 --  (2) Arguments: bits of syntax that refer to the relevant values.
---
--- Graph context.  In the following the two collection names represent
--- the "from" and "to" collections.
-type GrCtxt1 = (CncSpec, Syntax, Syntax, ColName)
-type GrCtxt2 = (CncSpec, Syntax, Syntax, ColName, ColName) -- Includes from and to collection.
-
 type Hook grphCtxt args = grphCtxt -> args -> EasyEmit ()
 
---type Hook1 = Hook GrCtxt1 Syntax
---type Hook2 = Hook GrCtxt1 (Syntax,Syntax)
+-- Graph context aliases::
+type GrCtxt1 = (Syntax, Syntax)
+type GrCtxt2 = (Syntax, Syntax, ColName) -- Includes destination collection name.
 
-data CodeGenPlugin = CodeGenPlugin 
+data HooksTable = HooksTable
     {
-      -- This predicate determines which steps to which the hooks are applied.
-      hooksPredicate :: ColName -> Bool,
-
       -- I vacillated on whether or not to put all of these hooks
       -- (functions) inside a Maybe.  That would make it more clear
       -- what a plugin DOESN'T implement, but I think it makes the
@@ -82,9 +79,9 @@ data CodeGenPlugin = CodeGenPlugin
       -- default hook -- it emits nothing.
 
       -- Declare & initialize (respectively) global state for a collection, stored in global context.
-      addGlobalState :: ColName -> (EasyEmit (), EasyEmit ()),
+      addGlobalState :: (EasyEmit (), EasyEmit ()),
       -- Declare & initialize (respectively) local state, stored for a given step collection in TLS.
-      addLocalState :: ColName -> (EasyEmit (), EasyEmit ()),
+      addLocalState  :: (EasyEmit (), EasyEmit ()),
 
       -- Two arguments: reference to tag, reference to item.
       beforeItemPut :: Hook GrCtxt2 (Syntax,Syntax),
@@ -117,15 +114,19 @@ data CodeGenPlugin = CodeGenPlugin
 instance Show (a -> b) where
   show _ = "<fun>"
 
+instance Show (EasyEmit a) where
+  show _ = "<easyemit_computation>"
 
-defaultCodeGenPlugin = 
+--------------------------------------------------------------------------------
+-- The default method table does nothing.
+
+defaultHooksTable = 
   -- The default hooks just do nothing:
   let twoarg   =        const$ const$ return ()
-  in CodeGenPlugin
+  in HooksTable
   {
-      hooksPredicate    = const False, -- And they apply to nothing.
-      addGlobalState    = const$ (return (), return ()),
-      addLocalState     = const$ (return (), return ()),
+      addGlobalState    = (return (), return ()),
+      addLocalState     = (return (), return ()),
 
       beforeItemPut     = twoarg,
       afterItemPut      = twoarg,
@@ -143,60 +144,26 @@ defaultCodeGenPlugin =
       afterStepExecute  = twoarg
   }
 
--- Combine plugins.  Both are executed against all step collections to which they apply.
--- This is probably quite inefficient.  Those Maybe's could make it a little more efficient.
-combineHooks left right = 
-  let lp = hooksPredicate left 
-      rp = hooksPredicate right 
-      combine2 project x y   = do project left x y  ; project right x y 
-
-      combine1 project x     = 
-	let (a,b) = project left x
-	    (c,d) = project right x
-	in (do a;c, do b;d)
-
-  in CodeGenPlugin
-  {
-      hooksPredicate    = \ name -> lp name || rp name,
-      addGlobalState    = combine1 addGlobalState,
-      addLocalState     = combine1 addLocalState,
-
-      beforeItemPut     = combine2 beforeItemPut,
-      afterItemPut      = combine2 afterItemPut,
-      beforeItemGet     = combine2 beforeItemGet,
-      afterItemGet      = combine2 afterItemGet,
-
-      beforeReducerPut  = combine2 beforeReducerPut,
-      afterReducerPut   = combine2 afterReducerPut,
-      beforeReducerGet  = combine2 beforeReducerGet,
-      afterReducerGet   = combine2 afterReducerGet,
-
-      beforeTagPut      = combine2 beforeTagPut,
-      afterTagPut       = combine2 afterTagPut,
-      beforeStepExecute = combine2 beforeStepExecute,
-      afterStepExecute  = combine2 afterStepExecute
-  }
-
 
 
 ----------------------------------------------------------------------------------------------------
 -- These should probably be moved to their own file, but I'm going to put small plugins here.
 ----------------------------------------------------------------------------------------------------
 
-testplugin =
+testplugin spec stpC =
   let 
     boilerplate msg = 
-	\ (_,_,_,from,to) (tag,val) -> 
-	    putS$ "// [testhooks] "++ show from ++ ": " ++ msg ++" "++ show to 
+	\ (_,_,to) (tag,val) -> 
+	    putS$ "// [testhooks] "++ show stpC ++ ": " ++ msg ++" "++ show to 
 		  ++", args: " ++ show (deSyn tag) ++" "++ show (deSyn val)
 
   in
-  defaultCodeGenPlugin 
-  { hooksPredicate = const True
-  , addLocalState  = \ name -> (comm "[testhooks] Local state declaration goes here.",
-				comm "[testhooks] Local state initialization goes here.")
-  , addGlobalState = \ name -> (comm "[testhooks] Global state declaration goes here.",
-				comm "[testhooks] Global state initialization goes here.")
+  Just$ defaultHooksTable
+  { 
+    addLocalState  = (comm "[testhooks] Local state declaration goes here.",
+		      comm "[testhooks] Local state initialization goes here.")
+  , addGlobalState = (comm "[testhooks] Global state declaration goes here.",
+		      comm "[testhooks] Global state initialization goes here.")
 
   , beforeItemPut = boilerplate "before putting Item to"
   , afterItemPut  = boilerplate "after putting Item to"
@@ -208,8 +175,8 @@ testplugin =
   , beforeReducerGet = boilerplate "before getting Reducer from"
   , afterReducerGet  = boilerplate "after getting Reducer from"
 
-  , beforeTagPut = \ (g,_,_,stpC,tgC) tag -> putS$ "// [testhooks] before putting Tag: " ++ show (deSyn tag)
-  , afterTagPut  = \ (g,_,_,stpC,tgC) tag -> putS$ "// [testhooks] after putting Tag: " ++ show (deSyn tag) 
+  , beforeTagPut = \ (_,_,tgC) tag -> putS$ "// [testhooks] before putting Tag: " ++ show (deSyn tag)
+  , afterTagPut  = \ (_,_,tgC) tag -> putS$ "// [testhooks] after putting Tag: " ++ show (deSyn tag) 
 
   , beforeStepExecute = \ _ (tag,priv,main) -> 
       putS$ "// [testhooks] before step execute on tag reference: " ++ show (deSyn tag) ++" "++ show (deSyn priv) ++" "++ show (deSyn main)
@@ -217,24 +184,26 @@ testplugin =
       putS$ "// [testhooks] after step execute on tag reference: " ++ show (deSyn tag) ++" "++ show (deSyn priv) ++" "++ show (deSyn main)
 
   }
-  
-doneCountingPlugin =
+
+----------------------------------------------------------------------------------------------------  
+
+doneCountingPlugin spec stpC =
   let countername name = (atomToSyn name) +++ "_done_counter" 
       flagname    name = (atomToSyn name) +++ "_done_flag" 
   in
-  defaultCodeGenPlugin 
-  { hooksPredicate = const True
-  , addGlobalState = \ name -> 
+  Just$ defaultHooksTable
+  { 
+    addGlobalState = 
     (do comm "[autodone] Maintain two pieces of state per step collection: done counter & flag:"
-        var (TSym "tbb::atomic<int>") (countername name)
-        var (TSym "tbb::atomic<int>") (flagname name)
+        var (TSym "tbb::atomic<int>") (countername stpC)
+        var (TSym "tbb::atomic<int>") (flagname stpC)
 	return ()
     -- TEMP: FIXME: Need to set env done to 1 on wait() call.  
     -- No support for that yet so here's a hack:
-    , set (flagname name) (if name P.== "env" then 1 else 0) 
+    , set (flagname stpC) (if stpC P.== "env" then 1 else 0) 
     )
 
-  , afterStepExecute = \ (spec, _,_, stpC) (tag,priv,main) -> 
+  , afterStepExecute = \ _ (tag,priv,main) -> 
       do comm "[autodone] Decrement the counter that tracks these instances:"
 	 x <- tmpvar TInt 
          set x (function (main `dot` (countername stpC) `dot` "fetch_and_decrement") [])
@@ -252,7 +221,8 @@ doneCountingPlugin =
 						   ++show (upstreamNbrs spec (CGSteps stpC))++"\n"])
 	             (app (function "printf") [stringconst$ " [autodone] "++show stpC++" NOT DONE\n"]))
 	     (return ())
-  , beforeTagPut = \ (spec, priv,main, stpC,tgC) tag -> 
+
+  , beforeTagPut = \ (priv,main, tgC) tag -> 
       do comm "[autodone] Increment the counter that tracks downstream step instances:"
 	 let downstream = map graphNodeName $ filter isStepC $ downstreamNbrs spec (CGTags tgC)
 	 forM_ downstream $ \ destC -> do
@@ -261,3 +231,17 @@ doneCountingPlugin =
             app (function (main `dot` (countername destC) `dot` "fetch_and_increment")) []
 
   }
+
+
+----------------------------------------------------------------------------------------------------  
+-- Fusion plugin:
+
+-- Idea: this is a kind of interesting way to do fusion.
+-- We can fuse producer/consumer A and B by:
+--   (1) Call B directly from A's put method.  Use "return" to avoid the REAL put.
+--   (2) Use "return" in B's beforeStepExecute to disable it.
+
+-- Actually, (2) is not necessary, beforeStepExecute should really
+-- throw an exception, because B's execute should never be called in
+-- this framework.
+
