@@ -4,7 +4,7 @@ module Intel.Cnc.Spec.Codegen.CodegenShared where
 
 import StringTable.Atom
 import qualified StringTable.AtomSet as AS
-import Data.List
+import Data.List as L
 import Data.Maybe
 import qualified Data.Set as S
 import qualified Data.Map as M
@@ -205,6 +205,13 @@ doneCountingPlugin (spec@CncSpec{graph, steps, nodemap}) stpC =
 -- FIXME: REMOVE ITEM COLLECTIONS BEFORE COMPUTING CYCLES:
 
       cycsets = joinCycles$ cyclesIn' graph
+      -- We compute the upstream dependencies of entire cycles taken together:
+      cyc_upstreams = map (\ set -> S.difference (setUpstream set) set) $ 
+		      map getSteps cycsets
+      setUpstream = S.fromList .  concat . map (upstreamNbrs spec) . S.toList 
+      getSteps = S.fromList . filter isStepC . map (fromJust . G.lab graph) . S.toList 
+-- UNFINISHED:
+
       non_cycle_nodes = foldl' S.difference all_step_nds cycsets
       allnodesets  = cycsets ++ (map S.singleton (S.toList non_cycle_nodes))
       num_counters = length allnodesets
@@ -216,7 +223,14 @@ doneCountingPlugin (spec@CncSpec{graph, steps, nodemap}) stpC =
 			     n+1))
 		     (M.empty, 0) allnodesets
       env_ind = counter_map M.! (toAtom special_environment_name)
-      --num_counters = length cycsets + S.size non_cycle_nodes		     
+{-
+      upstream_map = fst$ 
+ 		     foldl' (\ (map,n) set -> 
+			    (foldl' (\mp nd -> M.insert (graphNodeName$ fromJust$ G.lab graph nd) n mp) 
+			            map (S.toList set), 
+			     n+1))
+		      (M.empty, 0) allnodesets
+-}
 
   in
   trace ("COUNTER MAP "++ show counter_map) $
@@ -281,6 +295,7 @@ doneCountingPlugin (spec@CncSpec{graph, steps, nodemap}) stpC =
 
 -- Join together nodes that participate in overlapping cycles:
 -- Inefficient quadratic algorithm:
+joinCycles :: (P.Ord a) => [[a]] -> [S.Set a]
 joinCycles cycs = foldl' foldin [] (map S.fromList cycs)
  where 
   foldin [] cyc      = [cyc]

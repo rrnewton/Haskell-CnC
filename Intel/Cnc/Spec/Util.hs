@@ -148,6 +148,8 @@ instance IsString Doc where
 instance IsString Atom where
     fromString s = toAtom s
 
+instance ToAtom Doc where
+   toAtom d = toAtom$ render d
 
 -- Constant: indentation used across all code generators.
 indent = 4
