@@ -206,8 +206,10 @@ emitCpp (config@CodeGenConfig{..}) (spec @ CncSpec{appname, steps, tags, items, 
    ------------------------------------------------------------
    -- Prototype for user step wrappers
    ------------------------------------------------------------   
-   let maincontext = t$ appname++"_context_RAW"     -- The top-level context (internal)
-       usercontext = t$ appname++"_context" -- The top-level context exposed to the user
+   let
+--       maincontext = t$ appname++"_context_RAW" -- The top-level context (internal)
+       maincontext = t$ appname++"_context" -- The top-level context (internal)
+       usercontext = t$ appname++"_context_TEMP"   -- The top-level context exposed to the user
    let stepwrapper stp = textAtom stp <> t"_step_wrapper"
 
    when (not old_05_api)$ do

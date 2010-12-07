@@ -2,23 +2,30 @@
 
 module Intel.Cnc.Spec.Codegen.CodegenShared where
 
-
 import StringTable.Atom
-import qualified Data.Graph.Inductive as G
+import qualified StringTable.AtomSet as AS
 import Data.List
 import Data.Maybe
+import qualified Data.Set as S
+import qualified Data.Map as M
 import Control.Monad
-
 import Intel.Cnc.Spec.AST 
 import Intel.Cnc.Spec.CncGraph
 import qualified Intel.Cnc.EasyEmit as E
---import Intel.Cnc.EasyEmit  hiding (app, not, (&&), (==), (||))
+import Intel.Cnc.Spec.CncGraph (ColName)
 import Intel.Cnc.EasyEmit  hiding (not, (||))
 import Intel.Cnc.Spec.Util hiding (app)
-import Intel.Cnc.Spec.CncGraph (ColName) -- hiding (app, not, (&&), (==))
 import Prelude hiding ((&&), (==), (<=))
 import qualified Prelude as P
+
 import Debug.Trace
+import Test.HUnit
+import qualified Data.Graph.Inductive as G
+import Data.Graph.Analysis.Algorithms.Common
+
+----------------------------------------------------------------------------------------------------
+-- This datatype stores the configuration information for backend acode generation.
+----------------------------------------------------------------------------------------------------
 
 data CodeGenConfig = CodeGenConfig 
       { cgverbosity :: Bool 
@@ -41,8 +48,8 @@ default_codegen_config =
       , gendepends  = False
       , gendebug    = False
       , wrapall     = False
---      , plugins     = []
-      , plugins     = [doneCountingPlugin, testplugin]
+--      , plugins     = [testplugin]
+      , plugins     = [doneCountingPlugin]
      }
 
 
@@ -187,41 +194,73 @@ testplugin spec stpC =
 
 ----------------------------------------------------------------------------------------------------  
 
-doneCountingPlugin spec stpC =
-  let countername name = (atomToSyn name) +++ "_done_counter" 
-      flagname    name = (atomToSyn name) +++ "_done_flag" 
+doneCountingPlugin (spec@CncSpec{graph, steps, nodemap}) stpC =
+  let 
+      is_maincontext = (stpC P.== toAtom special_environment_name)
+      countername num = Syn$t$ "done_counter" ++ show num
+      flagname    num = Syn$t$ "done_flag"    ++ show num
 
-      -- TODO: PERFORM THE GRAPH ANALYSIS TO FIND CYCLES HERE!
-      -- (OR MAYBE THIS SHOULD BE SHARED AND GO BACK INTO THE SPEC)?
-      
+      all_step_nds = S.fromList$ map (fst . (G.mkNode_ nodemap) . CGSteps) (AS.toList steps)
+
+-- FIXME: REMOVE ITEM COLLECTIONS BEFORE COMPUTING CYCLES:
+
+      cycsets = joinCycles$ cyclesIn' graph
+      non_cycle_nodes = foldl' S.difference all_step_nds cycsets
+      allnodesets  = cycsets ++ (map S.singleton (S.toList non_cycle_nodes))
+      num_counters = length allnodesets
+      -- Map every node onto exactly one counter.  Nodes in a cycle must have the same counter.
+      counter_map = fst$ 
+		    foldl' (\ (map,n) set -> 
+			    (foldl' (\mp nd -> M.insert (graphNodeName$ fromJust$ G.lab graph nd) n mp) 
+			            map (S.toList set), 
+			     n+1))
+		     (M.empty, 0) allnodesets
+      env_ind = counter_map M.! (toAtom special_environment_name)
+      --num_counters = length cycsets + S.size non_cycle_nodes		     
 
   in
+  trace ("COUNTER MAP "++ show counter_map) $
   Just$ defaultHooksTable
   { 
     addGlobalState = 
-    (do comm "[autodone] Maintain two pieces of state per step collection: done counter & flag:"
-        var (TSym "tbb::atomic<int>") (countername stpC)
-        var (TSym "tbb::atomic<int>") (flagname stpC)
-	return ()
-    -- TEMP: FIXME: Need to set env done to 1 on wait() call.  
-    -- No support for that yet so here's a hack:
-    , set (flagname stpC) (if stpC P.== toAtom special_environment_name then 1 else 0)
-    )
+    -- This only happens ONCE, not per step-collection, and it adds ALL the counters/flag:
+    if is_maincontext
+    then (do comm "[autodone] Maintain two pieces of state for each tracked subgraph: done counter & flag:"
+	     forM_ (zip [0..num_counters] allnodesets) $ \ (ind, ndset) -> do 
+	       comm$ show ind ++ ": Serves node(s): " ++ 
+	             concat (intersperse " "$ map (graphNodeName . fromJust . G.lab graph) (S.toList ndset))
+               var (TSym "tbb::atomic<int>") (countername ind)
+               var (TSym "tbb::atomic<int>") (flagname ind)
+             return ()
+
+	 , do comm "[autodone] Initialize done flags/counters:"
+	      app (function "printf") [stringconst$ " [autodone] Initializing done flags/counters...\n"]
+	      forM_ (zip [0..num_counters] allnodesets) $ \ (ind, ndset) -> do
+   	         -- TEMP: FIXME: Need to set env done to 1 on wait() call.  
+                 -- No support for that yet so here's a hack:
+	         set (flagname ind) (if ind P.== env_ind then 1 else 0)	     
+	         set (countername ind) 0
+	 )
+    else (return (), return ())
 
   , afterStepExecute = \ _ (tag,priv,main) -> 
       do comm "[autodone] Decrement the counter that tracks these instances:"
 	 x <- tmpvar TInt 
-         set x (function (main `dot` (countername stpC) `dot` "fetch_and_decrement") [])
+	 let stpind = counter_map M.! stpC
+         set x (function (main `dot` (countername stpind) `dot` "fetch_and_decrement") [])
 	 app (function "printf") [stringconst$ " [autodone] "++show stpC++" Decremented refcount from %d\n", x]
 	 if_ (x <= 1) -- TEMP FIXME!!!!! CHANGE ME BACK TO (==)
 	     (do comm " If we transition to a zero count we check our upstreams to see if we are really done."
 	         let upstream = filter isStepC $ upstreamNbrs spec (CGSteps stpC)
 	         if_ (if null upstream
 		      then error$ "doneCountingPlugin: missing upstream steps/environment for step collection "++ show stpC
+
+-- FIXME: CHANGE THIS TO CYCLE'S UPSTREAM!!
+
 		      else foldl1 (&&) $
-		           map (\ (CGSteps stp) -> main `dot` (flagname stp)) upstream)
+		           map (\ (CGSteps stp) -> main `dot` (flagname$ counter_map M.! stp)) upstream)
 	             (do comm "Upstream are all done, and now so are we:"
-		         set (main `dot` (flagname stpC)) 1
+		         set (main `dot` (flagname stpind)) 1
 		         app (function$ "printf") [stringconst$ " [autodone] "++show stpC++" Yep, we're done, deps met..."
 						   ++show (upstreamNbrs spec (CGSteps stpC))++"\n"])
 	             (app (function "printf") [stringconst$ " [autodone] "++show stpC++" NOT DONE\n"]))
@@ -231,15 +270,37 @@ doneCountingPlugin spec stpC =
       do comm "[autodone] Increment the counter that tracks downstream step instances:"
 	 let downstream = map graphNodeName $ filter isStepC $ downstreamNbrs spec (CGTags tgC)
 	 forM_ downstream $ \ destC -> do
+            let counter = main `dot` countername (counter_map M.! destC)
 	    app (function "printf") [stringconst$ " [autodone] "++show stpC++" Incrementing refcount from %d\n", 
-				     "(int)" +++ main `dot` (countername destC)]
-            app (function (main `dot` (countername destC) `dot` "fetch_and_increment")) []
+				     "(int)" +++ counter]
+            app (function (counter `dot` "fetch_and_increment")) []
 
   }
+
+-- Graph related utilities used by the above:
+
+-- Join together nodes that participate in overlapping cycles:
+-- Inefficient quadratic algorithm:
+joinCycles cycs = foldl' foldin [] (map S.fromList cycs)
+ where 
+  foldin [] cyc      = [cyc]
+  foldin (hd:tl) cyc = if S.null (S.intersection hd cyc)
+		       then hd : foldin tl cyc 
+		       else (S.union cyc hd) : tl
+
+
+----------------------------------------------------------------------------------------------------
+-- Dead-Item-Collection plugin:
+----------------------------------------------------------------------------------------------------
+
+-- This one will extend the doneCountingPlugin and add counters for
+-- item collections.  When all the steps consuming from an item
+-- collection are 'done' then the item collection can be freed.
 
 
 ----------------------------------------------------------------------------------------------------  
 -- Fusion plugin:
+----------------------------------------------------------------------------------------------------  
 
 -- Idea: this is a kind of interesting way to do fusion.
 -- We can fuse producer/consumer A and B by:
@@ -250,3 +311,23 @@ doneCountingPlugin spec stpC =
 -- throw an exception, because B's execute should never be called in
 -- this framework.
 
+
+----------------------------------------------------------------------------------------------------  
+-- Unit Tests:
+----------------------------------------------------------------------------------------------------  
+
+testg :: G.Gr () String
+testg = G.mkGraph (zip [1..7] (repeat ())) 
+    [(1,2,""), (2,3,""), (3,4,""), (4,5,""), (5,6,""), (6,7,""),
+     -- Close some cycles.
+     (4,2,""), (7,6,""), (7,3,"")
+    ]
+testc = cyclesIn' testg
+
+tests_codegenshared = 
+    testSet "CodegenShared" 
+      [ testCase "" "joinCycles connected1"$  [S.fromList [2,3,4,5,6,7]] ~=? joinCycles testc
+      , testCase "" "joinCycles connected2"$  [S.fromList [2,3,4,5,6,7]] ~=? joinCycles [[4,5,6,7,3],  [4,2,3],  [6,7]]
+      , testCase "" "joinCycles connected3"$  [S.fromList [2,3,4,5,6,7]] ~=? joinCycles [[4,5,6,7,3],  [4,2,3]]
+      , testCase "" "joinCycles split"$       [S.fromList [2,3,4], S.fromList [6,7]] ~=? joinCycles [[4,2,3],  [6,7]]
+      ]

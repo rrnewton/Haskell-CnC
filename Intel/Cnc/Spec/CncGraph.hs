@@ -52,6 +52,7 @@ graphNodeName (CGSteps n) = fromAtom n
 graphNodeName (CGTags  n) = fromAtom n
 graphNodeName (CGItems n) = fromAtom n
 
+
 instance Show CncSpec where
   show = show . pPrint
 

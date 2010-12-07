@@ -521,6 +521,7 @@ all_unit_tests =
  , test_traceVacuum
  , EE.tests_easyemit
  , test_readharch
+ , tests_codegenshared
  ]
 
 cncRunAllTests = 

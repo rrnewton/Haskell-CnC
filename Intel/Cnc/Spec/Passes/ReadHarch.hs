@@ -345,7 +345,7 @@ test_readharch =
   		   assertFailure "Parse of HARCHNODE line must not satisfy commentline.")
                (\ (e :: CE.SomeException) -> return ())
 
-  , testCase "" "parse complete file"$ TestCase t12
+  , testCase "" "parse complete file, and print to stdout"$ TestCase t12
 	  
   ]
 
