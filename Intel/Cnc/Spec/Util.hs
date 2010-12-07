@@ -126,6 +126,8 @@ constructor name args inits body =
     hangbraces (app name args <+> colon $$ 
 		nest 10 (vcat$ map_but_last (<>t", ")$ map (\ (a,b) -> a <> parens b) inits)) 
                 indent body
+
+-- Parameters to a function... abstracting this for, say, untyped languages?
 param ty name = ty <+> name
 
 dubquotes :: SynChunk a => a -> Doc

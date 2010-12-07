@@ -268,6 +268,7 @@ instance FunDefable Syntax                        where funDefAttr pre post r n 
 instance FunDefable (Syntax,Syntax)               where funDefAttr pre post r n ts fn = funDefShared pre post r n ts fn (\ [a,b] -> (a,b))         
 instance FunDefable (Syntax,Syntax,Syntax)        where funDefAttr pre post r n ts fn = funDefShared pre post r n ts fn (\ [a,b,c] -> (a,b,c))     
 instance FunDefable (Syntax,Syntax,Syntax,Syntax) where funDefAttr pre post r n ts fn = funDefShared pre post r n ts fn (\ [a,b,c,d] -> (a,b,c,d)) 
+instance FunDefable [Syntax]                      where funDefAttr pre post r n ts fn = funDefShared pre post r n ts fn id
 
 
 -- Terrible ugliness just to deal with those darn const qualifiers:

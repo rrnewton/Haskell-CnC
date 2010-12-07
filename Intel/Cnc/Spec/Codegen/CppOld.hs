@@ -617,16 +617,19 @@ generate_wrapper_context (CodeGenConfig{gendebug})
 		--  but it has too many arguments and is poorly abstracted.)
 	        wrapGP doret retty nm args isPut = 
 		       -- First let's put together the function's arguments:
-                       let args' = map (\ (tyD,v) -> tyD <+> text v) args 
-			   decls = commacat args'
-			   vars  = commacat $ map (text . snd) args
+                       let -- args' = map (\ (tyD,v) -> tyD <+> text v) args 
+			   -- decls = commacat args'
+			   -- vars  = commacat $ map (text . snd) args
 			   doplugs project = execEasyEmit$ 
 		               forM_ (plug_map AM.! stp) $ \ hooks ->
 				   project hooks (Syn$ t$ snd$ head args, Syn$ t$ snd$ head$tail args, itC)
 					         (Syn$ t$ snd$ head args, Syn$ t$ snd$ head$tail args)
 		       in
-		       hangbraces (t "inline "<> toDoc retty <+> t nm <> parens decls) 
-	                         indent 
+
+		       inlineFunDef retty (s nm) (map (doc2Ty . fst) args) $ \ (args::[Syntax]) -> 
+			    putD$ 
+--		       hangbraces (t "inline "<> toDoc retty <+> t nm <> parens decls) 
+--	                         indent 
 				 (-- CHECK TAG FUNCTIONS
 				  --------------------------------------------------------------------------------
 				  let checkTagFun stp target getnbrs = 
@@ -676,7 +679,7 @@ generate_wrapper_context (CodeGenConfig{gendebug})
 				   else doplugs beforeItemGet) $$
 				  --------------------------------------------------------------------------------
 				  (if doret then t"return " else t"") <>
-				  t "m_"<> textAtom itC <> t"." <> t nm <> parens vars <> semi $$
+				  t "m_"<> textAtom itC <> t"." <> t nm <> parens (commacat$ map deSyn args) <> semi $$
 				  --------------------------------------------------------------------------------
 				  (if isPut 
 				   then doplugs afterItemPut
@@ -684,8 +687,9 @@ generate_wrapper_context (CodeGenConfig{gendebug})
 				 )
 
                 -- Basic get or put:
-		basicGP nm isPut = wrapGP False "void" nm [(mkConstRef tagty, "tag"), 
-							   ((if isPut then mkConstRef else mkRef) (cppType ty2) , "ref")] isPut
+		basicGP nm isPut = wrapGP False (TSym$ toAtom "void") nm 
+				   [(mkConstRef tagty, "tag"), 
+				    ((if isPut then mkConstRef else mkRef) (cppType ty2) , "ref")] isPut
 
 	        wrapper = textAtom itC <> t"_wrapper"
 	        member  = t"m_" <> textAtom itC
@@ -698,18 +702,20 @@ generate_wrapper_context (CodeGenConfig{gendebug})
 
 		      putD$ t"CnC::item_collection" <> angles (cppType ty1 <>commspc<> cppType ty2) <> t" & " <> member <> semi $$ t"" 
                       comm "The constructor here needs to grab a reference from the main context:"
-		      putD (constructor wrapper 
-		                   [param (mkRef maincontext)      (t"p"),
-				    param (mkPtr classname) (t"c")]
-		                   [(member, t"p." <> textAtom itC)]
-		                   (assign "m_context" "c" $$ 
-		                    assign "parent_context" "&p"))
+	 	      cppConstructor (Syn wrapper)    -- Name.
+				     [Syn$ param (mkRef maincontext) (t"p"),
+				      Syn$ param (mkPtr classname)   (t"c")]
+		                     [(Syn$ member, Syn$ t"p." <> textAtom itC)]
+		                     (do set (s"m_context")      (s"c")  
+		                         set (s"parent_context") (s"&p"))
+
 		      -- Just three methods: two variants of get and one put.
-		      putD$ basicGP "get" False 
-		      putD$ basicGP "put" True 
-		      putD$ if oldstyle_get_method 
-		            then wrapGP True  (cppType ty2) "get" [(mkConstRef (cppType ty1),"tag")] False
-		            else empty
+		      basicGP "get" False 
+		      basicGP "put" True 
+		      if oldstyle_get_method 
+		       then do wrapGP True ty2 "get" [(mkConstRef (cppType ty1),"tag")] False
+			       return ()
+		       else return ()
 		      ) 
             putS "")
 
@@ -731,7 +737,7 @@ generate_wrapper_context (CodeGenConfig{gendebug})
 	   if False -- is_top_context
 	    then do return ()
 	    else 
-		 cppConstructor (Syn classname)         -- Name.
+		 cppConstructor (Syn classname)    -- Name.
 		     (if is_top_context            -- Args.
 		      then []
 		      else [Syn$ maincontext <> t" & p"]) 
