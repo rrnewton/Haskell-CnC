@@ -49,7 +49,7 @@ data CncTraceTag =
 
 spc = oneOf " \t"
 whitespc = many spc
-defaultStepContext = (toAtom "env","")
+defaultStepContext = (toAtom special_environment_name,"")
 
 doParse :: Parser CncTraceEvent -> String -> CncTraceEvent
 doParse p input
@@ -150,7 +150,8 @@ test_traceVacuum =
      tC = testCase ""
  in
  [ tC "traceline1: parse one line"$ Just (StartStep (toAtom "fib_step","0"))           ~=? tP "Start step (fib_step: 0)"
- , tC "traceline2: parse one line"$ Just (PutT (toAtom "env","") (toAtom "tags","10")) ~=? tP "Put tag <tags: 10>"
+ , tC "traceline2: parse one line"$ Just (PutT (toAtom special_environment_name,"") 
+					  (toAtom "tags","10")) ~=? tP "Put tag <tags: 10>"
  , tC "traceline3: parse one line"$ Nothing                                            ~=? tP "__Put tag <tags: 10>"
  , tC "traceline4: parse one line"$ Just (Prescribe (toAtom "control_S1") (toAtom "kj_compute"))
                                       ~=? tP  "Prescribe control_S1 kj_compute"

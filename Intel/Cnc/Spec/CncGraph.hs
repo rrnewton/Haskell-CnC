@@ -6,6 +6,7 @@
 ----------------------------------------------------------------------------------------------------
 module Intel.Cnc.Spec.CncGraph where
 
+import Intel.Cnc.Spec.Util 
 import Intel.Cnc.Spec.AST
 import Data.List as L
 import Data.Maybe
@@ -39,7 +40,7 @@ type CncGraph = (Gr CncGraphNode (Maybe TagFun))
 
 type ColName = Atom
 
-builtinSteps = [toAtom "env"]
+builtinSteps = [toAtom special_environment_name]
 
 data CncGraphNode  = 
     CGSteps ColName 

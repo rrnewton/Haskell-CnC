@@ -106,7 +106,7 @@ cncUbigraph interactive gr =
 	     CGSteps atom -> 
 		do changeVStyle stepstyle id		   
 		   setVAttr (VLabel$ fromAtom atom) id 
-		   if fromAtom atom == "env"
+		   if fromAtom atom == special_environment_name
 		     then do setVAttr (VColor "#ffff00") id 
 			     setVAttr (VLabel "env IN") id 
 			     newVertexWithID (-1)
@@ -128,7 +128,7 @@ cncUbigraph interactive gr =
    forM_ contexts $ \ (prev, id, label, _) -> 
       forM_ prev $ \ (_,p) -> 
 	case label of 
-	  CGSteps a | fromAtom a == "env" -> 
+	  CGSteps a | fromAtom a == special_environment_name -> 
 	       do edge <- newEdge (p,-1)
 		  changeEStyle consumestyle edge
 	  _ ->
@@ -332,7 +332,7 @@ traceToGUI trace =
       AddV envpr : ChangeV envpr defaultEnvAttr :
       loop emptyGUIState trace
  where 
-  envpr = (toAtom "env", "")
+  envpr = (toAtom special_environment_name, "")
   loop _ [] = []
   loop state0@GS{..} (hd:tl) = 
     let -- When drawing step collections we may "pump them up" as we get more instances:
@@ -514,7 +514,7 @@ playback state fwd =
 		 (error "no state atm") --(updateState state hd) 
   		 (error "no rev action") --(buildRevAction state hd : rvrs) 
 		 (tail fwd)
-   loop (M.fromList [((toAtom "env",""), envID)]) state [] fwd
+   loop (M.fromList [((toAtom special_environment_name,""), envID)]) state [] fwd
 
 -- This simply needs to not conflict with the auto-assigned Ubigraph ids:
 envID = 1

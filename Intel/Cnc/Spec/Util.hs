@@ -183,5 +183,4 @@ cnctag = "[CnC] "
 --hcnc_name = "hcnc"
 hcnc_name = "cnc"
 
-
-
+special_environment_name = "env"

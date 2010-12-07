@@ -17,7 +17,7 @@ import Intel.Cnc.Spec.SrcLoc
 pp x = pPrint x -- Eta expand, monomorphism restriction.
 
 -- For now there is exactly one predefined step collection:
-isBuiltin "env" = True
+isBuiltin e | e == special_environment_name = True
 isBuiltin _     = False
 
 -- Everything that is decorated with annotations (e.g. source

@@ -190,6 +190,11 @@ testplugin spec stpC =
 doneCountingPlugin spec stpC =
   let countername name = (atomToSyn name) +++ "_done_counter" 
       flagname    name = (atomToSyn name) +++ "_done_flag" 
+
+      -- TODO: PERFORM THE GRAPH ANALYSIS TO FIND CYCLES HERE!
+      -- (OR MAYBE THIS SHOULD BE SHARED AND GO BACK INTO THE SPEC)?
+      
+
   in
   Just$ defaultHooksTable
   { 
@@ -200,7 +205,7 @@ doneCountingPlugin spec stpC =
 	return ()
     -- TEMP: FIXME: Need to set env done to 1 on wait() call.  
     -- No support for that yet so here's a hack:
-    , set (flagname stpC) (if stpC P.== "env" then 1 else 0) 
+    , set (flagname stpC) (if stpC P.== toAtom special_environment_name then 1 else 0)
     )
 
   , afterStepExecute = \ _ (tag,priv,main) -> 
