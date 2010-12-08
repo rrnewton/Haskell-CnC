@@ -23,7 +23,7 @@ int main () {
     tagfun_checking_valid_context context;
 
     // Put some tags into the collection in a naive way:
-    for(int i=0; i<10; i++)
+    for(int i=0; i<5; i++)
        context.T1.put(i);
 
     context.wait();

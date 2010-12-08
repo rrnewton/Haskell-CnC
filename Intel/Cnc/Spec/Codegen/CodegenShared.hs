@@ -49,7 +49,8 @@ default_codegen_config =
       , gendebug    = False
       , wrapall     = False
 --      , plugins     = [testplugin]
-      , plugins     = [doneCountingPlugin]
+--      , plugins     = [autodonePlugin]
+      , plugins     = []
      }
 
 
@@ -113,7 +114,11 @@ data HooksTable = HooksTable
       --   (3) name of a variable holding a reference to the main
       --       context -- containing the state added by "addGlobalState"
       beforeStepExecute :: Hook GrCtxt1 (Syntax,Syntax,Syntax),
-      afterStepExecute  :: Hook GrCtxt1 (Syntax,Syntax,Syntax)
+      afterStepExecute  :: Hook GrCtxt1 (Syntax,Syntax,Syntax),
+
+      -- These inject code around the context's wait() method:
+      beforeEnvWait :: EasyEmit (),
+      afterEnvWait  :: EasyEmit ()
     }
   deriving Show
 
@@ -148,7 +153,9 @@ defaultHooksTable =
       beforeTagPut      = twoarg,
       afterTagPut       = twoarg,
       beforeStepExecute = twoarg,
-      afterStepExecute  = twoarg
+      afterStepExecute  = twoarg,
+      beforeEnvWait = return (),
+      afterEnvWait  = return ()
   }
 
 
@@ -190,50 +197,67 @@ testplugin spec stpC =
   , afterStepExecute  = \ _ (tag,priv,main) -> 
       putS$ "// [testhooks] after step execute on tag reference: " ++ show (deSyn tag) ++" "++ show (deSyn priv) ++" "++ show (deSyn main)
 
+  , beforeEnvWait = putS "// [testhooks] before environment wait"
+  , afterEnvWait  = putS "// [testhooks] after environment wait"
   }
 
 ----------------------------------------------------------------------------------------------------  
 
-doneCountingPlugin (spec@CncSpec{graph, steps, nodemap}) stpC =
+debug_autodone = True
+
+fromSetList :: P.Ord a => [(S.Set a, b)] -> M.Map a b
+fromSetList = 
+   foldl' (\ map (set,val) -> 
+	   S.fold (\ nd mp -> M.insert nd val mp)
+	          map set)
+          M.empty
+
+autodonePlugin (spec@CncSpec{graph, steps, nodemap}) =
   let 
-      is_maincontext = (stpC P.== toAtom special_environment_name)
       countername num = Syn$t$ "done_counter" ++ show num
       flagname    num = Syn$t$ "done_flag"    ++ show num
 
+      -- NOTE: This includes special_environment_name:
       all_step_nds = S.fromList$ map (fst . (G.mkNode_ nodemap) . CGSteps) (AS.toList steps)
 
 -- FIXME: REMOVE ITEM COLLECTIONS BEFORE COMPUTING CYCLES:
 
       cycsets = joinCycles$ cyclesIn' graph
       -- We compute the upstream dependencies of entire cycles taken together:
-      cyc_upstreams = map (\ set -> S.difference (setUpstream set) set) $ 
-		      map getSteps cycsets
+      cyc_upstreams = L.map (\ set -> S.difference (setUpstream set) set) $ 
+		      L.map getSteps cycsets
       setUpstream = S.fromList .  concat . map (upstreamNbrs spec) . S.toList 
       getSteps = S.fromList . filter isStepC . map (fromJust . G.lab graph) . S.toList 
--- UNFINISHED:
 
-      non_cycle_nodes = foldl' S.difference all_step_nds cycsets
-      allnodesets  = cycsets ++ (map S.singleton (S.toList non_cycle_nodes))
+      non_cycle_nodes = S.toList $ foldl' S.difference all_step_nds cycsets
+      allnodesets  = cycsets ++ (map S.singleton $ non_cycle_nodes)
       num_counters = length allnodesets
-      -- Map every node onto exactly one counter.  Nodes in a cycle must have the same counter.
-      counter_map = fst$ 
-		    foldl' (\ (map,n) set -> 
-			    (foldl' (\mp nd -> M.insert (graphNodeName$ fromJust$ G.lab graph nd) n mp) 
-			            map (S.toList set), 
-			     n+1))
-		     (M.empty, 0) allnodesets
-      env_ind = counter_map M.! (toAtom special_environment_name)
-{-
-      upstream_map = fst$ 
- 		     foldl' (\ (map,n) set -> 
-			    (foldl' (\mp nd -> M.insert (graphNodeName$ fromJust$ G.lab graph nd) n mp) 
-			            map (S.toList set), 
-			     n+1))
-		      (M.empty, 0) allnodesets
--}
+      nodeToName   = graphNodeName . fromJust . G.lab graph
 
-  in
-  trace ("COUNTER MAP "++ show counter_map) $
+      -- Map every node onto exactly one counter.  Nodes in a cycle must have the same counter.
+      counter_map :: M.Map Atom Int
+	   = M.mapKeys nodeToName $
+      	     fromSetList $ zip allnodesets [0..]
+      counter_lookup stp = case M.lookup stp counter_map of 
+			     Just x -> x
+			     Nothing -> error$ "autodonePlugin: Could not find counter corresponding to step: "++ show stp
+
+      -- Here we take the cycles' upstreams and fill in the rest for anything not in a cycle:
+      upstream_map :: M.Map Atom (S.Set CncGraphNode)
+	   = fromSetList $ 
+	     (map dosingle non_cycle_nodes ++
+	      zip (map (S.map nodeToName) cycsets) cyc_upstreams)
+      dosingle nd = let name = nodeToName nd in 
+		    (S.singleton name, 
+		     S.fromList$ upstreamNbrs spec (CGSteps name))
+  in 
+  -- This is a curried, two-phase constructor, first we analyze the
+  -- graph (above) and now we find out what step we apply to:
+  \ stpC ->
+  -- trace ("PLUGIN CONSTRUCTOR "++ show stpC) $
+  -- trace ("COUNTER MAP "++ show counter_map) $
+  -- trace ("UPSTREAM MAP "++ show upstream_map) $
+  let is_maincontext = (stpC P.== toAtom special_environment_name) in
   Just$ defaultHooksTable
   { 
     addGlobalState = 
@@ -248,11 +272,9 @@ doneCountingPlugin (spec@CncSpec{graph, steps, nodemap}) stpC =
              return ()
 
 	 , do comm "[autodone] Initialize done flags/counters:"
-	      app (function "printf") [stringconst$ " [autodone] Initializing done flags/counters...\n"]
+	      when debug_autodone$ app (function "printf") [stringconst$ " [autodone] Initializing done flags/counters...\n"]
 	      forM_ (zip [0..num_counters] allnodesets) $ \ (ind, ndset) -> do
-   	         -- TEMP: FIXME: Need to set env done to 1 on wait() call.  
-                 -- No support for that yet so here's a hack:
-	         set (flagname ind) (if ind P.== env_ind then 1 else 0)	     
+	         set (flagname ind) 0
 	         set (countername ind) 0
 	 )
     else (return (), return ())
@@ -260,9 +282,10 @@ doneCountingPlugin (spec@CncSpec{graph, steps, nodemap}) stpC =
   , afterStepExecute = \ _ (tag,priv,main) -> 
       do comm "[autodone] Decrement the counter that tracks these instances:"
 	 x <- tmpvar TInt 
-	 let stpind = counter_map M.! stpC
+	 let stpind = counter_lookup stpC
          set x (function (main `dot` (countername stpind) `dot` "fetch_and_decrement") [])
-	 app (function "printf") [stringconst$ " [autodone] "++show stpC++" Decremented refcount from %d\n", x]
+	 when debug_autodone$ 
+           app (function "printf") [stringconst$ " [autodone] "++show stpC++": Decremented own refcount to %d\n", x-1]
 	 if_ (x <= 1) -- TEMP FIXME!!!!! CHANGE ME BACK TO (==)
 	     (do comm " If we transition to a zero count we check our upstreams to see if we are really done."
 	         let upstream = filter isStepC $ upstreamNbrs spec (CGSteps stpC)
@@ -272,23 +295,32 @@ doneCountingPlugin (spec@CncSpec{graph, steps, nodemap}) stpC =
 -- FIXME: CHANGE THIS TO CYCLE'S UPSTREAM!!
 
 		      else foldl1 (&&) $
-		           map (\ (CGSteps stp) -> main `dot` (flagname$ counter_map M.! stp)) upstream)
+		           map (\ (CGSteps stp) -> main `dot` (flagname$ counter_lookup stp)) upstream)
 	             (do comm "Upstream are all done, and now so are we:"
 		         set (main `dot` (flagname stpind)) 1
-		         app (function$ "printf") [stringconst$ " [autodone] "++show stpC++" Yep, we're done, deps met..."
-						   ++show (upstreamNbrs spec (CGSteps stpC))++"\n"])
-	             (app (function "printf") [stringconst$ " [autodone] "++show stpC++" NOT DONE\n"]))
+			 when debug_autodone$ 
+		           app (function$ "printf") [stringconst$ " [autodone] "++show stpC++": Yep, we're done, deps met..."
+						     ++show (upstreamNbrs spec (CGSteps stpC))++"\n"])
+	             (when debug_autodone$
+		      app (function "printf") [stringconst$ " [autodone] "++show stpC++" NOT DONE\n"]))
 	     (return ())
 
   , beforeTagPut = \ (priv,main, tgC) tag -> 
       do comm "[autodone] Increment the counter that tracks downstream step instances:"
 	 let downstream = map graphNodeName $ filter isStepC $ downstreamNbrs spec (CGTags tgC)
 	 forM_ downstream $ \ destC -> do
-            let counter = main `dot` countername (counter_map M.! destC)
-	    app (function "printf") [stringconst$ " [autodone] "++show stpC++" Incrementing refcount from %d\n", 
-				     "(int)" +++ counter]
+            let counter = main `dot` countername (counter_lookup destC)
+	    when debug_autodone$ 
+	       app (function "printf") [stringconst$ " [autodone] "++show stpC++": Incrementing "++show destC++" refcount to %d\n", 
+					"1 + (int)" +++ counter]
             app (function (counter `dot` "fetch_and_increment")) []
 
+  , beforeEnvWait = 
+     do comm "[autodone] We consider the environment 'done' at this point:"
+	let flag = flagname$ counter_lookup (toAtom special_environment_name)
+        set ("p" `dot` flag) 1
+        when debug_autodone$
+	   app (function "printf") [stringconst$ " [autodone] Environment waiting, considered done.\n"]
   }
 
 -- Graph related utilities used by the above:

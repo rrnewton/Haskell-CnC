@@ -126,6 +126,8 @@ instance Pretty (Type) where
  pPrint (TTuple ty) = text "(" <> commacat ty <> text ")"
 
 
+voidTy = TSym (toAtom "void")
+
 -- Converting types to C++ concrete syntax.
 cppType :: Type -> Doc
 cppType ty = case ty of 

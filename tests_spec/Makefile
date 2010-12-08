@@ -9,7 +9,7 @@ ifeq (Darwin,$(shell uname))
 endif
 
 
-all: tagfun_checking_valid.exe tagfun_depends.exe simple_cycle.exe
+all: tagfun_checking_valid.exe tagfun_depends.exe simple_cycle.exe bigger_cycle.exe
 
 #	wtf g++ -m32 tagfuns1.cpp -ltbbmalloc  -ltbb -lcnc -I$(CNC_INSTALL_DIR)/include/
 
@@ -20,7 +20,11 @@ tagfun_depends.h: tagfun_depends.cnc
 	../cnc trans --depends $<
 
 simple_cycle.h: simple_cycle.cnc
-	../cnc trans $<
+	../cnc trans --autodone  $<
+
+bigger_cycle.h: bigger_cycle.cnc
+	../cnc trans --autodone  $<
+
 
 #============================================================
 
@@ -33,6 +37,9 @@ tagfun_depends.exe: tagfun_depends.cpp tagfun_depends.h
 
 simple_cycle.exe: simple_cycle.cpp simple_cycle.h
 	g++ $(FLAGS) simple_cycle.cpp -o $@
+
+bigger_cycle.exe: bigger_cycle.cpp bigger_cycle.h
+	g++ $(FLAGS) bigger_cycle.cpp -o $@
 
 
 clean:
