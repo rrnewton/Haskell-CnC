@@ -347,8 +347,8 @@ classLike prefix postfix (Syn name) (Syn inherits) m =
 cppClass :: Syntax -> Syntax -> EasyEmit () -> EasyEmit ()
 cppClass = classLike "class" ";"
 
--- cppStruct :: Syntax -> Syntax -> EasyEmit () -> EasyEmit ()
--- cppStruct = classLike "struct" ";"
+cppStruct :: Syntax -> Syntax -> EasyEmit () -> EasyEmit ()
+cppStruct = classLike "struct" ";"
 
 cppConstructor :: Syntax -> [Syntax] -> [(Syntax,Syntax)] -> EasyEmit () -> EasyEmit ()
 cppConstructor (Syn name) args inits body = 

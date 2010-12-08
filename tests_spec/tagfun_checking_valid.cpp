@@ -2,7 +2,6 @@
 
 #include<tagfun_checking_valid.h>
 
-
 template < class ctxt > 
 int S1::execute( const int & tag, ctxt & c) const {
     printf("Step1 exec with tag %d\n", tag);

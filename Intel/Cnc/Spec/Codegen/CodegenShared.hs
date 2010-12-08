@@ -4,6 +4,7 @@ module Intel.Cnc.Spec.Codegen.CodegenShared where
 
 import StringTable.Atom
 import qualified StringTable.AtomSet as AS
+import qualified StringTable.AtomMap as AM
 import Data.List as L
 import Data.Maybe
 import qualified Data.Set as S
@@ -205,13 +206,6 @@ testplugin spec stpC =
 
 debug_autodone = True
 
-fromSetList :: P.Ord a => [(S.Set a, b)] -> M.Map a b
-fromSetList = 
-   foldl' (\ map (set,val) -> 
-	   S.fold (\ nd mp -> M.insert nd val mp)
-	          map set)
-          M.empty
-
 autodonePlugin (spec@CncSpec{graph, steps, nodemap}) =
   let 
       countername num = Syn$t$ "done_counter" ++ show num
@@ -229,21 +223,22 @@ autodonePlugin (spec@CncSpec{graph, steps, nodemap}) =
       setUpstream = S.fromList .  concat . map (upstreamNbrs spec) . S.toList 
       getSteps = S.fromList . filter isStepC . map (fromJust . G.lab graph) . S.toList 
 
+      -- Remove all nodes that are in cycles to find those that remain:
       non_cycle_nodes = S.toList $ foldl' S.difference all_step_nds cycsets
       allnodesets  = cycsets ++ (map S.singleton $ non_cycle_nodes)
+
+      -- Map every node onto exactly one counter.  Nodes in a cycle must have the same counter.
+      counter_map :: AM.AtomMap Int -- Darn, atommap doesn't have mapKeys.
+	   = fromSetList $ 
+	     zip (map (S.map nodeToName) allnodesets) [0..]
+      counter_lookup stp = case AM.lookup stp counter_map of 
+			     Just x -> x
+			     Nothing -> error$ "autodonePlugin: Could not find counter corresponding to step: "++ show stp
       num_counters = length allnodesets
       nodeToName   = graphNodeName . fromJust . G.lab graph
 
-      -- Map every node onto exactly one counter.  Nodes in a cycle must have the same counter.
-      counter_map :: M.Map Atom Int
-	   = M.mapKeys nodeToName $
-      	     fromSetList $ zip allnodesets [0..]
-      counter_lookup stp = case M.lookup stp counter_map of 
-			     Just x -> x
-			     Nothing -> error$ "autodonePlugin: Could not find counter corresponding to step: "++ show stp
-
       -- Here we take the cycles' upstreams and fill in the rest for anything not in a cycle:
-      upstream_map :: M.Map Atom (S.Set CncGraphNode)
+      upstream_map :: AM.AtomMap (S.Set CncGraphNode)
 	   = fromSetList $ 
 	     (map dosingle non_cycle_nodes ++
 	      zip (map (S.map nodeToName) cycsets) cyc_upstreams)
@@ -286,21 +281,18 @@ autodonePlugin (spec@CncSpec{graph, steps, nodemap}) =
          set x (function (main `dot` (countername stpind) `dot` "fetch_and_decrement") [])
 	 when debug_autodone$ 
            app (function "printf") [stringconst$ " [autodone] "++show stpC++": Decremented own refcount to %d\n", x-1]
-	 if_ (x <= 1) -- TEMP FIXME!!!!! CHANGE ME BACK TO (==)
+	 if_ (x == 1)
 	     (do comm " If we transition to a zero count we check our upstreams to see if we are really done."
-	         let upstream = filter isStepC $ upstreamNbrs spec (CGSteps stpC)
+	         let upstream = filter isStepC $ S.toList $ AM.findWithDefault S.empty stpC upstream_map
 	         if_ (if null upstream
-		      then error$ "doneCountingPlugin: missing upstream steps/environment for step collection "++ show stpC
-
--- FIXME: CHANGE THIS TO CYCLE'S UPSTREAM!!
-
-		      else foldl1 (&&) $
+		      then 1 -- error$ "autodone: missing upstream steps/environment for step collection "++ show stpC
+		      else foldl1' (&&) $
 		           map (\ (CGSteps stp) -> main `dot` (flagname$ counter_lookup stp)) upstream)
 	             (do comm "Upstream are all done, and now so are we:"
 		         set (main `dot` (flagname stpind)) 1
 			 when debug_autodone$ 
 		           app (function$ "printf") [stringconst$ " [autodone] "++show stpC++": Yep, we're done, deps met..."
-						     ++show (upstreamNbrs spec (CGSteps stpC))++"\n"])
+						     ++ show (map graphNodeName$ upstreamNbrs spec (CGSteps stpC) :: [Atom]) ++"\n"])
 	             (when debug_autodone$
 		      app (function "printf") [stringconst$ " [autodone] "++show stpC++" NOT DONE\n"]))
 	     (return ())
@@ -323,6 +315,14 @@ autodonePlugin (spec@CncSpec{graph, steps, nodemap}) =
 	   app (function "printf") [stringconst$ " [autodone] Environment waiting, considered done.\n"]
   }
 
+--fromSetList :: P.Ord a => [(S.Set a, b)] -> M.Map a b
+fromSetList ::[(S.Set Atom, b)] -> AM.AtomMap b
+fromSetList = 
+   foldl' (\ map (set,val) -> 
+	   S.fold (\ nd mp -> AM.insert nd val mp)
+	          map set)
+          AM.empty
+
 -- Graph related utilities used by the above:
 
 -- Join together nodes that participate in overlapping cycles:
@@ -340,7 +340,7 @@ joinCycles cycs = foldl' foldin [] (map S.fromList cycs)
 -- Dead-Item-Collection plugin:
 ----------------------------------------------------------------------------------------------------
 
--- This one will extend the doneCountingPlugin and add counters for
+-- This one will extend the autodonePlugin and add counters for
 -- item collections.  When all the steps consuming from an item
 -- collection are 'done' then the item collection can be freed.
 

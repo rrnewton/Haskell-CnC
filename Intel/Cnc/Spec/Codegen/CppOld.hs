@@ -207,8 +207,10 @@ emitCpp (config@CodeGenConfig{..}) (spec @ CncSpec{appname, steps, tags, items, 
    -- Prototype for user step wrappers
    ------------------------------------------------------------   
    let
-       maincontext = t$ appname++"_context_INTERNAL" -- The top-level context (internal)
-       usercontext =     appname++"_context"         -- The top-level context exposed to the user
+       usercontext = appname++"_context"             -- The top-level context exposed to the user
+       maincontext = if areAnyWrapped                -- The top-level context (internal)
+		     then t$ appname++"_context_INTERNAL" 
+		     else t usercontext
    let stepwrapper stp = textAtom stp <> t"_step_wrapper"
 
    when (not old_05_api)$ do
@@ -302,18 +304,17 @@ emitCpp (config@CodeGenConfig{..}) (spec @ CncSpec{appname, steps, tags, items, 
      when gendepends $ 
        forM_ stepls_with_types $ \ (stp,ty) -> 
 	 when (AS.member stp tractible_depends_steps) $
-	 do
-  --	      cname = 
-	    putD$ struct (tuner_name stp <> t" : public CnC::default_tuner< int, tagfun_depends_context >") $ 
-	      t"bool preschedule() const { return false; }" $$
-	      t"template< class dependency_consumer >" $$
-	      (execEasyEmit$ 
+	    cppStruct (Syn$ tuner_name stp)
+		      (Syn$ t"public CnC::default_tuner< "  <>
+			    cppType ty <> t", "<> 
+			    maincontext <> t" >")
+	     (do putS "bool preschedule() const { return false; }"
+	         putS "template< class dependency_consumer >" 
 		 constFunDef voidTy (s"depends") 
 			[TConst$ TRef$ ty, 
 			 TRef$ TSym$ toAtom$ render maincontext, 
 			 TRef$ TSym$ toAtom$ "dependency_consumer"] $ 
 			\ (Syn tag, contextref, deps) -> do
-			  comm "BODY"
 			  let dep = function$ Syn$t$ synToStr$ deps `dot` s"depends"
 			  -- Now iterate through all data collections connected to the step collection:
 			  forM_ (lpre graph$ realmap M.! (CGSteps stp)) $ \ (nd, tgfn) -> 
@@ -325,9 +326,8 @@ emitCpp (config@CodeGenConfig{..}) (spec @ CncSpec{appname, steps, tags, items, 
 					      EE.app dep [contextref `dot` Syn (toDoc itC), Syn resulttag]
 				 Nothing -> comm "Ack.. tag function not available..."
 			     _ -> return ()
+                 return ()
 	       )
-
--- public CnC::default_tuner< int, tagfun_depends_context > // TODO3: derive from default tuner
 
 
    --------------------------------------------------------------------------------
@@ -341,9 +341,10 @@ emitCpp (config@CodeGenConfig{..}) (spec @ CncSpec{appname, steps, tags, items, 
       forM_ stepls_with_types $ \ (stp,stpty) -> when (shouldWrapStep stp) $ do
         generate_wrapper_context config spec stp stpty plug_map maincontext usercontext
 
-   comm "Also, we generate a wrapper for the main context that is exposed to the user:"
-   comm "================================================================================"
-   generate_wrapper_context config spec (toAtom special_environment_name) TInt plug_map maincontext usercontext
+   when areAnyWrapped $ do
+      comm "Also, we generate a wrapper for the main context that is exposed to the user:"
+      comm "================================================================================"
+      generate_wrapper_context config spec (toAtom special_environment_name) TInt plug_map maincontext usercontext
 
    ------------------------------------------------------------
    -- Execute wrapper methods 
@@ -652,13 +653,13 @@ generate_wrapper_context (CodeGenConfig{gendebug})
 
 				             --((_,Just (TF args exps)) : []) -> 
 					     
-				             ((_,Just (TF args exps)) : tl) -> -- TEMPTOGGLE ... permissive, ignoring additional tag functions!
-					       case (args,exps) of  
+				             ((_,Just (TF tfargs exps)) : tl) -> -- TEMPTOGGLE ... permissive, ignoring additional tag functions!
+					       case (tfargs,exps) of  
 					         ([arg], [exp]) -> 
 						    do comm ("Checking tag function "++ show arg ++" -> "++ show exp)
 						       -- TODO: use normal variable decl here:
 						       putD$ tagty <+> (fromAtom arg) <+> t"=" <+> t"* m_context->tag" <> semi
-						       assert (Syn (t"tag") EE.== Syn (pPrint exp))
+						       assert (head args EE.== Syn (pPrint exp))
 						 _ -> error "internal error: tag function correctness not fully implemented yet.  Finish me."
 
 				             _ -> error$ "internal error: tag function correctness codegen: \n w"++show ls

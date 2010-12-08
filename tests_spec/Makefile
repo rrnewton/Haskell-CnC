@@ -14,10 +14,10 @@ all: tagfun_checking_valid.exe tagfun_depends.exe simple_cycle.exe bigger_cycle.
 #	wtf g++ -m32 tagfuns1.cpp -ltbbmalloc  -ltbb -lcnc -I$(CNC_INSTALL_DIR)/include/
 
 tagfun_checking_valid.h: tagfun_checking_valid.cnc  
-	../cnc trans --debug $<
+	../cnc trans --autodone --debug $<
 
 tagfun_depends.h: tagfun_depends.cnc
-	../cnc trans --depends $<
+	../cnc trans --autodone --depends $<
 
 simple_cycle.h: simple_cycle.cnc
 	../cnc trans --autodone  $<
@@ -42,5 +42,13 @@ bigger_cycle.exe: bigger_cycle.cpp bigger_cycle.h
 	g++ $(FLAGS) bigger_cycle.cpp -o $@
 
 
+run:
+	./tagfun_checking_valid.exe 
+	./tagfun_depends.exe 
+	./simple_cycle.exe 
+	./bigger_cycle.exe
+
+
 clean:
-	rm -f *.o *.exe tagfun_checking_valid.h tagfun_depends.h
+	rm -f *.o *.exe tagfun_checking_valid.h tagfun_depends.h simple_cycle.h bigger_cycle.h
+

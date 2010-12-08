@@ -328,11 +328,15 @@ instance Show TagFun where
 -- But really it's just an equality.
 -- Note, the reason these are Exp LISTS is because these are implicitly tuples.
 -- The tag functions are multi-dimensional.
+--
+-- TODO: This function could solve simple equations to get the formal
+-- parameters all to one side of the equation, allowing things like (2*i -> 3*i).
 mkTagFun exps1 exps2 = 
  let e1s = Prelude.map checkConvertTF exps1
      e2s = Prelude.map checkConvertTF exps2
  in if all isTEVar e1s
-    then if not (Prelude.null exps1) && not (Prelude.null exps2)
+    then
+         if not (Prelude.null exps1) && not (Prelude.null exps2)
 	     -- length exps1 == length exps2 
          then Just (TF (Prelude.map unTEVar e1s) e2s)
 	 -- Otherwise there is a mismatch in the number of tag components:
