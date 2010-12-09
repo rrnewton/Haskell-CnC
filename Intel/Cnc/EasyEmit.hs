@@ -356,6 +356,11 @@ cppConstructor (Syn name) args inits body =
 		    (Syn$ commasep$ map (\ (a,b) -> deSyn a <> parens (deSyn b)) inits)
 	      body
 
+-- Constructor method prototypes just look like applications
+constructorPrototype :: Syntax -> [Syntax] -> EasyEmit ()
+constructorPrototype name args = 
+  app (function name) args
+
 -- Curly-brace delimited, indented block:
 -- POSSIBLY INEFFICIENT!
 -- TODO: Implement this by tracking the indent level in the monad:

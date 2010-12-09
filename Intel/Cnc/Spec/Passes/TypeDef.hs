@@ -60,7 +60,6 @@ instance MapTypes (PStatement dec) where
      Constraints s inst els -> Constraints s (mapTypes fn inst) (mapTypes fn els)
      TypeDef _ _ _ -> error "serious internal implementation error"
 
-
 instance MapTypes (CollectionInstance dec) where 
   mapTypes fn inst = case inst of 
    InstName       dec str     -> inst

@@ -1,9 +1,9 @@
 
 
 
-tags<int>       T;
-steps           S;
-reductions<int> R(foo);
+tags<int>       T1;
+steps           S1;
+reductions<int> R1(plus);
 
 // Here is a one-liner:
-env -> T :: S -> R -> env;
+env -> T1 :: S1 -> R1 -> env;
