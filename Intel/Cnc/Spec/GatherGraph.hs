@@ -23,7 +23,7 @@ import StringTable.AtomSet as AS
 import Control.Monad
 import Data.Graph.Inductive as G
 --import Data.Graph.Inductive.NodeMap as NM
---import Debug.Trace
+import Debug.Trace
 
 ----------------------------------------------------------------------------------------------------
 
@@ -41,6 +41,7 @@ coalesceGraph name parsed =
           mapM_ (insMapNodeM . CGSteps) (AS.toList$ steps allnodes)
           mapM_ (insMapNodeM . CGTags)  (L.map fst$ AM.toList$ tags  allnodes)
           mapM_ (insMapNodeM . CGItems) (L.map fst$ AM.toList$ items allnodes)
+          mapM_ (insMapNodeM . CGReductions) (L.map fst$ AM.toList$ reductions allnodes)
 
   (_,(nm,g2)) = --trace ("Done collecting declares.. all nodes: " ++ show g1) $ 
        run g1 $ forM_ parsed collect -- Then add the edges.
@@ -56,8 +57,9 @@ coalesceGraph name parsed =
       Constraints _ _ _  -> return ()
       DeclareExtern      -> return ()
       DeclareTags  _ _ _ -> return ()
-      DeclareItems _ _ _ -> return ()
       DeclareSteps _ _   -> return ()
+      DeclareItems _ _ _         -> return ()
+      DeclareReductions _ _ _ _  -> return ()
       TypeDef      _ _ _ -> return ()
 
 
@@ -68,6 +70,7 @@ collectDecls [] = seedWorld
 collectDecls (DeclareTags  s name ty : tl) = extendTags  name ty $ (checkDup name$ collectDecls tl)
 collectDecls (DeclareItems s name ty : tl) = extendItems name ty $ (checkDup name$ collectDecls tl)
 collectDecls (DeclareSteps s name    : tl) = extendSteps name    $ (checkDup name$ collectDecls tl)
+collectDecls (DeclareReductions s name op ty : tl) = extendReductions name (op,ty) $ (checkDup name$ collectDecls tl)
 collectDecls (_ : tl) = collectDecls tl
 
 -- A lot of other miscellaneous contortion here to the end of supporting legacy syntax:
@@ -75,14 +78,17 @@ collectDecls (_ : tl) = collectDecls tl
 extendItems name ty (a@(CncSpec{..})) = a { items= AM.insert name (mergeTy name ty items) items }
 extendTags  name ty (a@(CncSpec{..})) = a { tags = AM.insert name (mergeTy name ty tags)  tags }
 extendSteps name    (a@(CncSpec{..})) = a { steps= AS.insert name steps }
+extendReductions name opty (a@(CncSpec{..})) = a { reductions= AM.insert name opty reductions }
+--   a { reductions= AM.insert name (op, mergeTy name ty reductions) items }
 
 checkDup atom all = 
     if cncSpecMember atom all
     then error$ "Duplicate declaration of name: '"++ (fromAtom atom) ++"'"
     else all
 cncSpecMember atom (CncSpec{..}) =
-    AM.member atom tags  ||
-    AS.member atom steps ||
+    AM.member atom tags       ||
+    AS.member atom steps      ||
+    AM.member atom reductions ||
     AM.member atom items
 
 ------------------------------------------------------------
@@ -98,7 +104,11 @@ extendWithInstance acc inst =
     InstStepCol _ name ls -> extendSteps (toAtom name) acc
     InstItemCol _ name ls -> extendItems (toAtom name) Nothing acc
     InstTagCol  _ name ls -> extendTags  (toAtom name) Nothing acc
-    _                   -> acc
+--    _                   -> acc
+--    InstReductionCol _ name ls -> extendReductions (toAtom name) Nothing acc
+
+    InstName _ _         -> acc
+    InstStepOrTags _ _ _ -> error$ "extendWithInstance: InstStepOrTags should have been desugared by now: " ++ show inst
 
 extendWithLink acc link = 
   case link of 
@@ -131,14 +141,17 @@ coalesceChain allnodes start ls = loop (process start) ls
     let produce prevs insts next = 
          forM_ insts $ \ (node,exps) -> 
          forM_ prevs $ \ (pnode,pexps) -> 
+           let insert = insMapEdgeM (pnode, node, mkTagFun exps pexps) in
 	   do case (pnode, node) of 
 	        -- Valid combinations for a producer relation:
 		-- This is tricky because depending on whether the left or the right
 		-- hand side is the step collection the tag expressions are interpreted
 		-- differently.
-	        (CGItems _, CGSteps _) -> insMapEdgeM (pnode, node, mkTagFun exps pexps)
-	        (CGSteps _, CGItems _) -> insMapEdgeM (pnode, node, mkTagFun pexps exps)
-	        (CGSteps _, CGTags _)  -> insMapEdgeM (pnode, node, mkTagFun pexps exps)
+	        (CGItems _, CGSteps _)      -> insert
+	        (CGSteps _, CGItems _)      -> insert
+	        (CGReductions _, CGSteps _) -> insert
+	        (CGSteps _, CGReductions _) -> insert
+	        (CGSteps _, CGTags _)       -> insert
 	        (l,r) -> error$ "coalesceChain: invalid put/get relation from '"++graphNodeName l++"' to '"++graphNodeName r++"'"
               loop next tl
     in
@@ -166,6 +179,7 @@ instToNode (CncSpec { .. }) inst =
     let classify name | AS.member name steps = CGSteps name
 		      | AM.member name tags  = CGTags  name
 		      | AM.member name items = CGItems name 
+		      | AM.member name reductions = CGReductions name 
 --		      | isBuiltin (fromAtom name) = CGSteps name
                       | True                      = error$ "Collection was not declared: " ++ show name
     in case inst of 
@@ -201,6 +215,7 @@ seedWorld =
   CncSpec {  steps= AS.fromList builtinSteps
 	  ,  tags=  AM.empty
 	  ,  items= AM.empty
+	  ,  reductions= AM.empty
 	  ,  graph    = error "CncSpec: graph uninitialized"
 	  ,  nodemap  = error "CncSpec: nodemap uninitialized"
 	  ,  appname  = error "CncSpec: appname uninitialized"

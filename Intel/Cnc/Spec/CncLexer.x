@@ -33,7 +33,7 @@ $symchar   = [$symbol ]
 
 -- These are the KEYWORDS for the language:
 @reservedid = 
-	module|fun|tags|items|steps|dense|constrain|prescribes|type
+	module|fun|tags|items|reductions|steps|dense|constrain|prescribes|type
 --step
 
 @reservedop =

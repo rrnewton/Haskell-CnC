@@ -168,7 +168,8 @@ $(HCNCNAME).stripped: viz
 
 $(HCNCNAME): preproc buildtrans
 buildtrans: 
-	ghc -fwarn-unused-imports $(GHCFLAGS) --make Intel/Cnc/Spec/Main.hs -o $(HCNCNAME) 
+	ghc $(GHCFLAGS) --make Intel/Cnc/Spec/Main.hs -o $(HCNCNAME) 
+# -fwarn-unused-imports
 #	ghc -c Intel/Cnc/Spec/CncLexer.hs 
 #	ghc -O --make Intel/Cnc/Spec/Main.hs -o $(HCNCNAME)
 

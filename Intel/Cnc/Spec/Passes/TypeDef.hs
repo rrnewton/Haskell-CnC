@@ -2,7 +2,7 @@
 
 -- This module contains the simple spec transformation pass that desugars type synonyms (TypeDefs)
 
--- Certainl this is a candidate for Scrap-your-boilerplate generic programming.
+-- Certainly this is a candidate for Scrap-your-boilerplate generic programming.
 
 module Intel.Cnc.Spec.Passes.TypeDef where
 
@@ -17,66 +17,78 @@ import Test.HUnit
 
 desugarTypeDefs :: [PStatement dec] -> [PStatement dec]
 desugarTypeDefs input = 
-    map desugar everything_else 
+    mapTypes desugarTy everything_else 
  where 
   synonyms = AM.fromList$ map (\ (TypeDef _ nm ty) -> (nm,ty)) $
 	     filter isdef input
-
   everything_else = filter (not . isdef) input
   isdef (TypeDef _ _ _) = True
   isdef _ = False
-  
-  desugar stmnt = case stmnt of 
-     DeclareTags  s nm mty -> DeclareTags  s nm $ fmap doTy mty 
-     DeclareItems s nm Nothing -> stmnt
-     DeclareItems s nm (Just (ty1,ty2)) -> DeclareItems s nm $ Just (doTy ty1, doTy ty2)
-     DeclareSteps _ _   -> stmnt
-     Function           -> stmnt
-     DeclareExtern      -> stmnt
 
-     Chain insts links      -> Chain (map doInst insts) (map doLink links)
-     Constraints s inst els -> Constraints s (doInst inst) (map doExp els)
-
-     TypeDef _ _ _ -> error "serious internal implementation error"
-
-  doTy ty = 
+  desugarTy ty = 
     case ty of 
      TInt      -> TInt
      TFloat    -> TFloat
      TSym atom -> case AM.lookup atom synonyms of 
 		    Nothing -> TSym atom
 		    Just ty -> ty -- Easy, no constructor application
-     TPtr ty   -> TPtr   $ doTy ty
-     TRef ty   -> TRef   $ doTy ty
-     TDense ty -> TDense $ doTy ty
-     TConst ty -> TConst $ doTy ty
-     TTuple ls -> TTuple $ map doTy ls
-
+     TPtr ty   -> TPtr   $ desugarTy ty
+     TRef ty   -> TRef   $ desugarTy ty
+     TDense ty -> TDense $ desugarTy ty
+     TConst ty -> TConst $ desugarTy ty
+     TTuple ls -> TTuple $ map desugarTy ls
 
   ----------------------------------------------------------------------------------------------------
-  -- Everything below this line is total boilerplate.
+  -- Everything below this line is total boilerplate just to traverse the data-types.
   ----------------------------------------------------------------------------------------------------
 
-  doInst inst = case inst of 
+-- Process all the types, SYB eligible.  
+class MapTypes a where
+  mapTypes :: (Type -> Type) -> a -> a
+
+instance MapTypes (PStatement dec) where 
+  mapTypes fn stmnt = case stmnt of 
+     DeclareTags  s nm mty -> DeclareTags  s nm $ fmap fn mty 
+     DeclareItems s nm Nothing -> stmnt
+     DeclareItems s nm (Just (ty1,ty2)) -> DeclareItems s nm $ Just (fn ty1, fn ty2)
+     DeclareReductions s nm op Nothing -> stmnt
+     DeclareReductions s nm op (Just ty1) -> DeclareReductions s nm op $ Just (fn ty1)
+     DeclareSteps _ _   -> stmnt
+     Function           -> stmnt
+     DeclareExtern      -> stmnt
+     Chain insts links      -> Chain (mapTypes fn insts) (mapTypes fn links)
+     Constraints s inst els -> Constraints s (mapTypes fn inst) (mapTypes fn els)
+     TypeDef _ _ _ -> error "serious internal implementation error"
+
+
+instance MapTypes (CollectionInstance dec) where 
+  mapTypes fn inst = case inst of 
    InstName       dec str     -> inst
-   InstStepOrTags dec str els -> InstStepOrTags dec str $ map doExp els
-   InstTagCol     dec str els -> InstTagCol     dec str $ map doExp els
-   InstItemCol    dec str els -> InstItemCol    dec str $ map doExp els
-   InstStepCol    dec str els -> InstStepCol    dec str $ map doExp els
+   InstStepOrTags dec str els -> InstStepOrTags dec str $ mapTypes fn els
+   InstTagCol     dec str els -> InstTagCol     dec str $ mapTypes fn els
+   InstItemCol    dec str els -> InstItemCol    dec str $ mapTypes fn els
+   InstStepCol    dec str els -> InstStepCol    dec str $ mapTypes fn els
 
-  doLink lnk = case lnk of 
-    ProduceLink    dec insts -> ProduceLink    dec $ map doInst insts
-    PrescribeLink  dec insts -> PrescribeLink  dec $ map doInst insts
-    RevProduceLink dec insts -> RevProduceLink dec $ map doInst insts
+instance MapTypes (RelLink dec) where 
+  mapTypes fn lnk = case lnk of 
+    ProduceLink    dec insts -> ProduceLink    dec $ mapTypes fn insts
+    PrescribeLink  dec insts -> PrescribeLink  dec $ mapTypes fn insts
+    RevProduceLink dec insts -> RevProduceLink dec $ mapTypes fn insts
 
-  -- Expressions don't yet have any type info but we do a meaningless traversal here
-  -- just so we will catch future expressions added...
-  doExp e = case e of
+-- Expressions don't YET have any type info but we do a meaningless traversal here
+-- just so we will catch future expressions added...
+instance MapTypes (Exp dec) where 
+  mapTypes fn e = case e of
    Lit _ _ -> e
    Var _ _ -> e
-   App s rat rands -> App s (doExp rat) (map doExp rands)
-   If  s a b c     -> If  s (doExp a) (doExp b) (doExp c)
+   App s rat rands -> App s (mapTypes fn rat) (mapTypes fn rands)
+   If  s a b c     -> If  s (mapTypes fn a) (mapTypes fn b) (mapTypes fn c)
 
+instance MapTypes a => MapTypes [a] where
+  mapTypes fn = map (mapTypes fn)
+
+instance (MapTypes a, MapTypes b) => MapTypes (a,b) where
+  mapTypes fn (a,b) = (mapTypes fn a, mapTypes fn b)
 
 
 ----------------------------------------------------------------------------------------------------

@@ -139,9 +139,10 @@ data PStatement dec =
    -- When we parse a file we allow statements to be arbitrarily long chains of relations:
    -- We represent this as a starting instance(s) followed by an arbitrary number of links.
    Chain [CollectionInstance dec] [RelLink dec]
- | DeclareTags  dec Atom (Maybe Type)
- | DeclareItems dec Atom (Maybe (Type, Type))
- | DeclareSteps dec Atom 
+ | DeclareTags       dec Atom (Maybe Type)
+ | DeclareItems      dec Atom (Maybe (Type, Type))
+ | DeclareReductions dec Atom Atom (Maybe Type)
+ | DeclareSteps      dec Atom 
 
  -- Type synonyms are of kind * for now...
  | TypeDef dec Atom Type
@@ -157,10 +158,16 @@ instance Pretty (PStatement dec) where
      commacat first <+>
      hsep (map pPrint rest) <> text ";\n"
  pPrint (DeclareTags _ name Nothing)   = text "tags " <> text (fromAtom name) <> text ";\n"
- pPrint (DeclareTags _ name (Just ty)) = text "tags<" <> pPrint ty <> text "> " <> text (fromAtom name) <> text ";\n"
- pPrint (DeclareItems _ name Nothing)  = text "items" <+> text (fromAtom name) <> text ";\n"
+ pPrint (DeclareTags _ name (Just ty)) = text "tags<" <> pPrint ty <> text "> " <> text (fromAtom name) <> t";\n"
+ pPrint (DeclareItems _ name Nothing)  = text "items" <+> text (fromAtom name) <> t";\n"
  pPrint (DeclareItems _ name (Just (ty1,ty2))) = 
-     text "items<" <> pPrint ty1 <> comma <+> pPrint ty2 <> text "> " <> text (fromAtom name) <> text ";\n"
+     t"items<" <> pp ty1 <> comma <+> pp ty2 <> t"> " <> toDoc name <> t";\n"
+
+ pPrint (DeclareReductions _ name op Nothing)  = t"reductions" <+> (toDoc name) <> parens (toDoc op) <> t";\n"
+-- pPrint (DeclareReductions _ name op (Just (ty1,ty2))) = 
+ pPrint (DeclareReductions _ name op (Just ty1)) = 
+     t"reductions<" <> pp ty1 <> t"> " <> toDoc name <> parens (toDoc op) <> t";\n"
+
  pPrint (DeclareSteps _ name) =  text "steps " <> text (fromAtom name) <> text ";\n"
  pPrint (Constraints _ inst exps) = text "constrain " <> pp inst <+> 
 				    hcat (punctuate (text ", ") $ map pp exps) <> text ";\n"
@@ -180,6 +187,7 @@ instance Decorated PStatement where
      Chain insts links -> Chain (map (mapDecor f) insts) (map (mapDecor f) links)
      DeclareTags  s name ty -> DeclareTags  (f s) name ty
      DeclareItems s name ty -> DeclareItems (f s) name ty
+     DeclareReductions s name op ty -> DeclareReductions (f s) name op ty
      DeclareSteps s name    -> DeclareSteps (f s) name
      Constraints  s inst ls -> Constraints  (f s) (mapDecor f inst) (map (mapDecor f) ls)
 
@@ -193,11 +201,12 @@ instance Decorated PStatement where
      Chain (hd:_) _  -> getDecor hd
      Chain [] (hd:_) -> getDecor hd
      Chain [] []     -> error "getDecor: cannot get decoration from an empty 'Chain'.  Shouldn't have such a thing anyway."
-     DeclareTags  s _ _ -> s
-     DeclareItems s _ _ -> s
-     DeclareSteps s _   -> s
-     Constraints  s _ _ -> s
-     TypeDef      s _ _ -> s
+     DeclareTags       s _ _   -> s
+     DeclareItems      s _ _   -> s
+     DeclareReductions s _ _ _ -> s
+     DeclareSteps      s _   -> s
+     Constraints       s _ _ -> s
+     TypeDef           s _ _ -> s
      Function      -> error "getDecor: not implemented yet"
      DeclareExtern -> error "getDecor: not implemented yet"
 
@@ -227,15 +236,18 @@ instance Decorated RelLink where
      RevProduceLink s _ -> s
 
 ------------------------------------------------------------
+
+-- These are references to collections in the
+-- prescribe/produce/consume constructions of the .cnc file.
 data CollectionInstance dec = 
    InstName dec String
    -- TEMP: until the syntax has been figured out we sometimes know
    -- that an instance is a Step OR a Tag collection, but not which.
  | InstStepOrTags dec String [Exp dec]
-
- | InstTagCol     dec String [Exp dec]
- | InstItemCol    dec String [Exp dec]
- | InstStepCol    dec String [Exp dec]
+ | InstTagCol       dec String [Exp dec]
+ | InstItemCol      dec String [Exp dec]
+ | InstReductionCol dec String [Exp dec]
+ | InstStepCol      dec String [Exp dec]
 
  deriving (Eq,Ord,Show,Data,Typeable)
 

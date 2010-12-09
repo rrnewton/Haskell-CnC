@@ -164,8 +164,9 @@ readCnCFile verbosity file = do
   handle <- openFile file ReadMode
   str <- hGetContents handle
 
+  when (verbosity > 2)$ putStrLn "\n                            All Lexed Tokens "
   when (verbosity > 2)$ putStrLn "================================================================================"
-  when (verbosity > 2)$ putStrLn "\nAll Lexed Tokens: "
+
   --when verbose$ print $ hcat $ intersperse (text ", ") $ map (\ (L _ cl str) -> text (show cl) <+> pp str) $ scan_to_list str
   when (verbosity > 2)$ print $ sep $ map (\ (L _ cl str) -> text (show cl) <+> pp str) $ scan_to_list str
        --filter (not . is_comment) $ scan_to_list str -- Even filtering the long lines still doesn't `sep` to do the right thing.
@@ -180,24 +181,24 @@ readCnCFile verbosity file = do
       final_statements = p1
 
   ----------------------------------------
+  when (verbosity > 2)$ putStrLn "\n                          Parsed AST (detailed)"
   when (verbosity > 2)$ putStrLn "================================================================================"
-  when (verbosity > 2)$ putStrLn "\nParsed AST (detailed):"
   when (verbosity > 2)$ sequence_ $ map (print . stripDecor) parsed
 
   -- when verbose$ putStrLn "\nParsed AST rendered as a SExp:"
   -- when verbose$ putStrLn "================================================================================"
   -- when verbose$ sequence_ $ map (\stmt -> putStrLn $ buildList $ sexpSerialize stmt) parsed
 
+  when (verbosity > 1)$ putStrLn "\n                         Pretty printed parsed AST"
   when (verbosity > 1)$ putStrLn "================================================================================"
-  when (verbosity > 1)$ putStrLn "\nPretty printed parsed AST:"
   when (verbosity > 1)$ putStrLn$ renderStyle style $ hcat $ map pPrint parsed
 
   -- [2010.07.23] Lazy parsing complicates this, it must happen after IO that touches the parse:
   evaluate (length str)
   hClose handle -- Cleaner to do this than to wait for garbage collection.
 
+  when (verbosity > 1)$ putStrLn "                            Coalesced CnC Graph"
   when (verbosity > 1)$ putStrLn "================================================================================"
-  when (verbosity > 1)$ putStrLn "\nCoalesced CnC Graph:"
   -- The name of the module is derived from the file name:	   
   let appname = takeBaseName file
       graph = coalesceGraph appname final_statements

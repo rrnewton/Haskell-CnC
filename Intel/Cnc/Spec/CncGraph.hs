@@ -24,6 +24,8 @@ data CncSpec = CncSpec {
   steps :: AtomSet,
   tags  :: AtomMap (Maybe Type),
   items :: AtomMap (Maybe (Type,Type)),
+  reductions :: AtomMap (Atom, Maybe Type), -- Contains 'op' and type.
+
   graph :: CncGraph,
   appname :: String,
   -- Might as well cache this after it is extracted, used by FGL calls:
@@ -42,27 +44,32 @@ type ColName = Atom
 builtinSteps = [toAtom special_environment_name]
 
 data CncGraphNode  = 
-    CGSteps ColName 
-  | CGTags  ColName 
-  | CGItems ColName 
+    CGSteps      ColName 
+  | CGTags       ColName 
+  | CGItems      ColName 
+  | CGReductions ColName 
  deriving (Eq, Ord, Show)
 
 graphNodeName (CGSteps n) = fromAtom n
 graphNodeName (CGTags  n) = fromAtom n
 graphNodeName (CGItems n) = fromAtom n
-
+graphNodeName (CGReductions n) = fromAtom n
 
 instance Show CncSpec where
   show = show . pPrint
 
 instance Pretty CncSpec where
   pPrint (CncSpec{..}) = 
-      text "  All Steps:\n========================================"    $$ 
+      text "============= All Steps ======================"    $$ 
 	   hcat (intersperse (text ", ") $ L.map (text . fromAtom) $ AS.toList steps) $$
-      text "\n  Tag Types:\n========================================" $$ 
+      text "\n============= Tag Types ======================" $$ 
 	   sep (L.map (\(x,y) -> pp((fromAtom x)::String,y)) $ AM.toList tags) $$
-      text "\n  Item Types:\n========================================" $$ 
+      text "\n============= Item Types =====================" $$ 
 	   sep (L.map (\(x,y) -> pp((fromAtom x)::String,y)) $ AM.toList items) $$
+
+      text "\n=========== Reduction Ops/Types ==============" $$ 
+	   sep (L.map (\(x,y) -> pp((fromAtom x)::String,y)) $ AM.toList reductions) $$
+
       text (show graph)
 
 ----------------------------------------------------------------------------------------------------

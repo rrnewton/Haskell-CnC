@@ -82,6 +82,7 @@ import Text.PrettyPrint.HughesPJClass
 	tags		{ L _ LReservedId "tags" }
 	items		{ L _ LReservedId "items" }
 	steps		{ L _ LReservedId "steps" }
+	reductions	{ L _ LReservedId "reductions" }
 	dense		{ L _ LReservedId "dense" }
 	prescribes      { L _ LReservedId "prescribes" }
 
@@ -152,8 +153,21 @@ Decl
   | Mod Mods tags '<' Type '>' var         { [DeclareTags (cLL $3 $7) (tAL $7) (Just $5)] }
   | tags '<' Type '>' var                  { [DeclareTags (combineSrcSpans (lexSpan $1) (lexSpan $>)) (tAL $5) (Just $3)] }
 
+-- TODO: Rearrange this so that the arbitrary numbers of template args
+-- are accepted and an error is thrown if the wrong number are present:
+
   | Mods items var                         { [DeclareItems (cLL $2 $3) (tAL $3) Nothing] }
   | Mods items '<' Type ',' Type '>' var   { [DeclareItems (cLL $2 $8) (tAL $8) (Just ($4, $6))] }
+
+  -- Reductions are similar to item collections except they are parameterized by a reduction op.
+  -- | Mods reductions var '(' var ')'        { [DeclareReductions (cLL $2 $3) (tAL $3) (tAL $5) Nothing] }
+  -- | Mods reductions '<' Type ',' Type '>' var '(' var ')' 
+  --                                          { [DeclareReductions (cLL $2 $8) (tAL $8) (tAL $10) (Just ($4, $6))] }
+
+  | Mods reductions var '(' var ')'        { [DeclareReductions (cLL $2 $3) (tAL $3) (tAL $5) Nothing] }
+  | Mods reductions '<' Type '>' var '(' var ')' 
+                                           { [DeclareReductions (cLL $2 $8) (tAL $6) (tAL $8) (Just $4)] }
+
 
 
   | '<' Type var '>'                       { [DeclareTags (combineSrcSpans (lexSpan $1) (lexSpan $>)) (tAL $3) (Just $2)] }
@@ -225,6 +239,7 @@ Var : var                               { $1 }
     -- Sadly, this error checking should go EVERYWHERE:
     | tags                              { parseErrorSDoc (lexSpan $1) $ text "Keyword 'tags' used incorrectly." }
     | items                             { parseErrorSDoc (lexSpan $1) $ text "Keyword 'items' used incorrectly." }
+    | reductions                        { parseErrorSDoc (lexSpan $1) $ text "Keyword 'reductions' used incorrectly." }
     | steps                             { parseErrorSDoc (lexSpan $1) $ text "Keyword 'steps' used incorrectly." }
     | dense                             { parseErrorSDoc (lexSpan $1) $ text "Keyword 'dense' used incorrectly." }
     | prescribes                        { parseErrorSDoc (lexSpan $1) $ text "Keyword 'prescribes' used incorrectly." }
