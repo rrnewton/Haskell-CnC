@@ -58,6 +58,11 @@ instance StringBuilder (State [String]) where
 ----------------------------------------------------------------------------------------------------
 -- These operate on and produce Doc types:
 
+-- Export this friendly shortcut:
+pp x = pPrint x -- Eta expand, due to monomorphism restriction.
+commacat ls = hcat (intersperse (text ", ") $ map pPrint ls)
+commasep ls = sep (intersperse (text ", ") $ map pPrint ls)
+
 escapeString = foldr showLitChar ""
 
 vbraces d = lbrace $+$ d $+$ rbrace

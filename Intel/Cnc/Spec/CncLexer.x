@@ -1,7 +1,7 @@
 
 {
 module Intel.Cnc.Spec.CncLexer where
-import Debug.Trace
+-- import Debug.Trace
 }
 
 %wrapper "monad"

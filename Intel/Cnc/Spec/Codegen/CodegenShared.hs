@@ -13,16 +13,16 @@ import Control.Monad
 import Intel.Cnc.Spec.AST 
 import Intel.Cnc.Spec.CncGraph
 import qualified Intel.Cnc.EasyEmit as E
-import Intel.Cnc.Spec.CncGraph (ColName)
 import Intel.Cnc.EasyEmit  hiding (not, (||))
 import Intel.Cnc.Spec.Util hiding (app)
 import Prelude hiding ((&&), (==), (<=))
 import qualified Prelude as P
 
-import Debug.Trace
 import Test.HUnit
 import qualified Data.Graph.Inductive as G
 import Data.Graph.Analysis.Algorithms.Common
+
+import Debug.Trace
 
 ----------------------------------------------------------------------------------------------------
 -- This datatype stores the configuration information for backend acode generation.
@@ -206,17 +206,22 @@ testplugin spec stpC =
 
 debug_autodone = True
 
-autodonePlugin (spec@CncSpec{graph, steps, nodemap}) =
+autodonePlugin (spec@CncSpec{graph, steps, items, nodemap}) =
   let 
       countername num = Syn$t$ "done_counter" ++ show num
       flagname    num = Syn$t$ "done_flag"    ++ show num
+      nodeToName   = graphNodeName . fromJust . G.lab graph
+      nameToNode   = fst . (G.mkNode_ nodemap)
+
+      -- Remove item collections before computing cycles (interested in control only):
+      pruned_graph = G.delNodes (map (nameToNode . CGItems) $ AM.keys items) graph 
+      -- TODO: ALTERNATIVELY: Rebuild the graph with only step collections.
+      --step_only_graph = stepOnlyGraph graph
 
       -- NOTE: This includes special_environment_name:
-      all_step_nds = S.fromList$ map (fst . (G.mkNode_ nodemap) . CGSteps) (AS.toList steps)
+      all_step_nds = S.fromList$ map (nameToNode . CGSteps) (AS.toList steps)
 
--- FIXME: REMOVE ITEM COLLECTIONS BEFORE COMPUTING CYCLES:
-
-      cycsets = joinCycles$ cyclesIn' graph
+      cycsets = joinCycles$ cyclesIn' pruned_graph
       -- We compute the upstream dependencies of entire cycles taken together:
       cyc_upstreams = L.map (\ set -> S.difference (setUpstream set) set) $ 
 		      L.map getSteps cycsets
@@ -227,15 +232,16 @@ autodonePlugin (spec@CncSpec{graph, steps, nodemap}) =
       non_cycle_nodes = S.toList $ foldl' S.difference all_step_nds cycsets
       allnodesets  = cycsets ++ (map S.singleton $ non_cycle_nodes)
 
+      
       -- Map every node onto exactly one counter.  Nodes in a cycle must have the same counter.
-      counter_map :: AM.AtomMap Int -- Darn, atommap doesn't have mapKeys.
-	   = fromSetList $ 
-	     zip (map (S.map nodeToName) allnodesets) [0..]
+      counter_map :: AM.AtomMap Int  = fromSetList $ nodesets_counters
+      nodesets_counters = zip (map (S.map nodeToName) allnodesets) [0..] 
+      num_counters = length allnodesets
       counter_lookup stp = case AM.lookup stp counter_map of 
 			     Just x -> x
 			     Nothing -> error$ "autodonePlugin: Could not find counter corresponding to step: "++ show stp
-      num_counters = length allnodesets
-      nodeToName   = graphNodeName . fromJust . G.lab graph
+      -- For convenience, we store a map in the other direction as well, from counter -> nodeset:
+      rev_counter_map = M.fromList $ map (\ (a,b) -> (b,a)) nodesets_counters
 
       -- Here we take the cycles' upstreams and fill in the rest for anything not in a cycle:
       upstream_map :: AM.AtomMap (S.Set CncGraphNode)
@@ -291,8 +297,9 @@ autodonePlugin (spec@CncSpec{graph, steps, nodemap}) =
 	             (do comm "Upstream are all done, and now so are we:"
 		         set (main `dot` (flagname stpind)) 1
 			 when debug_autodone$ 
-		           app (function$ "printf") [stringconst$ " [autodone] "++show stpC++": Yep, we're done, deps met..."
-						     ++ show (map graphNodeName$ upstreamNbrs spec (CGSteps stpC) :: [Atom]) ++"\n"])
+		           app (function$ "printf") [stringconst$ " [autodone] "++ show stpC ++": Node(s) done "
+						     ++ show (S.toList$ rev_counter_map M.! stpind)
+						     ++", deps met: " ++ show upstream ++"\n"])
 	             (when debug_autodone$
 		      app (function "printf") [stringconst$ " [autodone] "++show stpC++" NOT DONE\n"]))
 	     (return ())

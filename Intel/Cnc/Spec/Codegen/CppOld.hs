@@ -16,10 +16,11 @@ module Intel.Cnc.Spec.Codegen.CppOld where
 
 import Intel.Cnc.Spec.Codegen.CodegenShared
 
-import Intel.Cnc.Spec.AST hiding (commacat)
+import Intel.Cnc.Spec.AST 
+import Intel.Cnc.Spec.TagFun
 import Intel.Cnc.Spec.CncGraph
 --import Intel.Cnc.Spec.GatherGraph
-import Intel.Cnc.Spec.Util as U
+import Intel.Cnc.Spec.Util as U hiding (commacat)
 
 import qualified Intel.Cnc.EasyEmit as EE
 import Intel.Cnc.EasyEmit hiding (app, not, (&&), (==), (||))
@@ -37,7 +38,7 @@ import qualified Data.Map as M
 import Data.List
 import Data.Maybe
 import Data.Graph.Inductive hiding (empty)
-import Debug.Trace
+--import Debug.Trace
 
 import qualified StringTable.AtomMap as AM
 import qualified StringTable.AtomSet as AS
@@ -260,8 +261,7 @@ emitCpp (config@CodeGenConfig{..}) (spec @ CncSpec{appname, steps, tags, items, 
      ((flip map) (AM.toList items) $ \ (itC,mty) -> 
        case mty of 
          Nothing -> error$ "CppOld Codegen: item collection without type: "++ (fromAtom itC)
-         Just (ty1,ty2) -> trace ("ITEM COLLECTION WITH TYPE" ++ show (ty1,ty2)) $
-                           t "CnC::item_collection" <> 
+         Just (ty1,ty2) -> t "CnC::item_collection" <> 
                            let extra = 
                                 case ty1 of  
                                   -- In the case where the tag type is dense in all dimensions, turn on CNC_VECTOR:

@@ -12,8 +12,8 @@
 module Intel.Cnc.EasyEmit where
 
 
-import Intel.Cnc.Spec.Util hiding (app)
-import Intel.Cnc.Spec.AST  hiding (commasep)
+import Intel.Cnc.Spec.Util hiding (app, commasep)
+import Intel.Cnc.Spec.AST  
 
 import Control.Monad 
 import qualified  Control.Monad.State.Strict as S 

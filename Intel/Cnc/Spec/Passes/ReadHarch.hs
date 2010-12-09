@@ -23,7 +23,6 @@ import Text.Parsec.Char
 import Text.Parsec.Combinator
 import Text.Parsec.String
 import System.IO
-import Control.Monad
 import Data.List
 --import Data.Set as S hiding (map, filter, partition)
 import Data.Set (Set, member)

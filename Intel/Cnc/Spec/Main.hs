@@ -5,7 +5,7 @@ module Main where
 
 import Intel.Cnc.Spec.CncLexer hiding (main)
 import Intel.Cnc.Spec.CncGrammar
-import Intel.Cnc.Spec.AST
+import Intel.Cnc.Spec.SrcLoc
 import Intel.Cnc.Spec.CncGraph
 import Intel.Cnc.Spec.GatherGraph
 import Intel.Cnc.Spec.Util hiding(t)
@@ -22,15 +22,13 @@ import Intel.Cnc.Spec.Passes.TypeDef
 import Intel.Cnc.Spec.Passes.ReadHarch
 import Intel.Cnc.Spec.Version
 
-import Data.Maybe ( fromMaybe, fromJust )
+import Data.Maybe ( fromJust )
 import qualified Data.Map as M
-import Data.IORef
 import Data.List
-import Data.Function
+--import Data.Function
 
 import Control.Monad hiding (when)
 import Control.Exception 
-import Control.Concurrent
 
 import System.Environment
 import System.Console.GetOpt

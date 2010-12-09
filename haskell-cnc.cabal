@@ -1,10 +1,11 @@
 Name:           haskell-cnc
 
-Version:        0.1.3.103
+Version:        0.1.3.104
 -- [2010.11.10] 0.1.3.100 Bumping slightly after change to CNC_ASSUME_TR1
 -- [2010.11.10] 0.1.3.101 New scheme for extracting version from cabal file.
 -- [2010.12.06] 0.1.3.102 Bumped for recent translator plugin rearchitecture.
 -- [2010.12.06] 0.1.3.103 Bumped for completion of autodone facility.
+-- [2010.12.06] 0.1.3.104 Bumped for fix of autodone to remove item collections re: cycles.
 
 License: BSD3
 License-file:   LICENSE

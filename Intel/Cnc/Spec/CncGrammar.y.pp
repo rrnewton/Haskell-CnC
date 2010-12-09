@@ -6,9 +6,9 @@ import Intel.Cnc.Spec.CncLexer hiding (main)
 import Intel.Cnc.Spec.AST
 import Intel.Cnc.Spec.SrcLoc
 
-import Data.Char
+--import Data.Char
 import StringTable.Atom
-import Data.Data
+--import Data.Data
 import Text.PrettyPrint.HughesPJClass
 
 }

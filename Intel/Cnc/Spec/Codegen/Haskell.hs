@@ -8,17 +8,17 @@
 
 module Intel.Cnc.Spec.Codegen.Haskell where
 
-import Intel.Cnc.Spec.AST
+--import Intel.Cnc.Spec.AST
 import Intel.Cnc.Spec.CncGraph
-import Intel.Cnc.Spec.GatherGraph
+--import Intel.Cnc.Spec.GatherGraph
 import Intel.Cnc.Spec.Util 
-import Control.Monad.State
-import StringTable.Atom
-import Data.Maybe
-import Text.PrettyPrint.HughesPJClass
+--import Control.Monad.State
+--import StringTable.Atom
+--import Data.Maybe
+--import Text.PrettyPrint.HughesPJClass
 
-import qualified StringTable.AtomMap as AM
-import qualified StringTable.AtomSet as AS
+--import qualified StringTable.AtomMap as AM
+--import qualified StringTable.AtomSet as AS
 
 emitHaskell :: StringBuilder m => CncSpec -> m ()
 emitHaskell (spec @ CncSpec{..}) = do

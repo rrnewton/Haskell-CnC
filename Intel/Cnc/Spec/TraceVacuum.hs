@@ -13,11 +13,9 @@ module Intel.Cnc.Spec.TraceVacuum where
 
 import Intel.Cnc.Spec.Util
 
-import Data.Maybe
-import Control.Monad
 import Text.Parsec
-import Text.Parsec.Char
-import Text.Parsec.Combinator
+-- import Text.Parsec.Char
+-- import Text.Parsec.Combinator
 import Text.Parsec.String
 
 import Test.HUnit

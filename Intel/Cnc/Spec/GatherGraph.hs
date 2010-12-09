@@ -9,6 +9,7 @@
 
 module Intel.Cnc.Spec.GatherGraph ( coalesceGraph ) where
 import Intel.Cnc.Spec.AST
+import Intel.Cnc.Spec.TagFun
 import Intel.Cnc.Spec.CncGraph
 import Intel.Cnc.Spec.SrcLoc
 import Intel.Cnc.Spec.Util
@@ -22,7 +23,7 @@ import StringTable.AtomSet as AS
 import Control.Monad
 import Data.Graph.Inductive as G
 --import Data.Graph.Inductive.NodeMap as NM
-import Debug.Trace
+--import Debug.Trace
 
 ----------------------------------------------------------------------------------------------------
 

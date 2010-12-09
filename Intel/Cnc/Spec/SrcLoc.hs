@@ -361,3 +361,19 @@ thenCmp :: Ordering -> Ordering -> Ordering
 thenCmp EQ       ordering = ordering
 thenCmp ordering _        = ordering
 
+
+----------------------------------------------------------------------------------------------------
+-- Type class for decorated things.
+----------------------------------------------------------------------------------------------------
+
+-- | Everything that is decorated with annotations (e.g. source
+-- locations) should be able to provide them or strip them.
+-- This replicates most of the benefit of using a "Located" type.
+--
+-- Some generic programming could probably provide this for free.
+class Decorated t where 
+  mapDecor   :: (a -> b) -> t a -> t b
+  getDecor   :: t a -> a
+  stripDecor :: t a -> t ()
+  stripDecor = mapDecor (\_ -> ())
+

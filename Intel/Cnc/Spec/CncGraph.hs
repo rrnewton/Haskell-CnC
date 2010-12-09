@@ -8,6 +8,7 @@ module Intel.Cnc.Spec.CncGraph where
 
 import Intel.Cnc.Spec.Util 
 import Intel.Cnc.Spec.AST
+import Intel.Cnc.Spec.TagFun
 import Data.List as L
 import Data.Maybe
 import Data.Map
@@ -17,8 +18,6 @@ import StringTable.AtomSet as AS
 import Text.PrettyPrint.HughesPJClass hiding (Style)
 import Data.Graph.Inductive as G
 
-import Debug.Trace
-
 -- The total "Spec" includes the graph and other metadata.
 -- Collect a global set of all collection names.
 data CncSpec = CncSpec {
@@ -27,9 +26,9 @@ data CncSpec = CncSpec {
   items :: AtomMap (Maybe (Type,Type)),
   graph :: CncGraph,
   appname :: String,
-  -- Might as well cache this after it is extracted:
+  -- Might as well cache this after it is extracted, used by FGL calls:
   nodemap :: NodeMap CncGraphNode,
-  -- Annoyingly, nodemaps are essentially unreadable and useless:
+  -- Annoyingly, FGL nodemaps are essentially unreadable and useless, hence this:
   realmap :: Map CncGraphNode Node,
   -- We store the graph in a "flat" form and separately keep a tree of partitions:
   harchtree :: ()
@@ -95,6 +94,7 @@ isItemC _           = False
 isStepC (CGSteps _) = True
 isStepC _           = False
 
+----------------------------------------------------------------------------------------------------
 
 -- | Get upstream neighbors in the CnC graph.
 -- This routine sees *through* tag collections.
@@ -118,3 +118,8 @@ nbrHelper adjacent (spec@CncSpec{..}) nodelab =
     process x@(CGSteps _) = [x]
     process x@(CGItems _) = [x]
     process x@(CGTags _) = nbrHelper adjacent spec x
+
+
+-- | Extract a subgraph of the full CnC graph that only contains step collections (including 'env').
+stepOnlyGraph :: CncGraph -> Gr ColName ()
+stepOnlyGraph = error "stepOnlyGraph: TODO: implement me"
