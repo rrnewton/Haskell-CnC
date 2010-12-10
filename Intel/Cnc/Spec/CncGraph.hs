@@ -7,6 +7,7 @@
 module Intel.Cnc.Spec.CncGraph where
 
 import Intel.Cnc.Spec.Util 
+import Intel.Cnc.Spec.SrcLoc
 import Intel.Cnc.Spec.AST
 import Intel.Cnc.Spec.TagFun
 import Data.List as L
@@ -24,7 +25,7 @@ data CncSpec = CncSpec {
   steps :: AtomSet,
   tags  :: AtomMap (Maybe Type),
   items :: AtomMap (Maybe (Type,Type)),
-  reductions :: AtomMap (Atom, Maybe Type), -- Contains 'op' and type.
+  reductions :: AtomMap (Atom, Exp (), Maybe (Type,Type)), -- Contains 'op' and type.
 
   graph :: CncGraph,
   appname :: String,

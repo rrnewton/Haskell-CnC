@@ -51,8 +51,8 @@ instance MapTypes (PStatement dec) where
      DeclareTags  s nm mty -> DeclareTags  s nm $ fmap fn mty 
      DeclareItems s nm Nothing -> stmnt
      DeclareItems s nm (Just (ty1,ty2)) -> DeclareItems s nm $ Just (fn ty1, fn ty2)
-     DeclareReductions s nm op Nothing -> stmnt
-     DeclareReductions s nm op (Just ty1) -> DeclareReductions s nm op $ Just (fn ty1)
+     DeclareReductions s nm op exp Nothing    -> DeclareReductions s nm op (mapTypes fn exp) Nothing
+     DeclareReductions s nm op exp (Just (ty1,ty2)) -> DeclareReductions s nm op (mapTypes fn exp) (Just (fn ty1, fn ty2))
      DeclareSteps _ _   -> stmnt
      Function           -> stmnt
      DeclareExtern      -> stmnt

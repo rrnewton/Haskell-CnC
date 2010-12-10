@@ -164,9 +164,9 @@ Decl
   -- | Mods reductions '<' Type ',' Type '>' var '(' var ')' 
   --                                          { [DeclareReductions (cLL $2 $8) (tAL $8) (tAL $10) (Just ($4, $6))] }
 
-  | Mods reductions var '(' var ')'        { [DeclareReductions (cLL $2 $3) (tAL $3) (tAL $5) Nothing] }
-  | Mods reductions '<' Type '>' var '(' var ')' 
-                                           { [DeclareReductions (cLL $2 $8) (tAL $6) (tAL $8) (Just $4)] }
+  | Mods reductions var '(' var ',' Exp ')' { [DeclareReductions (cLL $2 $3) (tAL $3) (tAL $5) $7 Nothing] }
+  | Mods reductions '<' Type ',' Type '>' var '(' var ',' Exp ')' 
+                                            { [DeclareReductions (cLL $2 $10) (tAL $8) (tAL $10) $12 (Just ($4, $6))] }
 
 
 

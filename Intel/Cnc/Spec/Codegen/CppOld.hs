@@ -217,7 +217,7 @@ emitCpp (config@CodeGenConfig{..}) (spec @ CncSpec{appname, steps, tags, items, 
    when (not old_05_api)$ do
      putS  "// Forward declaration of the context class (representing the CnC graph)\n"
      putD$ t"class " <> maincontext <> t";"
-     putD$ t"class " <> t usercontext <> t";"
+     when areAnyWrapped$ putD$ t"class " <> t usercontext <> t";"
 
      maybeComment [t"", t"Type definitions for wrappers around steps."]
 	(forM_ stepls_with_types $ \ (stp,ty) -> when (shouldWrapStep stp) $ do
@@ -275,9 +275,9 @@ emitCpp (config@CodeGenConfig{..}) (spec @ CncSpec{appname, steps, tags, items, 
      comm "Reduction collection members:"
      forM_ (AM.toList reductions) $ \ (rdC, mty) -> 
        case mty of 
-         (_, Nothing) -> error$ "CppOld.hs Codegen: reduction collection without type: "++ (fromAtom rdC)
-         (op, Just ty) -> var (doc2Ty$ t "CnC::reduction_collection" <> angles (cppType ty))
-		              (atomToSyn rdC)
+         (_, _, Nothing) -> error$ "CppOld.hs Codegen: reduction collection without type: "++ (fromAtom rdC)
+         (op, exp, Just (ty1,ty2)) -> var (doc2Ty$ t "CnC::reduction_collection" <> angles (cppType ty1 <> t", " <> cppType ty2))
+				          (atomToSyn rdC)
 
      maybeComment [t"", t" Keys for thread local storage:"] $ 
        forM_ stepls $ \stp -> 
@@ -403,33 +403,28 @@ emitCpp (config@CodeGenConfig{..}) (spec @ CncSpec{appname, steps, tags, items, 
    ------------------------------------------------------------
    putS "\n\n"
    putS "// Finally, define the constructor for the main context:\n"
-   when (areAnyWrapped && not old_05_api)$ putS "// (Note that this occurs AFTER the private contexts are defined.)\n"
-   putD $ 
-     (hangbraces 
-       (maincontext <> t"::" <> maincontext <> parens empty <+> colon $$
-     	-- Initializer list:
-     	(nest 6 $ vcat $ 
-         (punctuate commspc $ 
-	  if old_05_api then [] else  
-	   -- ASSUMPTION, THERE WILL BE AT LEAST ONE STEP COLLECTION:
-     	   t "// Initialize step collections" :
-           ((flip map) stepls $ \ stp -> 
-	      -- Disabling this:
-	      -- t"// "<> privcontext_member stp <> parens (t"new "<> privcontext stp <> parens (t"*this")) <> commspc $$
-     	      (t$ step_obj$ fromAtom stp) <> parens (t"this") 
-     	   )) ++
+   --when (areAnyWrapped && not old_05_api) $ do 
+   when (not old_05_api) $ do 
+     putS "// (Note that this occurs AFTER the private contexts are defined.)\n"
+     cppConstructor (Syn$ maincontext <> t"::" <> maincontext) [] -- Name, Args
+       -- Initializer list:
+       ((if old_05_api then [] else  
+     	   -- t "// Initialize step collections" :
+          ((flip map) stepls $ \ stp -> (Syn$ t$ step_obj$ fromAtom stp, s"this"))) ++
 
-     	 t "// Initialize tag collections" :
-     	 ((flip map) (AM.toList tags) $ \ (tg,Just ty) -> 
-     	   t", " <> textAtom tg <> parens (t "this, false") 
-     	 ) ++ 
-     	 t "// Initialize item collections" :
-     	 ((flip map) (AM.toList items) $ \ (itC,Just (ty1,ty2)) -> 
-     	   t", " <> textAtom itC <> parens (t "this")
-     	 )))
-       indent 
+     	  -- t "// Initialize tag collections" :
+     	  ((flip map) (AM.toList tags) $ \ (tg,Just ty) -> (atomToSyn tg, s"this, false")) ++ 
+
+      	  -- t "// Initialize item collections" :
+     	  ((flip map) (AM.toList items) $ \ (itC,Just (ty1,ty2)) -> (atomToSyn itC, s "this")) ++ 
+
+          -- t "// Initialize reduction collections: "
+     	  ((flip map) (AM.toList reductions) $ \ (rdC, (op, exp, Just ty)) -> (atomToSyn rdC, Syn(pPrint exp <> t", & "<> textAtom op <> t", this")))
+	  ) $
+
        -- Body of the constructor
-       (vcat $ 
+       putD
+       (nest 6 $ vcat $ 
          [-- Create objects for all step collections:
      	  -- This was an intermediate step in our API evolution:
      	  -- (vcat$ (flip map) stepls $ \ stp -> 
@@ -506,7 +501,7 @@ emitCpp (config@CodeGenConfig{..}) (spec @ CncSpec{appname, steps, tags, items, 
 	 (maybeComment [t"",t"Finally global state added by plugins is initalized:"] $
 	   forM_ (AM.toList plug_map) $ \ (stpC,hooks) ->
 	     sequence_ $ map (snd . addGlobalState) hooks )]
-	))
+	)
 
    ------------------------------------------------------------
    -- Finish up

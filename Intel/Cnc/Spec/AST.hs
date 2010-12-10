@@ -141,7 +141,7 @@ data PStatement dec =
    Chain [CollectionInstance dec] [RelLink dec]
  | DeclareTags       dec Atom (Maybe Type)
  | DeclareItems      dec Atom (Maybe (Type, Type))
- | DeclareReductions dec Atom Atom (Maybe Type)
+ | DeclareReductions dec Atom Atom (Exp dec) (Maybe (Type, Type))
  | DeclareSteps      dec Atom 
 
  -- Type synonyms are of kind * for now...
@@ -163,10 +163,11 @@ instance Pretty (PStatement dec) where
  pPrint (DeclareItems _ name (Just (ty1,ty2))) = 
      t"items<" <> pp ty1 <> comma <+> pp ty2 <> t"> " <> toDoc name <> t";\n"
 
- pPrint (DeclareReductions _ name op Nothing)  = t"reductions" <+> (toDoc name) <> parens (toDoc op) <> t";\n"
+ pPrint (DeclareReductions _ name op exp Nothing)  = 
+     t"reductions" <+> (toDoc name) <> parens (toDoc op <> t", " <> pPrint exp) <> t";\n"
 -- pPrint (DeclareReductions _ name op (Just (ty1,ty2))) = 
- pPrint (DeclareReductions _ name op (Just ty1)) = 
-     t"reductions<" <> pp ty1 <> t"> " <> toDoc name <> parens (toDoc op) <> t";\n"
+ pPrint (DeclareReductions _ name op exp (Just ty1)) = 
+     t"reductions<" <> pp ty1 <> t"> " <> toDoc name <> parens (toDoc op <> t", " <> pPrint exp) <> t";\n"
 
  pPrint (DeclareSteps _ name) =  text "steps " <> text (fromAtom name) <> text ";\n"
  pPrint (Constraints _ inst exps) = text "constrain " <> pp inst <+> 
@@ -187,7 +188,8 @@ instance Decorated PStatement where
      Chain insts links -> Chain (map (mapDecor f) insts) (map (mapDecor f) links)
      DeclareTags  s name ty -> DeclareTags  (f s) name ty
      DeclareItems s name ty -> DeclareItems (f s) name ty
-     DeclareReductions s name op ty -> DeclareReductions (f s) name op ty
+     DeclareReductions s name op exp ty -> DeclareReductions (f s) name op (mapDecor f exp) ty
+--     DeclareReductions s name op exp ty -> DeclareReductions (f s) name op exp ty
      DeclareSteps s name    -> DeclareSteps (f s) name
      Constraints  s inst ls -> Constraints  (f s) (mapDecor f inst) (map (mapDecor f) ls)
 
@@ -203,7 +205,7 @@ instance Decorated PStatement where
      Chain [] []     -> error "getDecor: cannot get decoration from an empty 'Chain'.  Shouldn't have such a thing anyway."
      DeclareTags       s _ _   -> s
      DeclareItems      s _ _   -> s
-     DeclareReductions s _ _ _ -> s
+     DeclareReductions s _ _ _ _ -> s
      DeclareSteps      s _   -> s
      Constraints       s _ _ -> s
      TypeDef           s _ _ -> s

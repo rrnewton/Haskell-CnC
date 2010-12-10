@@ -59,7 +59,7 @@ coalesceGraph name parsed =
       DeclareTags  _ _ _ -> return ()
       DeclareSteps _ _   -> return ()
       DeclareItems _ _ _         -> return ()
-      DeclareReductions _ _ _ _  -> return ()
+      DeclareReductions _ _ _ _ _ -> return ()
       TypeDef      _ _ _ -> return ()
 
 
@@ -70,7 +70,9 @@ collectDecls [] = seedWorld
 collectDecls (DeclareTags  s name ty : tl) = extendTags  name ty $ (checkDup name$ collectDecls tl)
 collectDecls (DeclareItems s name ty : tl) = extendItems name ty $ (checkDup name$ collectDecls tl)
 collectDecls (DeclareSteps s name    : tl) = extendSteps name    $ (checkDup name$ collectDecls tl)
-collectDecls (DeclareReductions s name op ty : tl) = extendReductions name (op,ty) $ (checkDup name$ collectDecls tl)
+collectDecls (DeclareReductions s name op exp tys : tl) = 
+       extendReductions name (op, mapDecor (const ()) exp, tys)
+       $ (checkDup name$ collectDecls tl)
 collectDecls (_ : tl) = collectDecls tl
 
 -- A lot of other miscellaneous contortion here to the end of supporting legacy syntax:
@@ -106,7 +108,6 @@ extendWithInstance acc inst =
     InstTagCol  _ name ls -> extendTags  (toAtom name) Nothing acc
 --    _                   -> acc
 --    InstReductionCol _ name ls -> extendReductions (toAtom name) Nothing acc
-
     InstName _ _         -> acc
     InstStepOrTags _ _ _ -> error$ "extendWithInstance: InstStepOrTags should have been desugared by now: " ++ show inst
 

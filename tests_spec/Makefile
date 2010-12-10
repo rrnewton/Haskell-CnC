@@ -1,15 +1,11 @@
 
-
-
-
 FLAGS= -I$(CNC_INSTALL_DIR)/include -L$(CNC_INSTALL_DIR)/lib/$(CNC_ARCH_PLATFORM) -ltbbmalloc -ltbb -lcnc 
 
 ifeq (Darwin,$(shell uname))
   FLAGS+= -m32 
 endif
 
-
-all: tagfun_checking_valid.exe tagfun_depends.exe simple_cycle.exe bigger_cycle.exe
+all: tagfun_checking_valid.exe tagfun_depends.exe simple_cycle.exe bigger_cycle.exe reduction_test.exe
 
 #	wtf g++ -m32 tagfuns1.cpp -ltbbmalloc  -ltbb -lcnc -I$(CNC_INSTALL_DIR)/include/
 
@@ -25,6 +21,8 @@ simple_cycle.h: simple_cycle.cnc
 bigger_cycle.h: bigger_cycle.cnc
 	../cnc trans --autodone  $<
 
+reduction_test.h: reduction_test.cnc
+	../cnc trans --autodone  $<
 
 #============================================================
 
@@ -41,13 +39,15 @@ simple_cycle.exe: simple_cycle.cpp simple_cycle.h
 bigger_cycle.exe: bigger_cycle.cpp bigger_cycle.h
 	g++ $(FLAGS) bigger_cycle.cpp -o $@
 
+reduction_test.exe: reduction_test.cpp reduction_test.h
+	g++ $(FLAGS) reduction_test.cpp -o $@
 
 run:
 	./tagfun_checking_valid.exe 
 	./tagfun_depends.exe 
 	./simple_cycle.exe 
 	./bigger_cycle.exe
-
+	./reduction_test.exe
 
 clean:
 	rm -f *.o *.exe tagfun_checking_valid.h tagfun_depends.h simple_cycle.h bigger_cycle.h
