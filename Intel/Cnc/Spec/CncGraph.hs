@@ -101,6 +101,9 @@ isItemC (CGItems _) = True
 isItemC _           = False
 isStepC (CGSteps _) = True
 isStepC _           = False
+isReductionC (CGReductions _) = True
+isReductionC _                = False
+
 
 ----------------------------------------------------------------------------------------------------
 
@@ -125,6 +128,7 @@ nbrHelper adjacent (spec@CncSpec{..}) nodelab =
     labs  = catMaybes$ L.map (lab graph) (adjacent graph nd)
     process x@(CGSteps _) = [x]
     process x@(CGItems _) = [x]
+    process x@(CGReductions _) = [x]
     process x@(CGTags _) = nbrHelper adjacent spec x
 
 

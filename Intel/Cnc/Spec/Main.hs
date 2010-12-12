@@ -41,6 +41,7 @@ import System.Exit
 import Text.Printf
 import Text.PrettyPrint.HughesPJClass
 import Test.HUnit
+import Debug.Trace
 
 -- These expand the file size quite a bit.  Not committing to include right now:
 -- #define CNCVIZ
@@ -52,7 +53,8 @@ import Intel.Cnc.Spec.CncViz as Viz
 
 data Flag 
     = Verbose Int | Version | Help | Debug 
-    | GenTracing | GenDepends | AutoDone | NoStepDefs | SelfTest
+    | GenTracing | GenDepends | NoStepDefs | SelfTest
+    | AutoDone | AutoDoneDbg
     | Cpp | CppOld | Haskell
  -- | Input String  | LibDir String
     | Output String
@@ -98,7 +100,15 @@ translate_options =
      , Option []        ["debug"]   (NoArg Debug)             "generate extra code for correctness checking"
      , Option []        ["tracing"] (NoArg GenTracing)        "generate code in which tracing is on by default"
      , Option []        ["depends"] (NoArg GenDepends)        "generate depends functions from spec where possible"
-     , Option []        ["autodone"] (NoArg AutoDone)       "track collection completion and signal reduction-completion automatically"
+    , Option []        ["autodone"] (NoArg AutoDone)          "track collection completion and signal reduction-completion automatically"
+    , Option []        ["autodonedbg"] (NoArg AutoDoneDbg)    "print additional messages for debugging autodone facility"
+
+     -- , Option []     ["autodone"] (OptArg 
+     -- 				   (\ arg -> case arg of 
+     -- 				              Just str -> trace str $ AutoDone
+     -- 				              Nothing -> AutoDone)
+     -- 				   "mode")
+     -- 		                  "track collection completion and signal reduction-completion automatically"
 
 --     , Option []        ["defsteps"] (NoArg GenTracing)$  "[c++] rather than the user defining custom types for each step,\n"++
 --	                                                  "      emit default versions within the generated header"
@@ -468,7 +478,8 @@ main2 argv = do
          Debug       -> return cfg{ gendebug=True, wrapall=True }
          GenTracing  -> return cfg{ gentracing=True } 
          GenDepends  -> return cfg{ gendepends=True } 
-         AutoDone    -> return cfg{ plugins= autodonePlugin : plugins cfg } 
+         AutoDone    -> return cfg{ plugins= reductionDonePlugin False : plugins cfg } 
+         AutoDoneDbg -> return cfg{ plugins= reductionDonePlugin True : plugins cfg } 
          NoStepDefs  -> return cfg{ genstepdefs=False } 
 
 	 m | codegenmode_option m -> return cfg

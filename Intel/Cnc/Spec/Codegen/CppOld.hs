@@ -529,6 +529,7 @@ emitStep appname name ty = putD$
 constRefType ty = t "const" <+> cppType ty <+> t "&"
 
 
+
 ------------------------------------------------------------------------------------------------------------------------
 ------------------------------------------------------------------------------------------------------------------------
 
@@ -538,7 +539,7 @@ constRefType ty = t "const" <+> cppType ty <+> t "&"
 -- 
 --generate_wrapper_context :: Atom -> Type -> EasyEmit ()
 generate_wrapper_context (CodeGenConfig{gendebug})
-			 (spec @ CncSpec{appname, steps, tags, items, graph, realmap}) 
+			 (spec @ CncSpec{appname, steps, tags, items, reductions, graph, realmap}) 
 			 stp stpty plug_map maincontext usercontext = 
    let 
        is_top_context = (stp == toAtom special_environment_name)
@@ -605,7 +606,7 @@ generate_wrapper_context (CodeGenConfig{gendebug})
 			    doplugs afterTagPut
 			     
 		       return ()
--- FIXME FIXME TODO TODO: Factor this to merge it with Item collections.
+-- FIXME FIXME TODO TODO: Factor this to merge it with Item/Reduction collections.
 		       ) 
 
   	   comm ""
@@ -614,123 +615,22 @@ generate_wrapper_context (CodeGenConfig{gendebug})
 	     (putD$ textAtom tgC <> t"_wrapper" <+> textAtom tgC <> semi)
 
            ------------------------------------------------------------   
-	   -- Wrap item collections:
+           comm ""
+	   comm "Wrappers for reduction collections:" 
            ------------------------------------------------------------   
-	   -- FIXME: No reason to wrap ALL item collections.
+           forM_ (AM.toList reductions) $ \ (redC, (op, init, Just (ty1,ty2))) -> do
+	     wrap_item_or_reduction_collection "reduction" redC ty1 ty2 classname stp plug_map fprintf stderr abort maincontext realmap gendebug graph
+  	   comm ""
+ 	   comm "PUBLIC MEMBERS: Reduction collections are all wrapped for now:" 
+	   forM_ (AM.toList reductions) $ \ (redC, (op, init, Just (ty1,ty2))) -> 
+	     (putD$ textAtom redC <> t"_wrapper" <+> textAtom redC <> semi)
 
+           ------------------------------------------------------------   
            comm ""
 	   comm "Wrappers for item collections:" 
-
-           forM_ (AM.toList items) $ \ (itC,Just (ty1,ty2)) -> 
-	    (
-	    let tagty = cppType ty1
-
-	        -- A reused bit of syntax for wrapper get/put methods:
- 	        -- (This is one of those things that you don't want to duplicate, 
-		--  but it has too many arguments and is poorly abstracted.)
-	        wrapGP doret retty nm args isPut = 
-		       -- First let's put together the function's arguments:
-                       let -- args' = map (\ (tyD,v) -> tyD <+> text v) args 
-			   -- decls = commacat args'
-			   -- vars  = commacat $ map (text . snd) args
-			   doplugs project = execEasyEmit$ 
-		               forM_ (AM.findWithDefault [] stp plug_map) $ \ hooks ->
-				   project hooks (Syn$ t$ snd$ head args, Syn$ t$ snd$ head$tail args, itC)
-					         (Syn$ t$ snd$ head args, Syn$ t$ snd$ head$tail args)
-		       in
-
-		       inlineFunDef retty (s nm) (map (doc2Ty . fst) args) $ \ (args::[Syntax]) -> 
-			    putD$ 
-				 (-- CHECK TAG FUNCTIONS
-				  --------------------------------------------------------------------------------
-				  let checkTagFun stp target getnbrs = 
-				        -- TODO INSERT CORRECTNESS CHECKING HERE:
-				        let stpnd  = realmap M.! (CGSteps stp)
-				            itemnd = realmap M.! target
-				            gctxt  = context graph itemnd
-				            lnhbrs = getnbrs gctxt-- lpre' gctxt ++ lsuc' gctxt
-				            ls =  filter (\ (nd,lab) -> nd == stpnd) lnhbrs
-	 			            -- [(_,tf)] = filter (\ (nd,lab) -> nd == stpnd)$  lpre' gctxt				            
-				            --[(_,tf)] = trace (" LENGTH "++ show (length ls) ++" "++ show stpnd ++" "++ show itemnd++" "++ show lnhbrs) ls
-				        in 
-				           execEasyEmit$
-				           case ls of 
-				             -- If we have no relationship to that collection its an error to access it:
-
-				             [] -> do let str = printf "CnC graph violation: should not access collection '%s' from '%s'" 
-							               (graphNodeName target :: String) (show stp) 
-						      EE.app fprintf [stderr, stringconst$ str]
-				                      EE.app abort[]
-
-				             [(_,Nothing)] -> comm "No tag function to check..."
-
-				             --((_,Just (TF args exps)) : []) -> 
-					     
-				             ((_,Just (TF tfargs exps)) : tl) -> -- TEMPTOGGLE ... permissive, ignoring additional tag functions!
-					       case (tfargs,exps) of  
-					         ([arg], [exp]) -> 
-						    do comm ("Checking tag function "++ show arg ++" -> "++ show exp)
-						       -- TODO: use normal variable decl here:
-						       putD$ tagty <+> (fromAtom arg) <+> t"=" <+> t"* m_context->tag" <> semi
-						       assert (head args EE.== Syn (pPrint exp))
-						 _ -> error "internal error: tag function correctness not fully implemented yet.  Finish me."
-
-				             _ -> error$ "internal error: tag function correctness codegen: \n w"++show ls
-				  in				  
-				  (if gendebug -- Optionally include debugging assertions.
-        	  	            then checkTagFun stp (CGItems itC) (if isPut then lpre' else lsuc') 
-				    else empty) $$
-				  --------------------------------------------------------------------------------
-				  -- TODO: Factor tagfun correctness into a Plugin
-				  --------------------------------------------------------------------------------
-				  -- Execute plugin hooks:
-				  -- FIXME: This should be put OR get..
-				  (if isPut 
-				   then doplugs beforeItemPut
-				   else doplugs beforeItemGet) $$
-				  --------------------------------------------------------------------------------
-				  (if doret then t"return " else t"") <>
-				  t "m_"<> textAtom itC <> t"." <> t nm <> parens (commacat$ map deSyn args) <> semi $$
-				  --------------------------------------------------------------------------------
-				  (if isPut 
-				   then doplugs afterItemPut
-				   else doplugs afterItemGet)
-				 )
-
-                -- Basic get or put:
-		basicGP nm isPut = wrapGP False voidTy nm 
-				   [(mkConstRef tagty, "tag"), 
-				    ((if isPut then mkConstRef else mkRef) (cppType ty2) , "ref")] isPut
-
-	        wrapper = textAtom itC <> t"_wrapper"
-	        member  = t"m_" <> textAtom itC
-	    in do 
-	    comm "The item collection wrapper: A 'NoOp' wrapper class that does nothing: "
-	    cppClass (Syn wrapper) (s"")
-	          (do putS "public:"  
-		      putD$ mkPtr classname <> t" m_context;" 
-		      putD$ mkPtr maincontext <> t" parent_context;\n" 
-
-		      putD$ t"CnC::item_collection" <> angles (cppType ty1 <>commspc<> cppType ty2) <> t" & " <> member <> semi $$ t"" 
-                      comm "The constructor here needs to grab a reference from the main context:"
-	 	      cppConstructor (Syn wrapper)    -- Name.
-				     [Syn$ param (mkRef maincontext) (t"p"),
-				      Syn$ param (mkPtr classname)   (t"c")]
-		                     [(Syn$ member, Syn$ t"p." <> textAtom itC)]
-		                     (do set (s"m_context")      (s"c")  
-		                         set (s"parent_context") (s"&p"))
-
-		      -- Just three methods: two variants of get and one put.
-		      basicGP "get" False 
-		      basicGP "put" True 
-		      if oldstyle_get_method 
-		       then do wrapGP True ty2 "get" [(mkConstRef (cppType ty1),"tag")] False
-			       return ()
-		       else return ()
-		      ) 
-            putS "")
-
-           -- Declare MEMBERS
+           ------------------------------------------------------------   
+           forM_ (AM.toList items) $ \ (itC,Just (ty1,ty2)) -> do
+	     wrap_item_or_reduction_collection "item" itC ty1 ty2 classname stp plug_map fprintf stderr abort maincontext realmap gendebug graph
   	   comm ""
  	   comm "PUBLIC MEMBERS: Item collections are all wrapped for now:" 
 	   forM_ (AM.toList items) $ \ (itC, Just (ty1,ty2)) -> 
@@ -763,9 +663,15 @@ generate_wrapper_context (CodeGenConfig{gendebug})
 		       -- In this case we initialize our own copy of the context rather than taking it as argument:
 		       then [(s"p", s"")]
 		       else []) ++
+		      -- Item collections:
 		      ((flip map) (AM.toList items) $ \ (itC, Just (ty1,ty2)) -> 
 		       (atomToSyn itC, s"p, this")
 		      )  ++		
+
+		      ((flip map) (AM.toList reductions) $ \ (redC, _) -> 
+		       (atomToSyn redC, s"p, this")
+		      ) ++ 
+
 		      ((flip map) (AM.toList tags) $ \ (tgC, Just ty) -> 
 		       --(atomToSyn tgC, s"p" `dot` atomToSyn tgC)
 		       (atomToSyn tgC, s"p, this") -- This is for the new, WRAPPED, tag collection.
@@ -777,6 +683,135 @@ generate_wrapper_context (CodeGenConfig{gendebug})
 	  )
 	 putS$ "\n"
 	 putS$ "\n"
+
+
+
+------------------------------------------------------------------------------------------------------------------------
+
+-- HACK: TEMPORARY: This needs refactoring
+
+wrap_item_or_reduction_collection which colName ty1 ty2 classname stp plug_map fprintf stderr abort maincontext realmap gendebug graph = 
+           (
+	    let 
+                isReduction = case which of
+                                "reduction" -> True
+                                "item"      -> False
+                                _ -> error "the helper function wrap_item_or_reduction_collection must take either 'reduction' or 'item'"
+                tagty = cppType ty1
+
+	        -- A reused bit of syntax for wrapper get/put methods:
+ 	        -- (This is one of those things that you don't want to duplicate, 
+		--  but it has too many arguments and is poorly abstracted.)
+	        wrapGP doret retty nm args isPut = 
+		       -- First let's put together the function's arguments:
+                       let -- args' = map (\ (tyD,v) -> tyD <+> text v) args 
+			   -- decls = commacat args'
+			   -- vars  = commacat $ map (text . snd) args
+			   doplugs project = execEasyEmit$ 
+		               forM_ (AM.findWithDefault [] stp plug_map) $ \ hooks ->
+				   project hooks (Syn$ t$ snd$ head args, Syn$ t$ snd$ head$tail args, colName)
+					         (Syn$ t$ snd$ head args, Syn$ t$ snd$ head$tail args)
+		       in
+
+		       inlineFunDef retty (s nm) (map (doc2Ty . fst) args) $ \ (args::[Syntax]) -> 
+			    putD$ 
+				 (-- CHECK TAG FUNCTIONS
+				  --------------------------------------------------------------------------------
+				  let checkTagFun stp target getnbrs = 
+				        -- TODO INSERT CORRECTNESS CHECKING HERE:
+				        let stpnd  = realmap M.! (CGSteps stp)
+				            itemnd = realmap M.! target
+				            gctxt  = context graph itemnd
+				            lnhbrs = getnbrs gctxt-- lpre' gctxt ++ lsuc' gctxt
+				            ls =  filter (\ (nd,lab) -> nd == stpnd) lnhbrs
+	 			            -- [(_,tf)] = filter (\ (nd,lab) -> nd == stpnd)$  lpre' gctxt				            
+				            --[(_,tf)] = trace (" LENGTH "++ show (length ls) ++" "++ show stpnd ++" "++ show itemnd++" "++ show lnhbrs) ls
+				        in 
+				           execEasyEmit$
+				           case ls of 
+				             -- If we have no relationship to that collection its an error to access it:
+
+				             [] -> do let str = printf " [tagfun_check] CnC graph violation: should not access collection '%s' from '%s'" 
+							               (graphNodeName target :: String) (show stp) 
+						      EE.app fprintf [stderr, stringconst$ str]
+				                      EE.app abort[]
+
+				             [(_,Nothing)] -> comm " [tagfun_check] No tag function to check..."
+
+				             --((_,Just (TF args exps)) : []) -> 
+					     
+				             ((_,Just (TF tfargs exps)) : tl) -> -- TEMPTOGGLE ... permissive, ignoring additional tag functions!
+					       case (tfargs,exps) of  
+					         ([arg], [exp]) -> 
+						    do comm (" [tagfun_check] Checking tag function "++ show arg ++" -> "++ show exp)
+						       -- TODO: use normal variable decl here:
+						       putD$ tagty <+> (fromAtom arg) <+> t"=" <+> t"* m_context->tag" <> semi
+						       assert (head args EE.== Syn (pPrint exp))
+						 _ -> error "internal error: tag function correctness not fully implemented yet.  Finish me."
+
+				             _ -> error$ "internal error: tag function correctness codegen: \n w"++show ls
+				  in				  
+				  (if gendebug -- Optionally include debugging assertions.
+        	  	            then checkTagFun stp ((if isReduction then CGReductions else CGItems) colName) 
+                                                     (if isPut then lpre' else lsuc') 
+				    else empty) $$
+				  --------------------------------------------------------------------------------
+				  -- TODO: Factor tagfun correctness into a Plugin
+				  --------------------------------------------------------------------------------
+				  -- Execute plugin hooks:
+				  -- FIXME: This should be put OR get..
+				  (if isPut 
+				   then doplugs (if isReduction then beforeItemPut else beforeItemPut)
+				   else doplugs (if isReduction then beforeItemGet else beforeItemGet)) $$
+				  --------------------------------------------------------------------------------
+				  (if doret then t"return " else t"") <>
+				  t "m_"<> textAtom colName <> t"." <> t nm <> parens (commacat$ map deSyn args) <> semi $$
+				  --------------------------------------------------------------------------------
+				  (if isPut 
+				   then doplugs (if isReduction then afterItemPut else afterItemPut)
+				   else doplugs (if isReduction then afterItemGet else afterItemGet))
+				 )
+
+                -- Basic get or put:
+		basicGP nm isPut = wrapGP False voidTy nm 
+				   [(mkConstRef tagty, "tag"), 
+				    ((if isPut then mkConstRef else mkRef) (cppType ty2) , "ref")] isPut
+
+	        wrapper = textAtom colName <> t"_wrapper"
+	        member  = t"m_" <> textAtom colName
+	    in do 
+	    comm$ "The "++ which ++" collection wrapper: A 'NoOp' wrapper class that does nothing: "
+	    cppClass (Syn wrapper) (s"")
+	          (do putS "public:"  
+		      putD$ mkPtr classname <> t" m_context;" 
+		      putD$ mkPtr maincontext <> t" parent_context;\n" 
+
+		      putD$ t("CnC::"++ which ++"_collection") <> angles (cppType ty1 <>commspc<> cppType ty2) <> t" & " <> member <> semi $$ t"" 
+                      comm "The constructor here needs to grab a reference from the main context:"
+	 	      cppConstructor (Syn wrapper)    -- Name.
+				     [Syn$ param (mkRef maincontext) (t"p"),
+				      Syn$ param (mkPtr classname)   (t"c")]
+		                     [(Syn$ member, Syn$ t"p." <> textAtom colName)]
+		                     (do set (s"m_context")      (s"c")  
+		                         set (s"parent_context") (s"&p"))
+
+		      -- Just three methods: two variants of get and one put.
+		      basicGP "get" False 
+		      basicGP "put" True 
+
+                      -- Hackish: adding the done and done_all methods:
+                      wrapGP True voidTy "done" [(mkConstRef (cppType ty1),"tag")] False
+                      wrapGP True voidTy "all_done" [] False
+
+		      if oldstyle_get_method 
+		       then do wrapGP True ty2 "get" [(mkConstRef (cppType ty1),"tag")] False
+			       return ()
+		       else return ()
+		      ) 
+            putS "")
+
+
+
 
 
 

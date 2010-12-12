@@ -86,10 +86,11 @@ haskell :-
 <0> @varop			{ mkL LVarOp }
 --<0> @consym			{ mkL LConSym }
 
-<0> @decimal       		{ mkL LInteger }
-
-<0> @decimal \. @decimal @exponent?
+<0> @decimal \. @decimal 
+  | @decimal \. @decimal @exponent ?
   | @decimal @exponent		{ mkL LFloat }
+
+<0> @decimal       		{ mkL LInteger }
 
 <0> \' ($graphic # [\'\\] | " " | @escape) \'
 				{ mkL LChar }

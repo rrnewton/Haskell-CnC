@@ -19,7 +19,8 @@ int main ()
     for(int i=0; i<10; i++) context.T1.put(i);
     context.wait();
     int n;
-    context.R1.done(0);
+    //    context.R1.done(0);
+    // context.R1.all_done();
     context.R1.get(0, n);
     printf("Retrieve reducer result at 0: %d\n", n);
     return 0;
