@@ -1,5 +1,9 @@
 {-# LANGUAGE ScopedTypeVariables, OverloadedStrings, NamedFieldPuns #-}
 
+-- NOTES
+-- It would be nice for plugins to be able to invoke methods of all other plugins...
+
+
 module Intel.Cnc.Spec.Codegen.CodegenShared where
 
 import StringTable.Atom
@@ -74,7 +78,8 @@ type CodeGenPlugin = CncSpec -> ColName -> Maybe HooksTable
 --  (2) Arguments: bits of syntax that refer to the relevant values.
 type Hook grphCtxt args = grphCtxt -> args -> EasyEmit ()
 
--- Graph context aliases::
+-- Graph context aliases:
+-- First two Syntax arguments are the names of the step/target collections respectively
 type GrCtxt1 = (Syntax, Syntax)
 type GrCtxt2 = (Syntax, Syntax, ColName) -- Includes destination collection name.
 
@@ -119,7 +124,11 @@ data HooksTable = HooksTable
 
       -- These inject code around the context's wait() method:
       beforeEnvWait :: EasyEmit (),
-      afterEnvWait  :: EasyEmit ()
+      afterEnvWait  :: EasyEmit (),
+
+      -- Done happens per-set of collections (for example, cycles cause grouping)
+      -- This hook is UNUSED except when the autodone plugin is enabled.
+      whenDone :: S.Set ColName -> EasyEmit ()
     }
   deriving Show
 
@@ -156,7 +165,9 @@ defaultHooksTable =
       beforeStepExecute = twoarg,
       afterStepExecute  = twoarg,
       beforeEnvWait = return (),
-      afterEnvWait  = return ()
+      afterEnvWait  = return (),
+
+      whenDone = const$ return ()
   }
 
 
@@ -200,6 +211,11 @@ testplugin spec stpC =
 
   , beforeEnvWait = putS "// [testhooks] before environment wait"
   , afterEnvWait  = putS "// [testhooks] after environment wait"
+
+  , whenDone = \ cols -> putS "// [testhooks] done"
+
+  -- TODO add a "done" hook and introduce a "done" method alongside the step execute method inside the step wrapper.
+
   }
 
 
@@ -214,14 +230,13 @@ reductionDonePlugin :: Bool -> CodeGenPlugin
 
 -- | The autodone plugin introduces counters for step collections and
 -- | tracks when they are completely finished ("done").
-autodonePlugin      debug spec = fst $ __merged debug spec
+autodonePlugin      debug = fst . __merged debug 
 
 -- | The reduction-done plugin extends autodone by introducing counters
 -- for reduction collections and signalling all_done()
-reductionDonePlugin debug spec = snd $ __merged debug spec 
+reductionDonePlugin debug = snd . __merged debug 
 
--- NOTE: There must be a better method for this, but the following
--- will ensure that both these plugins share the same graph analysis.
+-- NOTE: There must be a better method for this.
 __merged debug_autodone spec = 
    -- Bind the graph analysis a single time:
    let rec = __sharedCounterGraphAnalysis spec in 
@@ -232,13 +247,17 @@ __merged debug_autodone spec =
 -- | This graph analysis can be performed once and shared between
 -- multiple plugins.  It collapses cycles and maps the collapsed space
 -- onto unique numbers, which can be used for various purposes.
--- Further, it computes the upstream step collections on the collapsed graph.more 
+-- Further, it computes the upstream/downstream step collections on the collapsed graph.
+-- 
+-- NOTE: Currently only step collections are included in the counter map!jk
 __sharedCounterGraphAnalysis :: CncSpec
 			   -> (AM.AtomMap Int,
 			       M.Map Int (S.Set Atom),
+			       AM.AtomMap (S.Set CncGraphNode),
 			       AM.AtomMap (S.Set CncGraphNode))
 __sharedCounterGraphAnalysis (spec@CncSpec{graph, steps, items, reductions, nodemap}) = 
-    (counter_map, rev_counter_map, upstream_map)    
+    trace "DOING GRAPH ANALYSIS " $ 
+    (counter_map, rev_counter_map, upstream_map, downstream_map)
   where 
       nodeToName   = graphNodeName . fromJust . G.lab graph
       nameToNode   = fst . (G.mkNode_ nodemap)
@@ -268,114 +287,158 @@ __sharedCounterGraphAnalysis (spec@CncSpec{graph, steps, items, reductions, node
       rev_counter_map = M.fromList $ map (\ (a,b) -> (b,a)) nodesets_counters
 
       -- Next we compute the upstream dependencies of entire cycles taken together:
-      setUpstream = S.fromList .  concat . map (upstreamNbrs spec) . S.toList 
-      getSteps = S.fromList . filter isStepC . map (fromJust . G.lab graph) . S.toList 
       cycs_wname = L.map getSteps cycsets
-      cyc_upstreams = L.map (\ set -> S.difference (setUpstream set) set) cycs_wname
+      -- getSteps: convert a set of FGL Nodes to a set of CGSteps
+      getSteps = S.fromList . filter isStepC . map (fromJust . G.lab graph) . S.toList 
+      
+      -- For each node we store its up/down-stream dependencies.  If the node is part of a
+      -- cycles, its up/down-stream deps are those of the entire cycle:
+      upstream_map :: AM.AtomMap (S.Set CncGraphNode)   = make_map upstreamNbrs   
+      downstream_map :: AM.AtomMap (S.Set CncGraphNode) = make_map downstreamNbrs 
+      
+      make_map getnbrs  =
+             let
+                 cycnbrs = L.map (\ set -> S.difference (setNbrs set) set)   cycs_wname
+                 -- setNbrs: take the combined upstreams of a set of nodes:
+		 setNbrs = S.fromList .  concat . map (getnbrs spec) . S.toList 
+	     in 
+	        fromSetList $ 
+		(map (dosingle getnbrs) non_cycle_nodes ++
+	        zip (map (S.map nodeToName) cycsets) cycnbrs)
 
-      -- Here we build a map for upstreams filling in for anything not in a cycle:
-      upstream_map :: AM.AtomMap (S.Set CncGraphNode)
-	   = fromSetList $ 
-	     (map dosingle non_cycle_nodes ++
-	      zip (map (S.map nodeToName) cycsets) cyc_upstreams)
-      dosingle nd = let name = nodeToName nd in 
-		    (S.singleton name, 
-		     S.fromList$ upstreamNbrs spec (CGSteps name))
+      dosingle getnbrs nd = 
+	     let name = nodeToName nd in 
+	       (S.singleton name, 
+		S.fromList$ getnbrs spec (CGSteps name))
 
 
 --------------------------------------------------------------------------------
 -- Reduction-Done plugin:
 --------------------------------------------------------------------------------
 
-__autodone debug_autodone (counter_map, rev_counter_map, upstream_map) 
+-- The autodone plugin introduces counters for groups of steps.  For
+-- each group of steps 'done' will eventually be signaled (once).
+__autodone debug_autodone (counter_map, rev_counter_map, upstream_map, downstream_map) 
            (spec@CncSpec{graph, steps, items, reductions, nodemap}) 
 	   stpC =
   let 
       countername num = Syn$t$ "done_counter" ++ show num
       flagname    num = Syn$t$ "done_flag"    ++ show num
+      funname     num = Syn$t$ "signal_done"    ++ show num
+
       numbered_nodesets :: [(Int, S.Set Atom)] = M.toList rev_counter_map
       counter_lookup stp = case AM.lookup stp counter_map of 
 			     Just x -> x
 			     Nothing -> error$ "autodonePlugin: Could not find counter corresponding to step: "++ show stp
    
       is_maincontext = (stpC P.== toAtom special_environment_name) 
-  in
-   Just$ defaultHooksTable
-   { 
-     addGlobalState = 
-     -- This only happens ONCE, not per step-collection, and it adds ALL the counters/flag:
-     if is_maincontext
-     then (do comm "[autodone] Maintain two pieces of state for each tracked subgraph: done counter & flag:"
-	      forM_ numbered_nodesets $ \ (ind, ndset) -> do 
-		comm$ show ind ++ ": Serves node(s): " ++ 
-		      concat (intersperse " "$ map fromAtom (S.toList ndset))
-		var (TSym "tbb::atomic<int>") (countername ind)
-		var (TSym "tbb::atomic<int>") (flagname ind)
-	      return ()
 
-	  , do comm "[autodone] Initialize done flags/counters:"
-	       when debug_autodone$ do 
-		  app (function "printf") [stringconst$ " [autodone] Initializing done flags/counters...\n"]
-	       forM_ numbered_nodesets $ \ (ind, _) -> do
-		  set (flagname ind) 0
-		  set (countername ind) 0
-	       -- when debug_autodone$ do 
-	       --    let cycs = (map (map graphNodeName . S.toList) cycs_wname) :: [[Atom]]
-	       --    app (function "printf") [stringconst$ "   [autodone] Cycles detected: "
-	       -- 			       ++show cycs++"\n"]
-	  )
-     else (return (), return ())
+      this = defaultHooksTable
+       {
+	whenDone = \ set -> do
+	  comm "[autodone] As we become done, we check our downstreams to see if they are now done too."
+	  let alldown = S.unions $ 
+	                 map (\nd -> AM.findWithDefault S.empty nd downstream_map) $
+	                  S.toList set
 
-   , afterStepExecute = \ _ (tag,priv,main) -> 
-       do comm "[autodone] Decrement the counter that tracks these instances:"
-	  x <- tmpvar TInt 
-	  done_transition <- varinit TInt "done_transition" 0 -- HACK, this is to coordinate with reductionDonePlugin below
-	  let stpind = counter_lookup stpC
-	  set x (function (main `dot` (countername stpind) `dot` "fetch_and_decrement") [])
-	  when debug_autodone$ 
-	    app (function "printf") [stringconst$ " [autodone] "++show stpC++": Decremented own refcount to %d\n", x-1]
-	  if_ (x == 1)
-	      (do comm " If we transition to a zero count we check our upstreams to see if we are really done."
-		  let upstream = filter isStepC $ S.toList $ AM.findWithDefault S.empty stpC upstream_map
-		  if_ (if null upstream
-		       then 1 -- error$ "autodone: missing upstream steps/environment for step collection "++ show stpC
-		       else foldl1' (&&) $
-			    map (\ (CGSteps stp) -> main `dot` (flagname$ counter_lookup stp)) upstream)
-		      (do comm "Upstream are all done, and now so are we:"
-			  set (main `dot` (flagname stpind)) 1
-			  set done_transition 1
-			  when debug_autodone$ 
-			    app (function$ "printf") [stringconst$ " [autodone] "++ show stpC ++": Node(s) done "
-						      ++ show (S.toList$ rev_counter_map M.! stpind)
-						      ++", deps met: " ++ show upstream ++"\n"])
-		      (when debug_autodone$
-		       app (function "printf") [stringconst$ " [autodone] "++show stpC++" NOT DONE\n"]))
-	      (return ())
+              -- Compute a set consisting of all downstream *counters* (step groups), not steps:
+	      counters = S.toList $ 
+			 S.map ((counter_map AM.!) . graphNodeName) $
+			 S.filter isStepC alldown
 
-   , beforeTagPut = \ (priv,main, tgC) tag -> 
-       do comm "[autodone] Increment the counter that tracks downstream step instances:"
-	  let downstream = map graphNodeName $ filter isStepC $ downstreamNbrs spec (CGTags tgC)
-	  forM_ downstream $ \ destC -> do
-	     let counter = main `dot` countername (counter_lookup destC)
+	  comm$ "           Downstream counters: " ++ show counters
+	  forM_ counters $ \ cntr -> do
+	     comm "Beware of races, this must be atomic so the done function is only called once."
+	     comm "FIXME"
+	     if_ (countername cntr == 919191)
+		 (app (function$ funname cntr) [])
+		 (return ())
+
+
+       , addGlobalState = 
+	-- This only happens ONCE, not per step-collection, and it adds ALL the counters/flag:
+	if is_maincontext
+	then (do comm "[autodone] Maintain two pieces of state for each tracked subgraph: done counter & flag:"
+		 forM_ numbered_nodesets $ \ (ind, ndset) -> do 
+		   comm$ show ind ++ ": Serves node(s): " ++ 
+			 concat (intersperse " "$ map fromAtom (S.toList ndset))
+		   var (TSym "tbb::atomic<int>") (countername ind)
+		   flag <- var (TSym "tbb::atomic<int>") (flagname ind)
+		   comm "We also introduce a procedure that transitions a group of nodes into a done state:"
+		   funDef voidTy (funname ind) [] $ \() -> do 
+		      set flag 1 
+		      whenDone this ndset
+
+		 return ()
+
+	     , do comm "[autodone] Initialize done flags/counters:"
+		  when debug_autodone$ do 
+		     app (function "printf") [stringconst$ " [autodone] Initializing done flags/counters...\n"]
+		  forM_ numbered_nodesets $ \ (ind, _) -> do
+		     set (flagname ind) 0
+		     set (countername ind) 0
+		  -- when debug_autodone$ do 
+		  --    let cycs = (map (map graphNodeName . S.toList) cycs_wname) :: [[Atom]]
+		  --    app (function "printf") [stringconst$ "   [autodone] Cycles detected: "
+		  -- 			       ++show cycs++"\n"]
+	     )
+	else (return (), return ())
+
+      , afterStepExecute = \ _ (tag,priv,main) -> 
+	  do comm "[autodone] Decrement the counter that tracks these instances:"
+	     x <- tmpvar TInt 
+--	     done_transition <- varinit TInt "done_transition" 0 -- HACK, this is to coordinate with reductionDonePlugin below
+	     let stpind = counter_lookup stpC
+	     set x (function (main `dot` (countername stpind) `dot` "fetch_and_decrement") [])
 	     when debug_autodone$ 
-		app (function "printf") [stringconst$ " [autodone] "++show stpC++": Incrementing "++show destC++" refcount to %d\n", 
-					 "1 + (int)" +++ counter]
-	     app (function (counter `dot` "fetch_and_increment")) []
+	       app (function "printf") [stringconst$ " [autodone] "++show stpC++": Decremented own refcount to %d\n", x-1]
+	     if_ (x == 1)
+		 (do comm " If we transition to a zero count we check our upstreams to see if we are really done."
+		     let upstream = filter isStepC $ S.toList $ AM.findWithDefault S.empty stpC upstream_map
 
-   , beforeEnvWait = 
-      do comm "[autodone] We consider the environment 'done' at this point:"
-	 let flag = flagname$ counter_lookup (toAtom special_environment_name)
-	 set ("p" `dot` flag) 1
-	 when debug_autodone$
-	    app (function "printf") [stringconst$ " [autodone] Environment waiting, considered done.\n"]
-   }
+		     -- NOTE: We could FILTER the set of upstream dependencies so that we
+		     -- only have ONE representative from each cycle... but it isn't strictly necessary.
+		     if_ (if null upstream
+			  then 1 -- error$ "autodone: missing upstream steps/environment for step collection "++ show stpC
+			  else foldl1' (&&) $
+			       map (\ (CGSteps stp) -> main `dot` (flagname$ counter_lookup stp)) upstream)
+			 (do comm "Upstream are all done, and now so are we:"
+			     -- set (main `dot` (flagname stpind)) 1
+			     app (function $ main `dot` (funname stpind)) []
+--			     set done_transition 1
+			     when debug_autodone$ 
+			       app (function$ "printf") [stringconst$ " [autodone] "++ show stpC ++": Node(s) done "
+							 ++ show (S.toList$ rev_counter_map M.! stpind)
+							 ++", deps met: " ++ show upstream ++"\n"])
+			 (when debug_autodone$
+			  app (function "printf") [stringconst$ " [autodone] "++show stpC++" NOT DONE\n"]))
+		 (return ())
+
+      , beforeTagPut = \ (priv,main, tgC) tag -> 
+	  do comm "[autodone] Increment the counter that tracks downstream step instances:"
+	     let downstream = map graphNodeName $ filter isStepC $ downstreamNbrs spec (CGTags tgC)
+	     forM_ downstream $ \ destC -> do
+		let counter = main `dot` countername (counter_lookup destC)
+		when debug_autodone$ 
+		   app (function "printf") [stringconst$ " [autodone] "++show stpC++": Incrementing "++show destC++" refcount to %d\n", 
+					    "1 + (int)" +++ counter]
+		app (function (counter `dot` "fetch_and_increment")) []
+
+      , beforeEnvWait = 
+	 do comm "[autodone] We consider the environment 'done' at this point:"
+	    let flag = flagname$ counter_lookup (toAtom special_environment_name)
+	    set ("p" `dot` flag) 1
+	    when debug_autodone$
+	       app (function "printf") [stringconst$ " [autodone] Environment waiting, considered done.\n"]
+      }
+  in Just$ this 
 
 
 --------------------------------------------------------------------------------
 -- Reduction-Done plugin:
 --------------------------------------------------------------------------------
 
-__reduction debug_autodone (counter_map, rev_counter_map, upstream_map)   
+__reduction debug_autodone (counter_map, rev_counter_map, upstream_map, downstream_map)   
             (spec@CncSpec{graph, steps, items, reductions, nodemap}) =
   let 
       autodone_plug = autodonePlugin debug_autodone spec
@@ -409,6 +472,7 @@ __reduction debug_autodone (counter_map, rev_counter_map, upstream_map)
 		  comm "[reduction_done] Likewise initialize reduction_collection counters:"
 	          forM_ (AM.toList reductions) $ \ (redC, (op, init, ty)) -> do
 -- 	             set (countername redC) (strToSyn$show$ reduction_upstream_counts AM.! redC)
+-- FIXME!!! TAKE INTO ACCOUNT CYClES!!!!
                      let upstrm = upstreamNbrs spec (CGReductions redC)
 	             comm$ "   reduction collection "++ show redC ++" depends on "++ show upstrm ++ ":"
  	             set (countername redC) (strToSyn$show$ length upstrm)

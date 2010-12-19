@@ -14,6 +14,7 @@ import Text.PrettyPrint.HughesPJClass
 import Intel.Cnc.Spec.Util
 import Intel.Cnc.Spec.SrcLoc
 import Intel.Cnc.Spec.AST
+import Debug.Trace
 
 ------------------------------------------------------------
 -- Type definition.
@@ -71,7 +72,13 @@ instance Functor TagExp where
 --
 -- TODO: This function could solve simple equations to get the formal
 -- parameters all to one side of the equation, allowing things like (2*i -> 3*i).
-mkTagFun exps1 exps2 = 
+
+--mkTagFun :: (CncGraphNode, [Exp SrcSpan]) -> 
+--	    (CncGraphNode, [Exp SrcSpan]) -> Maybe TagFun
+--mkTagFun (node1,exps1) (node2,exps2) = 
+mkTagFun :: String -> [Exp SrcSpan] -> [Exp SrcSpan] -> Maybe TagFun
+mkTagFun ctxtmsg exps1 exps2 = 
+ trace ("MKTAGFUN "++ ctxtmsg) $
  let e1s = Prelude.map checkConvertTF exps1
      e2s = Prelude.map checkConvertTF exps2
  in if all isTEVar e1s
@@ -88,8 +95,8 @@ mkTagFun exps1 exps2 =
 		          ++ (show$ pp exps2) ++ 
 			  showSpanDetailed (foldl1 combineSrcSpans $ Prelude.map getDecor exps2)
 
-    else error$ "Presently the tag expressions indexing step collections must be simple variables, not: " 
-	        ++ (show$ pp exps1)
+    else error$ ctxtmsg ++ ": mkTagFun of  "++ (show$ pp exps1) ++ " and "++ show (pp exps2)++ 
+		" - Presently the tag expressions indexing step collections must be simple variables." 
 
 
 
@@ -115,7 +122,8 @@ isTEVar (TEVar _) = True
 isTEVar _ = False
 
 -- Avoid exhaustiveness warnings here:
-unTEVar = \ (TEVar name) -> name
+unTEVar (TEVar name) = name
+unTEVar _ = error "unTEVar: not TEVar"
 
 -- This is where we convert arbitrary Exps into more restricted tag expressions that
 -- support symbolic manipulation.

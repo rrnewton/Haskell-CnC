@@ -1,7 +1,11 @@
 {-# LANGUAGE CPP, NamedFieldPuns #-}
-{-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
+{-# OPTIONS_GHC -fwarn-incomplete-patterns  #-}
 
+#ifdef USE_CNC_AS_LIBRARY
+module Intel.Cnc.Spec.Main where
+#else
 module Main where
+#endif
 
 import Intel.Cnc.Spec.CncLexer hiding (main)
 import Intel.Cnc.Spec.CncGrammar

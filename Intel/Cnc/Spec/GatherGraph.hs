@@ -108,8 +108,11 @@ extendWithInstance acc inst =
     InstTagCol  _ name ls -> extendTags  (toAtom name) Nothing acc
 --    _                   -> acc
 --    InstReductionCol _ name ls -> extendReductions (toAtom name) Nothing acc
+
+-- These forms are ambiguous, so there is no extra information here:
     InstName _ _         -> acc
-    InstStepOrTags _ _ _ -> error$ "extendWithInstance: InstStepOrTags should have been desugared by now: " ++ show inst
+    InstStepOrTags _ _ _ -> acc
+--    InstStepOrTags _ _ _ -> error$ "extendWithInstance: InstStepOrTags should have been desugared by now:\n " ++ show inst
 
 extendWithLink acc link = 
   case link of 
@@ -142,23 +145,34 @@ coalesceChain allnodes start ls = loop (process start) ls
     let produce prevs insts next = 
          forM_ insts $ \ (node,exps) -> 
          forM_ prevs $ \ (pnode,pexps) -> 
-           let insert = insMapEdgeM (pnode, node, mkTagFun exps pexps) in
+           let 
+	       -- insert1 = insMapEdgeM (pnode, node, mkTagFun (node,exps) (pnode,pexps)) 
+	       -- insert_flipped = insMapEdgeM (pnode, node, mkTagFun (pnode,pexps) (node,exps)) 
+	       insert         = insMapEdgeM (pnode, node, mkTagFun (show (node,pnode)) exps pexps) 
+	       insert_flipped = insMapEdgeM (pnode, node, mkTagFun (show (pnode,node)) pexps exps) 
+	   in
+	   trace ("Inserting produce/consume edge: "++ show (pnode, L.map stripDecor  pexps, node, L.map stripDecor  exps)) $
 	   do case (pnode, node) of 
 	        -- Valid combinations for a producer relation:
 		-- This is tricky because depending on whether the left or the right
 		-- hand side is the step collection the tag expressions are interpreted
 		-- differently.
-	        (CGItems _, CGSteps _)      -> insert
-	        (CGSteps _, CGItems _)      -> insert
-	        (CGReductions _, CGSteps _) -> insert
-	        (CGSteps _, CGReductions _) -> insert
+	        (CGSteps _, CGItems _)      -> insert_flipped
+	        (CGSteps _, CGReductions _) -> insert_flipped
 	        (CGSteps _, CGTags _)       -> insert
+
+                -- NOTE: Tag functions always relative to the step collection.
+		-- Flip the tag components for generating the tag function:
+	        (CGItems _, CGSteps _)      -> insert
+	        (CGReductions _, CGSteps _) -> insert
+
 	        (l,r) -> error$ "coalesceChain: invalid put/get relation from '"++graphNodeName l++"' to '"++graphNodeName r++"'"
               loop next tl
     in
     case hd of 
      -- Connect the previous node to this one using a forward edge:
      ProduceLink _ insts    -> let pi = process insts in produce prevs pi pi
+     -- These mean the same thing but are written backwards:
      RevProduceLink s insts -> let pi = process insts in produce pi prevs pi
      PrescribeLink _ insts -> 
        let processed = process insts in
@@ -166,7 +180,10 @@ coalesceChain allnodes start ls = loop (process start) ls
        forM_ prevs $ \ (pnode,pexps) -> 
 	   -- This is a bit simpler because there is only one valid prescribe:
 	   do case (pnode, node) of 
-	        (CGTags _, CGSteps _) -> insMapEdgeM (pnode, node, mkTagFun exps pexps)	  
+	        (CGTags _, CGSteps _) -> 
+		    trace ("Inserting tag->step edge: "++ show (pnode, L.map stripDecor pexps, node, L.map stripDecor  exps)) $
+--		    insMapEdgeM (pnode, node, mkTagFun (node,exps) (pnode,pexps))
+		    insMapEdgeM (pnode, node, mkTagFun (show (node,exps)) exps pexps)
 	        (l,r) -> error$ "coalesceChain: invalid prescribe relation from '"++graphNodeName l++"' to '"++graphNodeName r++"'"
               loop processed tl
 

@@ -800,8 +800,10 @@ wrap_item_or_reduction_collection which colName ty1 ty2 classname stp plug_map f
 		      basicGP "put" True 
 
                       -- Hackish: adding the done and done_all methods:
-                      wrapGP True voidTy "done" [(mkConstRef (cppType ty1),"tag")] False
-                      wrapGP True voidTy "all_done" [] False
+                      when isReduction $ do 
+		         wrapGP False voidTy "done" [(mkConstRef (cppType ty1),"tag")] False
+                         wrapGP False voidTy "all_done" [] False
+			 return ()
 
 		      if oldstyle_get_method 
 		       then do wrapGP True ty2 "get" [(mkConstRef (cppType ty1),"tag")] False

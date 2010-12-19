@@ -1,5 +1,4 @@
 
-
 int plus(int x, int y) { return x + y; }
 
 #include<reduction_test.h>

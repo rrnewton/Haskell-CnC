@@ -65,7 +65,5 @@ int main ()
     context.R3.get(0, tmp);
     printf("\nR3[0] = %lf\n", tmp);
 
-    double foo = 6684686229;
-    printf("\ndouble test %lf\n", foo);
     return 0;
 }
