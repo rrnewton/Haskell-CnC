@@ -10,6 +10,8 @@ module Intel.Cnc.Spec.Util where
 
 import Text.PrettyPrint.HughesPJClass
 import Control.Monad.State
+import Control.Exception as CE
+import System.IO.Unsafe
 import System.IO
 import StringTable.Atom
 
@@ -160,6 +162,26 @@ instance ToAtom Doc where
 
 -- Constant: indentation used across all code generators.
 indent = 4
+
+--------------------------------------------------------------------------------
+-- Testing and Assertion Utilities
+--------------------------------------------------------------------------------
+
+-- The standard Control.Exception.assert is turned off in optimize mode and does not assume Show.
+-- This is a variant that assumes Show and is always on.
+alwaysAssertEq :: (Eq a, Show a) => String -> a -> a -> a1 -> a1
+alwaysAssertEq msg expect got  final = 
+  if (expect == got)
+  then final
+  else unsafePerformIO$
+       do putStrLn$ "\n!!! Assertion failed."
+	  putStrLn$ msg
+	  putStrLn$ "Expected:  " ++ show expect
+	  putStrLn$ "Received:  " ++ show got
+	  putStrLn$ ""
+	  -- For the source location:
+	  CE.assert (expect == got) 
+   		    (return final)
 
 -- HUnit convenience function (used by other modules):
 -- There's a problem with quickcheck where it doesn't
