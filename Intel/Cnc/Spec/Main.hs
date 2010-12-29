@@ -482,8 +482,11 @@ main2 argv = do
          Debug       -> return cfg{ gendebug=True, wrapall=True }
          GenTracing  -> return cfg{ gentracing=True } 
          GenDepends  -> return cfg{ gendepends=True } 
-         AutoDone    -> return cfg{ plugins= reductionDonePlugin False : plugins cfg } 
-         AutoDoneDbg -> return cfg{ plugins= reductionDonePlugin True : plugins cfg } 
+         AutoDone    -> return cfg{ plugins= autodonePlugin False : plugins cfg } 
+         AutoDoneDbg -> return cfg{ plugins= autodonePlugin True  : plugins cfg } 
+
+--         AutoDone    -> return cfg{ plugins= reductionDonePlugin False : plugins cfg } 
+--         AutoDoneDbg -> return cfg{ plugins= reductionDonePlugin True : plugins cfg } 
          NoStepDefs  -> return cfg{ genstepdefs=False } 
 
 	 m | codegenmode_option m -> return cfg

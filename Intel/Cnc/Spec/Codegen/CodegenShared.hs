@@ -55,9 +55,9 @@ default_codegen_config =
       , gendepends  = False
       , gendebug    = False
       , wrapall     = False
---      , plugins     = [testplugin]
+      , plugins     = [testplugin]
 --      , plugins     = [autodonePlugin]
-      , plugins     = []
+--      , plugins     = []
      }
 
 
@@ -80,8 +80,13 @@ type CodeGenPlugin = CncSpec -> ColName -> Maybe HooksTable
 --  (2) Arguments: bits of syntax that refer to the relevant values.
 type Hook grphCtxt args = grphCtxt -> args -> EasyEmit ()
 
+-- It's very hard to keep all these pieces of "Syntax" straight.  To
+-- help a little we wrap them in new types.
+newtype PrivCtxtPtr = PrivCtxtPtr Syntax
+newtype MainCtxtRef = MainCtxtRef Syntax 
+
 -- Graph context aliases:
--- First two Syntax arguments are the names of the step/target collections respectively
+-- First two Syntax arguments are the names of the private/main context respectively
 type GrCtxt1 = (Syntax, Syntax)
 type GrCtxt2 = (Syntax, Syntax, ColName) -- Includes destination collection name.
 
@@ -121,12 +126,14 @@ data HooksTable = HooksTable
       --       "addLocalState" before.
       --   (3) name of a variable holding a reference to the main
       --       context -- containing the state added by "addGlobalState"
-      beforeStepExecute :: Hook GrCtxt1 (Syntax,Syntax,Syntax),
-      afterStepExecute  :: Hook GrCtxt1 (Syntax,Syntax,Syntax),
+--      beforeStepExecute :: Hook GrCtxt1 (Syntax,Syntax,Syntax),
+--      afterStepExecute  :: Hook GrCtxt1 (Syntax,Syntax,Syntax),
+     beforeStepExecute :: Hook GrCtxt1 (Syntax,Syntax,Syntax),
+     afterStepExecute  :: Hook GrCtxt1 (Syntax,Syntax,Syntax),
 
       -- These inject code around the context's wait() method:
-      beforeEnvWait :: EasyEmit (),
-      afterEnvWait  :: EasyEmit (),
+      beforeEnvWait :: MainCtxtRef -> EasyEmit (),
+      afterEnvWait  :: MainCtxtRef -> EasyEmit (),
 
       -- Done happens per-set of collections (for example, cycles cause grouping)
       -- This hook is UNUSED except when the autodone plugin is enabled.
@@ -166,8 +173,8 @@ defaultHooksTable =
       afterTagPut       = twoarg,
       beforeStepExecute = twoarg,
       afterStepExecute  = twoarg,
-      beforeEnvWait = return (),
-      afterEnvWait  = return (),
+      beforeEnvWait = const$ return (),
+      afterEnvWait  = const$ return (),
 
       whenDone = const$ return ()
   }
@@ -211,8 +218,8 @@ testplugin spec stpC =
   , afterStepExecute  = \ _ (tag,priv,main) -> 
       putS$ "// [testhooks] after step execute on tag reference: " ++ show (deSyn tag) ++" "++ show (deSyn priv) ++" "++ show (deSyn main)
 
-  , beforeEnvWait = putS "// [testhooks] before environment wait"
-  , afterEnvWait  = putS "// [testhooks] after environment wait"
+  , beforeEnvWait = \ (MainCtxtRef m) -> putS$ "// [testhooks] before environment wait, main ctxt ref "++ show (deSyn m)
+  , afterEnvWait  = \ (MainCtxtRef m) -> putS "// [testhooks] after environment wait"
 
   , whenDone = \ cols -> putS "// [testhooks] done"
 
@@ -232,34 +239,48 @@ reductionDonePlugin :: Bool -> CodeGenPlugin
 
 -- | The autodone plugin introduces counters for step collections and
 -- | tracks when they are completely finished ("done").
-autodonePlugin      debug = fst . __merged debug 
+autodonePlugin      debug spec = __autodone  debug (basicCycleAnalysis spec) spec
 
 -- | The reduction-done plugin extends autodone by introducing counters
 -- for reduction collections and signalling all_done()
-reductionDonePlugin debug = snd . __merged debug 
+reductionDonePlugin debug spec = __reduction debug (basicCycleAnalysis spec) spec
 
--- NOTE: There must be a better method for this.
-__merged debug_autodone spec = 
-   -- Bind the graph analysis a single time:
-   let rec = __sharedCounterGraphAnalysis spec in 
-   (__autodone  debug_autodone rec spec, 
-    __reduction debug_autodone rec spec)
+-- ************* TODO / FIXME: ***************
+-- Currently the above two functions REPLICATE the cycle analysis.  Fix this by either:
+--   (1) rearchitecting the code that adds plugins in Main.hs to call basicCycleAnalysis once.
+--   (2) memoizing basicCycleAnalysis
 
---------------------------------------------------------------------------------
--- | This graph analysis can be performed once and shared between
--- multiple plugins.  It collapses cycles and maps the collapsed space
--- onto unique numbers, which can be used for various purposes.
--- Further, it computes the upstream/downstream step collections on the collapsed graph.
--- 
--- NOTE: Currently only step collections are included in the counter map!jk
-__sharedCounterGraphAnalysis :: CncSpec
-			   -> (AM.AtomMap Int,
-			       M.Map Int (S.Set Atom),
-			       AM.AtomMap (S.Set CncGraphNode),
-			       AM.AtomMap (S.Set CncGraphNode))
-__sharedCounterGraphAnalysis (spec@CncSpec{graph, steps, items, reductions, nodemap}) = 
+
+----------------------------------------------------------------------------------------------------
+-- Type definitions for graph analyses.
+
+-- | This represents the result of a basic graph analysis to determine
+-- cycles.  The nodes are re-indexed according to a scheme that
+-- assigns the same number to nodes within a cycle (e.g. they are
+-- "grouped").
+data BasicCycleAnalysis = BasicCycleAnalysis 
+  {
+    -- Map node names onto their new "collapsed" indices.
+    index_map      :: AM.AtomMap Int,
+    -- The same in reverse:
+    rev_index_map  :: M.Map Int (S.Set Atom),
+    -- Map nodes onto their up/downstream taking into account the
+    -- grouping (e.g. a dependency on a node implies dependencies on
+    -- all other nodes sharing the same group.
+    downstream_map :: AM.AtomMap (S.Set CncGraphNode),
+    upstream_map   :: AM.AtomMap (S.Set CncGraphNode)
+  }
+
+
+-- | Performs an analysis to produce a BasicCycleAnalysis
+--   For efficiency we would expect that this analysis is performed
+--   once and shared between multiple plugins.
+--
+-- NOTE: Currently only step collections are included in the counter map!
+basicCycleAnalysis :: CncSpec -> BasicCycleAnalysis
+basicCycleAnalysis (spec@CncSpec{graph, steps, items, reductions, nodemap}) = 
     trace "DOING GRAPH ANALYSIS " $ 
-    (counter_map, rev_counter_map, upstream_map, downstream_map)
+    BasicCycleAnalysis {index_map=counter_map, rev_index_map=rev_counter_map, upstream_map, downstream_map}
   where 
       nodeToName   = graphNodeName . fromJust . G.lab graph
       nameToNode   = fst . (G.mkNode_ nodemap)
@@ -320,7 +341,8 @@ __sharedCounterGraphAnalysis (spec@CncSpec{graph, steps, items, reductions, node
 
 -- The autodone plugin introduces counters for groups of steps.  For
 -- each group of steps 'done' will eventually be signaled (once).
-__autodone debug_autodone (counter_map, rev_counter_map, upstream_map, downstream_map) 
+__autodone debug_autodone 
+           BasicCycleAnalysis {index_map, rev_index_map, upstream_map, downstream_map}
            (spec@CncSpec{graph, steps, items, reductions, nodemap}) 
 	   stpC =
   let 
@@ -328,21 +350,22 @@ __autodone debug_autodone (counter_map, rev_counter_map, upstream_map, downstrea
       funname     num = Syn$t$ "decr_done_counter"  ++ show num
 
       stpind = counter_lookup stpC
-      numbered_nodesets :: [(Int, S.Set Atom)] = M.toList rev_counter_map
-      counter_lookup stp = case AM.lookup stp counter_map of 
+      -- This maps each 
+      numbered_nodesets :: [(Int, S.Set Atom)] = M.toList rev_index_map
+      counter_lookup stp = case AM.lookup stp index_map of 
 			     Just x -> x
 			     Nothing -> error$ "autodonePlugin: Could not find counter corresponding to step: "++ show stp
 
       is_maincontext = (stpC P.== toAtom special_environment_name) 
       -- env_ind :: Int = fst $ G.mkNode_ nodemap $ CGSteps $ toAtom special_environment_name
       -- The index of the counter associated with the environment:
-      env_ind :: Int = counter_map AM.! (toAtom special_environment_name)
+      env_ind :: Int = index_map AM.! (toAtom special_environment_name)
      
       -- Find all up or downstream counters from a set of nodes.
       nbr_counters updown_map set = 
             -- Compute a set consisting of all downstream *counters* (step groups), not steps:
 	    S.toList $ 
-	    S.map ((counter_map AM.!) . graphNodeName) $
+	    S.map ((index_map AM.!) . graphNodeName) $
 	    S.filter isStepC $
 	    nbr_set updown_map set
       -- Find up or downstream graph nodes (chunking cycles together).
@@ -356,13 +379,13 @@ __autodone debug_autodone (counter_map, rev_counter_map, upstream_map, downstrea
 	whenDone = \ set -> do
 	  comm "[autodone] As we become done, we decrement our downstream counters."
           let downcounters = nbr_counters downstream_map set
---	      upcounters   = nbr_counters upstream_map   set
 	      upstream     = nbr_set upstream_map set
 
 	  when debug_autodone$ 
 	    app (function$ "printf") [stringconst$ " [autodone] "++ show stpC ++": Node(s) done "
-				      ++ show (S.toList$ rev_counter_map M.! stpind)
-					      ++", upstream deps met: " ++ show (S.toList upstream) ++"\n"]
+				      ++ show (S.toList$ rev_index_map M.! stpind)
+					      ++", upstream deps met: " ++ 
+				              show (filter isStepC$ S.toList upstream) ++"\n"]
 	  forM_ downcounters $ \ cntr -> do
 	     app (function$ funname cntr) []
 
@@ -391,8 +414,7 @@ __autodone debug_autodone (counter_map, rev_counter_map, upstream_map, downstrea
 
 		 return ()
 
-	     , do comm "[autodone] Initialize done counters:"
-		  comm$ "TEMP env ind " ++ show  env_ind ++ " COUNTER MAP "++ show counter_map
+	     , do comm "[autodone] Initialize done counters based on number of upstream deps:"
 		  when debug_autodone$ do 
 		     app (function "printf") [stringconst$ " [autodone] Initializing done counters...\n"]
 		  forM_ numbered_nodesets $ \ (ind, ndset) -> do
@@ -415,7 +437,6 @@ __autodone debug_autodone (counter_map, rev_counter_map, upstream_map, downstrea
 
       , afterStepExecute = \ _ (tag,priv,main) -> 
 	  do comm "[autodone] Decrement the counter that tracks these instances:"
---	     done_transition <- varinit TInt "done_transition" 0 -- HACK, this is to coordinate with reductionDonePlugin below
              app (function $ main `dot` (funname stpind)) []
 
       , beforeTagPut = \ (priv,main, tgC) tag -> 
@@ -428,13 +449,11 @@ __autodone debug_autodone (counter_map, rev_counter_map, upstream_map, downstrea
 					    "1 + (int)" +++ counter]
 		app (function (counter `dot` "fetch_and_increment")) []
 
-      , beforeEnvWait = 
+      , beforeEnvWait = \ (MainCtxtRef main) ->
 	 do comm "[autodone] We consider the environment 'done' at this point:"
-	    --let flag = flagname$ counter_lookup (toAtom special_environment_name)
-	    --set ("p" `dot` flag) 1
-	    comm "FIXME ENVIRONMENT SHOULD SIGNAL DONE!!"
 	    when debug_autodone$
 	       app (function "printf") [stringconst$ " [autodone] Environment waiting, considered done.\n"]
+            app (function$ main `dot` (funname stpind)) []	    
       }
   in Just$ this 
 
@@ -443,7 +462,8 @@ __autodone debug_autodone (counter_map, rev_counter_map, upstream_map, downstrea
 -- Reduction-Done plugin:
 --------------------------------------------------------------------------------
 
-__reduction debug_autodone (counter_map, rev_counter_map, upstream_map, downstream_map)   
+__reduction debug_autodone 
+           BasicCycleAnalysis {upstream_map}
             (spec@CncSpec{graph, steps, items, reductions, nodemap}) =
   let 
       autodone_plug = autodonePlugin debug_autodone spec
@@ -471,6 +491,7 @@ __reduction debug_autodone (counter_map, rev_counter_map, upstream_map, downstre
 	if is_maincontext
 	then ( do lft
 		  comm "[reduction_done] Additionally maintain counters for reduction collections:"
+	          -- Unlike step collections these track ONLY upstream dependencies, not instances.
 	          forM_ (AM.toList reductions) $ \ (redC, _) ->
 		     var (TSym "tbb::atomic<int>") (countername redC)
 	     , do rht
@@ -501,6 +522,10 @@ __reduction debug_autodone (counter_map, rev_counter_map, upstream_map, downstre
 		       (return ())
 		   )		
 		(return ())
+
+     , whenDone = \ set -> do
+	  return () 
+
      }
 
 

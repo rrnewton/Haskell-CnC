@@ -43,6 +43,7 @@ import Data.Graph.Inductive hiding (empty)
 import qualified StringTable.AtomMap as AM
 import qualified StringTable.AtomSet as AS
 
+import Debug.Trace
 
 ----------------------------------------------------------------------------------------------------
 
@@ -643,10 +644,13 @@ generate_wrapper_context (CodeGenConfig{gendebug})
 	       var (doc2Ty maincontext) (s"p")
 	       comm ""
 	       let env_hooks = AM.findWithDefault [] (toAtom special_environment_name) plug_map
+		   ctxt_field = s"p"
 	       inlineFunDef voidTy (s "wait") [] $ \ () -> do
-		  forM_ env_hooks $ \ hooks -> beforeEnvWait hooks 
-		  EE.app (function$ s"p" `dot` s"wait") []
-		  forM_ env_hooks $ \ hooks -> afterEnvWait hooks
+		  forM_ env_hooks $ \ hooks -> 
+		       beforeEnvWait hooks (MainCtxtRef$ ctxt_field)
+		  EE.app (function$ ctxt_field `dot` s"wait") []
+		  forM_ env_hooks $ \ hooks -> 
+		      afterEnvWait hooks (MainCtxtRef$ ctxt_field)
 	       return ()
 
 	   comm ""

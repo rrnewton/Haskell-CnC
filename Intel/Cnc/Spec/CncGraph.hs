@@ -36,7 +36,7 @@ data CncSpec = CncSpec {
   -- We store the graph in a "flat" form and separately keep a tree of partitions:
   harchtree :: ()
 }
-
+-- deriving (Eq, Ord)
 
 type CncGraph = (Gr CncGraphNode (Maybe TagFun))
 
