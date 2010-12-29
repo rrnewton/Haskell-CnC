@@ -135,9 +135,10 @@ data HooksTable = HooksTable
       beforeEnvWait :: MainCtxtRef -> EasyEmit (),
       afterEnvWait  :: MainCtxtRef -> EasyEmit (),
 
-      -- Done happens per-set of collections (for example, cycles cause grouping)
-      -- This hook is UNUSED except when the autodone plugin is enabled.
-      whenDone :: S.Set ColName -> EasyEmit ()
+      -- Done happens per-set-of-collections (cycles cause grouping)
+      -- This hook is used ONLY when the done plugins are enabled.
+      whenDone :: S.Set CncGraphNode -> EasyEmit ()
+--      whenDone :: S.Set ColName -> EasyEmit ()
     }
   deriving Show
 
@@ -227,30 +228,6 @@ testplugin spec stpC =
 
   }
 
-
--- =================================================================================================
---  DONE propogation plugins:
--- -------------------------------------------------------------------------------------------------
--- Here we specify two different (well, one inherited from the other)
--- plugins that share the same graph analysis.
-
-autodonePlugin      :: Bool -> CodeGenPlugin 
-reductionDonePlugin :: Bool -> CodeGenPlugin 
-
--- | The autodone plugin introduces counters for step collections and
--- | tracks when they are completely finished ("done").
-autodonePlugin      debug spec = __autodone  debug (basicCycleAnalysis spec) spec
-
--- | The reduction-done plugin extends autodone by introducing counters
--- for reduction collections and signalling all_done()
-reductionDonePlugin debug spec = __reduction debug (basicCycleAnalysis spec) spec
-
--- ************* TODO / FIXME: ***************
--- Currently the above two functions REPLICATE the cycle analysis.  Fix this by either:
---   (1) rearchitecting the code that adds plugins in Main.hs to call basicCycleAnalysis once.
---   (2) memoizing basicCycleAnalysis
-
-
 ----------------------------------------------------------------------------------------------------
 -- Type definitions for graph analyses.
 
@@ -263,7 +240,7 @@ data BasicCycleAnalysis = BasicCycleAnalysis
     -- Map node names onto their new "collapsed" indices.
     index_map      :: AM.AtomMap Int,
     -- The same in reverse:
-    rev_index_map  :: M.Map Int (S.Set Atom),
+    rev_index_map  :: M.Map Int (S.Set CncGraphNode),
     -- Map nodes onto their up/downstream taking into account the
     -- grouping (e.g. a dependency on a node implies dependencies on
     -- all other nodes sharing the same group.
@@ -307,7 +284,8 @@ basicCycleAnalysis (spec@CncSpec{graph, steps, items, reductions, nodemap}) =
       nodesets_counters = zip (map (S.map nodeToName) allnodesets) [0..] 
       --num_counters = length allnodesets
       -- For convenience, we store a map in the other direction as well, from counter -> nodeset:
-      rev_counter_map = M.fromList $ map (\ (a,b) -> (b,a)) nodesets_counters
+      rev_counter_map = M.fromList $ 
+			zip [0..] (map (S.map (fromJust . G.lab graph)) allnodesets)
 
       -- Next we compute the upstream dependencies of entire cycles taken together:
       cycs_wname = L.map getSteps cycsets
@@ -335,23 +313,90 @@ basicCycleAnalysis (spec@CncSpec{graph, steps, items, reductions, nodemap}) =
 		S.fromList$ getnbrs spec (CGSteps name))
 
 
+
+-- =================================================================================================
+--  DONE propogation plugins:
+-- -------------------------------------------------------------------------------------------------
+
+-- 'Done' plugins are composable with one another.
+-- A done plugin is both a predicate and a codegenerator that contributes to the "whenDone" method.
+newtype  DonePlugin = DonePlugin (CncGraphNode -> Maybe (EasyEmit ()))
+
+--  and contain two main ingredients:
+--   * A predicate that indicates which cnc graph nodes should have their done-ness tracked.
+--   * A code generator that contributes to the final "whenDone" method.
+-- data DonePlugin = DonePlugin { nodePred :: CncGraphNode -> Bool, 
+-- 			       doneHook :: CncGraphNode -> EasyEmit () }
+
+-- Combine done plugins.
+composeDonePlugins :: DonePlugin -> DonePlugin -> DonePlugin 
+composeDonePlugins = undefined 
+
+
+-- All the DonePlugins used in a run of the translator should be
+-- composed together before conversion into a regular plugin.
+convertDonePlugin :: DonePlugin -> CodeGenPlugin
+
+
+-- Here we specify two different (well, one inherited from the other)
+-- plugins that share the same graph analysis.
+
+autodonePlugin      :: Bool -> CodeGenPlugin 
+reductionDonePlugin :: Bool -> CodeGenPlugin 
+
+-- | The autodone plugin introduces counters for step collections and
+-- | tracks when they are completely finished ("done").
+autodonePlugin      debug  = 
+  -- __autodone  debug (basicCycleAnalysis spec) spec
+  convertDonePlugin autodone_base
+
+-- | The reduction-done plugin extends autodone by introducing counters
+-- for reduction collections and signalling all_done()
+reductionDonePlugin debug spec = __reduction debug (basicCycleAnalysis spec) spec
+
+-- ************* TODO / FIXME: ***************
+-- Currently the above two functions REPLICATE the cycle analysis.  Fix this by either:
+--   (1) rearchitecting the code that adds plugins in Main.hs to call basicCycleAnalysis once.
+--   (2) memoizing basicCycleAnalysis
+
+
 --------------------------------------------------------------------------------
--- Reduction-Done plugin:
+-- Most basic done plugin.
+--------------------------------------------------------------------------------
+
+autodone_base :: DonePlugin
+-- This is a basic plugin that tracks done-ness but doesn't DO anything.
+autodone_base = DonePlugin $ 
+	        \ node -> if isStepC node 
+			  then Just (return ())
+			  else Nothing
+
+--------------------------------------------------------------------------------
+-- Conversion from done plugin to a normal plugin.
 --------------------------------------------------------------------------------
 
 -- The autodone plugin introduces counters for groups of steps.  For
 -- each group of steps 'done' will eventually be signaled (once).
-__autodone debug_autodone 
-           BasicCycleAnalysis {index_map, rev_index_map, upstream_map, downstream_map}
-           (spec@CncSpec{graph, steps, items, reductions, nodemap}) 
-	   stpC =
-  let 
+convertDonePlugin (DonePlugin dpgfun)
+		  (spec@CncSpec{graph, steps, items, reductions, nodemap}) 
+		  stpC 
+    = Just this
+  where 
+      debug_autodone = True
+      BasicCycleAnalysis {index_map, rev_index_map, upstream_map, downstream_map} = basicCycleAnalysis spec
+ 
       countername num = Syn$t$ "done_counter" ++ show num
       funname     num = Syn$t$ "decr_done_counter"  ++ show num
 
+      -- The predicate for which nodes are tracked with done counters.
+      -- ALL step collections must be tracked, and some subset of the
+      -- "passive" collections may be tracked as well.
+      -- (TODO: we could track only what is upstream of the collections of interest to dpgfun)
+      pred cncNode = isStepC cncNode || isJust (dpgfun cncNode)
+
       stpind = counter_lookup stpC
-      -- This maps each 
-      numbered_nodesets :: [(Int, S.Set Atom)] = M.toList rev_index_map
+      -- This maps each unique counter onto the corresponding set of CncSteps:
+      numbered_nodesets :: [(Int, S.Set CncGraphNode)] = M.toList rev_index_map
       counter_lookup stp = case AM.lookup stp index_map of 
 			     Just x -> x
 			     Nothing -> error$ "autodonePlugin: Could not find counter corresponding to step: "++ show stp
@@ -366,14 +411,15 @@ __autodone debug_autodone
             -- Compute a set consisting of all downstream *counters* (step groups), not steps:
 	    S.toList $ 
 	    S.map ((index_map AM.!) . graphNodeName) $
-	    S.filter isStepC $
+	    S.filter pred $ 
 	    nbr_set updown_map set
       -- Find up or downstream graph nodes (chunking cycles together).
       nbr_set updown_map set = 
          S.unions $ 
-	  map (\nd -> AM.findWithDefault S.empty nd updown_map) $
+	  map (\nd -> AM.findWithDefault S.empty (graphNodeName nd) updown_map) $
 	      S.toList set
 
+      -- Bind the "methodtable" to 'this' so it can be recursively referenced:
       this = defaultHooksTable
        {
 	whenDone = \ set -> do
@@ -382,10 +428,11 @@ __autodone debug_autodone
 	      upstream     = nbr_set upstream_map set
 
 	  when debug_autodone$ 
-	    app (function$ "printf") [stringconst$ " [autodone] "++ show stpC ++": Node(s) done "
-				      ++ show (S.toList$ rev_index_map M.! stpind)
+	    app (function$ "printf") [stringconst$ " [autodone] Node(s) done "
+				      ++ show ((map graphNodeName $ S.toList set) :: [Atom])
 					      ++", upstream deps met: " ++ 
-				              show (filter isStepC$ S.toList upstream) ++"\n"]
+				              show ((map graphNodeName $ filter pred$ S.toList upstream)
+						    :: [Atom]) ++"\n"]
 	  forM_ downcounters $ \ cntr -> do
 	     app (function$ funname cntr) []
 
@@ -395,22 +442,24 @@ __autodone debug_autodone
 	if is_maincontext
 	then (do comm "[autodone] Maintain a piece of state for each tracked subgraph: the done counter"
 		 forM_ numbered_nodesets $ \ (ind, ndset) -> do 
-	           comm ""
 		   comm$ "Counter "++ show ind ++ ": Serves node(s): " ++ 
-			 concat (intersperse " "$ map fromAtom (S.toList ndset))
+			 concat (intersperse " "$ map graphNodeName (S.toList ndset))
 		   var (TSym "tbb::atomic<int>") (countername ind)
 		   -- "We also introduce a procedure that transitions a group of nodes into a done state:"
 		   funDef voidTy (funname ind) [] $ \() -> do 
 		      x <- tmpvar TInt
-		      set x (function ((countername stpind) `dot` "fetch_and_decrement") [])
+                      let name = countername ind
+		      set x (function (name `dot` "fetch_and_decrement") [])
 		      when debug_autodone$ 
- 			app (function "printf") [stringconst$ " [autodone] "++show stpC++": Decremented own refcount to %d\n", x-1]
+ 			app (function "printf") [stringconst$ " [autodone] Decremented "++synToStr name++" to %d\n", 
+						 x-1]
 		      if_ (x == 1)
 			  (
     		              whenDone this ndset 
 			  )
 			  (when debug_autodone $
 			    app (function "printf") [stringconst$ " [autodone] "++show stpC++" NOT DONE\n"])
+	           comm ""
 
 		 return ()
 
@@ -455,7 +504,7 @@ __autodone debug_autodone
 	       app (function "printf") [stringconst$ " [autodone] Environment waiting, considered done.\n"]
             app (function$ main `dot` (funname stpind)) []	    
       }
-  in Just$ this 
+
 
 
 --------------------------------------------------------------------------------
