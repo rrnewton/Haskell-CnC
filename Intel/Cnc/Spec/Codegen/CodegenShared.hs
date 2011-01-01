@@ -3,8 +3,14 @@
 -- NOTES
 -- It would be nice for plugins to be able to invoke methods of all other plugins...
 
+-- TODO / FIXME:
+-- whenDone hook can be removed now.
 
-module Intel.Cnc.Spec.Codegen.CodegenShared where
+--------------------------------------------------------------------------------
+
+module Intel.Cnc.Spec.Codegen.CodegenShared 
+
+where
 
 import StringTable.Atom
 import qualified StringTable.AtomSet as AS
@@ -27,6 +33,9 @@ import qualified Data.Graph.Inductive as G
 import Data.Graph.Analysis.Algorithms.Common
 
 import Debug.Trace
+
+import Intel.Cnc.Spec.GatherGraph (exampleGraph)
+import Text.PrettyPrint.HughesPJClass
 
 import qualified Control.Exception as CE
 
@@ -228,8 +237,11 @@ testplugin spec stpC =
 
   }
 
+
+
 ----------------------------------------------------------------------------------------------------
 -- Type definitions for graph analyses.
+----------------------------------------------------------------------------------------------------
 
 -- | This represents the result of a basic graph analysis to determine
 -- cycles.  The nodes are re-indexed according to a scheme that
@@ -247,7 +259,22 @@ data BasicCycleAnalysis = BasicCycleAnalysis
     downstream_map :: AM.AtomMap (S.Set CncGraphNode),
     upstream_map   :: AM.AtomMap (S.Set CncGraphNode)
   }
+ deriving Show
 
+-- Would be nice to DERIVE this:
+instance Pretty BasicCycleAnalysis where 
+ pPrint BasicCycleAnalysis{index_map, rev_index_map, upstream_map, downstream_map} =
+   text "BasicCycleAnalysis {" $$
+   nest 4 (
+	   text "index_map = "      <> foo index_map      <> text ", " $$
+	   text "rev_index_map = "  <> foo rev_index_map  <> text ", " $$
+	   text "upstream_map = "   <> foo upstream_map   <> text ", " $$
+	   text "downstream_map = " <> foo downstream_map
+	  ) $$
+   text "}"
+
+-- foo x = text $ show x
+foo x = pPrint x
 
 -- | Performs an analysis to produce a BasicCycleAnalysis
 --   For efficiency we would expect that this analysis is performed
@@ -255,33 +282,43 @@ data BasicCycleAnalysis = BasicCycleAnalysis
 --
 -- NOTE: Currently only step collections are included in the counter map!
 basicCycleAnalysis :: CncSpec -> BasicCycleAnalysis
-basicCycleAnalysis (spec@CncSpec{graph, steps, items, reductions, nodemap}) = 
-    trace "DOING GRAPH ANALYSIS " $ 
+basicCycleAnalysis (spec@CncSpec{graph, steps, items, reductions, nodemap, realmap}) = 
     BasicCycleAnalysis {index_map=counter_map, rev_index_map=rev_counter_map, upstream_map, downstream_map}
   where 
-      nodeToName   = graphNodeName . fromJust . G.lab graph
-      nameToNode   = fst . (G.mkNode_ nodemap)
+      indexToNamed nd = case G.lab graph nd of 
+		        Nothing -> error$ "basicCycleAnalysis: Node not found in graph: "++ show nd
+		        Just x -> x
+      namedToIndex   = fst . (G.mkNode_ nodemap)
 
-      -- Remove item collections before computing cycles (interested in control only):
-      pruned_graph = G.delNodes (map (nameToNode . CGItems) $ AM.keys items) $
-		     G.delNodes (map (nameToNode . CGReductions) $ AM.keys reductions) $
+      -- NOTE: Only "active" collections which can put new instances into
+      -- other parts of the graph (currently only step collections) are
+      -- considered for the purposes of cycle calculation.
+
+      -- Thus remove reduction/item collections before computing cycles (interested in control only):
+      pruned_graph = G.delNodes (map (namedToIndex . CGItems) $ AM.keys items) $
+		     G.delNodes (map (namedToIndex . CGReductions) $ AM.keys reductions) $
 		     graph 
       -- TODO: ALTERNATIVELY: Rebuild the graph with only step collections.
       --step_only_graph = stepOnlyGraph graph
 
       -- NOTE: This includes special_environment_name:
-      all_step_nds = S.fromList$ map (nameToNode . CGSteps) (AS.toList steps)
+--      all_step_nds = S.fromList$ map (namedToIndex . CGSteps) (AS.toList steps)
 
       cycsets = joinCycles$ cyclesIn' pruned_graph
 		      
       -- Remove all nodes that are in cycles to find those that remain:
-      non_cycle_nodes = S.toList $ foldl' S.difference all_step_nds cycsets
+--      non_cycle_nodes = S.toList $ foldl' S.difference all_step_nds cycsets
 
+      all_names :: S.Set G.Node
+      all_names = S.fromList$ map namedToIndex $ M.keys realmap
+      non_cycle_nodes = S.toList$ foldl' S.difference all_names cycsets
+
+      -- Combine the nodes in and out of cycles:
       allnodesets :: [S.Set G.Node] = cycsets ++ (map S.singleton $ non_cycle_nodes)      
 
       -- Map every node onto exactly one counter.  Nodes in a cycle must have the same counter.
       counter_map :: AM.AtomMap Int  = fromSetList $ nodesets_counters
-      nodesets_counters = zip (map (S.map nodeToName) allnodesets) [0..] 
+      nodesets_counters = zip (map (S.map (graphNodeName . indexToNamed)) allnodesets) [0..] 
       --num_counters = length allnodesets
       -- For convenience, we store a map in the other direction as well, from counter -> nodeset:
       rev_counter_map = M.fromList $ 
@@ -305,18 +342,22 @@ basicCycleAnalysis (spec@CncSpec{graph, steps, items, reductions, nodemap}) =
 	     in 
 	        fromSetList $ 
 		(map (dosingle getnbrs) non_cycle_nodes ++
-	        zip (map (S.map nodeToName) cycsets) cycnbrs)
+	        zip (map (S.map (graphNodeName . indexToNamed)) cycsets) cycnbrs)
 
       dosingle getnbrs nd = 
-	     let name = nodeToName nd in 
-	       (S.singleton name, 
-		S.fromList$ getnbrs spec (CGSteps name))
+	     let name = indexToNamed nd in 
+	       (S.singleton (graphNodeName name), 
+		S.fromList$ getnbrs spec name)
 
 
 
 -- =================================================================================================
 --  DONE propogation plugins:
 -- -------------------------------------------------------------------------------------------------
+
+-- Used in this file only:
+countername num = Syn$t$ "done_counter" ++ show num
+
 
 -- 'Done' plugins are composable with one another.
 -- A done plugin is both a predicate and a codegenerator that contributes to the "whenDone" method.
@@ -328,31 +369,31 @@ newtype  DonePlugin = DonePlugin (CncGraphNode -> Maybe (EasyEmit ()))
 -- data DonePlugin = DonePlugin { nodePred :: CncGraphNode -> Bool, 
 -- 			       doneHook :: CncGraphNode -> EasyEmit () }
 
--- Combine done plugins.
-composeDonePlugins :: DonePlugin -> DonePlugin -> DonePlugin 
-composeDonePlugins = undefined 
-
-
 -- All the DonePlugins used in a run of the translator should be
 -- composed together before conversion into a regular plugin.
+composeDonePlugins :: DonePlugin -> DonePlugin -> DonePlugin 
 convertDonePlugin :: DonePlugin -> CodeGenPlugin
+
 
 
 -- Here we specify two different (well, one inherited from the other)
 -- plugins that share the same graph analysis.
-
 autodonePlugin      :: Bool -> CodeGenPlugin 
-reductionDonePlugin :: Bool -> CodeGenPlugin 
+--reductionDonePlugin :: Bool -> CodeGenPlugin 
 
 -- | The autodone plugin introduces counters for step collections and
 -- | tracks when they are completely finished ("done").
 autodonePlugin      debug  = 
-  -- __autodone  debug (basicCycleAnalysis spec) spec
   convertDonePlugin autodone_base
 
--- | The reduction-done plugin extends autodone by introducing counters
--- for reduction collections and signalling all_done()
-reductionDonePlugin debug spec = __reduction debug (basicCycleAnalysis spec) spec
+
+-- reductionDonePlugin = autodonePlugin
+
+-- -- | The reduction-done plugin extends autodone by introducing counters
+-- -- for reduction collections and signalling all_done()
+reductionDonePlugin debug = -- spec = 
+--    __reduction debug (basicCycleAnalysis spec) spec
+  convertDonePlugin reduction_doneplug
 
 -- ************* TODO / FIXME: ***************
 -- Currently the above two functions REPLICATE the cycle analysis.  Fix this by either:
@@ -368,24 +409,56 @@ autodone_base :: DonePlugin
 -- This is a basic plugin that tracks done-ness but doesn't DO anything.
 autodone_base = DonePlugin $ 
 	        \ node -> if isStepC node 
-			  then Just (return ())
+			  then Just$ return ()
 			  else Nothing
 
+-- This is more of a 
+reduction_doneplug = DonePlugin $ 
+  let 
+      debug_autodone = True
+      main = Syn$ t"FIXMEFIXME"
+  in 
+  trace "REDUCTION DONE BEING USED "$
+  \ node -> 
+    if isReductionC node then Just$ 
+      trace "REDUCTION DONE - CODEGEN INVOKED "$
+      do
+	 let redC = graphNodeName node
+	     counter = main `dot` countername redC		       
+	 x <- tmpvar TInt 
+	 set x ((function (counter `dot` "fetch_and_increment")) [])
+	 if_ (x == 1)
+	     (do comm "[reduction_done] When the dependencies of a reduction collection are done, signal all_done() on it"
+		 when debug_autodone$
+		   app (function "printf") [stringconst$ " [reduction_done] Signaling all_done() for "++ show redC ++".\n"]
+		 app (function (main `dot` atomToSyn redC `dot` "all_done")) [])
+	     (return ())
+    else Nothing
+
+
 --------------------------------------------------------------------------------
--- Conversion from done plugin to a normal plugin.
+-- Composing and Converting done plugins.
 --------------------------------------------------------------------------------
 
--- The autodone plugin introduces counters for groups of steps.  For
--- each group of steps 'done' will eventually be signaled (once).
+composeDonePlugins (DonePlugin dp1) (DonePlugin dp2) = DonePlugin$ 
+  \ cncnode -> 
+    case catMaybes [dp1 cncnode, dp2 cncnode]  of 
+      [] -> Nothing
+      ls -> Just$ sequence_ ls
+
+
+-- Conversion from done plugin to a normal plugin.
 convertDonePlugin (DonePlugin dpgfun)
 		  (spec@CncSpec{graph, steps, items, reductions, nodemap}) 
 		  stpC 
-    = Just this
+    = 
+      trace ("TEMPTOGGLE: convertDonePlugin GRAPH: "++ show (graph)) $
+      trace ("TEMPTOGGLE: convertDonePlugin NODESET: "++ show numbered_nodesets) $
+      Just this
   where 
       debug_autodone = True
       BasicCycleAnalysis {index_map, rev_index_map, upstream_map, downstream_map} = basicCycleAnalysis spec
  
-      countername num = Syn$t$ "done_counter" ++ show num
       funname     num = Syn$t$ "decr_done_counter"  ++ show num
 
       -- The predicate for which nodes are tracked with done counters.
@@ -435,7 +508,10 @@ convertDonePlugin (DonePlugin dpgfun)
 						    :: [Atom]) ++"\n"]
 	  forM_ downcounters $ \ cntr -> do
 	     app (function$ funname cntr) []
-
+	  -- Finally, inject code from all the DonePlugins that are active:
+	  trace ("TEMPTOGGLE: SEQUENCING DONEPLUG ACTIONS " ++ show set) $
+	    sequence_ (catMaybes$ map dpgfun$ S.toList set)
+          comm "TEMPTOGGLE: DONEPLUG HERE"
 
        , addGlobalState = 
 	-- This only happens ONCE, not per step-collection, and it declares ALL the counters:
@@ -510,7 +586,7 @@ convertDonePlugin (DonePlugin dpgfun)
 --------------------------------------------------------------------------------
 -- Reduction-Done plugin:
 --------------------------------------------------------------------------------
-
+{-
 __reduction debug_autodone 
            BasicCycleAnalysis {upstream_map}
             (spec@CncSpec{graph, steps, items, reductions, nodemap}) =
@@ -576,7 +652,7 @@ __reduction debug_autodone
 	  return () 
 
      }
-
+-}
 
 ----------------------------------------------------------------------------------------------------
 -- Dead-Item-Collection plugin:
@@ -616,7 +692,7 @@ fromSetList =
 -- Graph related utilities used by the above:
 
 -- Join together nodes that participate in overlapping cycles:
--- Inefficient quadratic algorithm:
+-- FIXME!!! Inefficient quadratic algorithm:
 joinCycles :: (P.Ord a) => [[a]] -> [S.Set a]
 joinCycles cycs = foldl' foldin [] (map S.fromList cycs)
  where 
@@ -637,10 +713,16 @@ testg = G.mkGraph (zip [1..7] (repeat ()))
     ]
 testc = cyclesIn' testg
 
+
 tests_codegenshared = 
     testSet "CodegenShared" 
       [ testCase "" "joinCycles connected1"$  [S.fromList [2,3,4,5,6,7]] ~=? joinCycles testc
       , testCase "" "joinCycles connected2"$  [S.fromList [2,3,4,5,6,7]] ~=? joinCycles [[4,5,6,7,3],  [4,2,3],  [6,7]]
       , testCase "" "joinCycles connected3"$  [S.fromList [2,3,4,5,6,7]] ~=? joinCycles [[4,5,6,7,3],  [4,2,3]]
       , testCase "" "joinCycles split"$       [S.fromList [2,3,4], S.fromList [6,7]] ~=? joinCycles [[4,2,3],  [6,7]]
+       
+      , testCase "" "basic graph analysis"$ test$ do
+	 putStrLn "Printing result of basic cycle analysis:"
+	 print$ pPrint (basicCycleAnalysis exampleGraph)
+      
       ]

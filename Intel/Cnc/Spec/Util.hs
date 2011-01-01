@@ -22,6 +22,10 @@ import GHC.Exts -- For IsString
 import qualified Test.HUnit as HU
 import Debug.Trace
 
+import qualified StringTable.AtomMap as AM
+import qualified Data.Map as M
+import qualified Data.Set as S
+
 -- String Builder
 ----------------------------------------------------------------------------------------------------
 -- We abstract the process of creating strings so that we can make our
@@ -88,7 +92,6 @@ collapseMaybe :: Maybe (Maybe t) -> Maybe t
 collapseMaybe Nothing         = Nothing
 collapseMaybe (Just Nothing)  = Nothing
 collapseMaybe (Just (Just x)) = Just x
-
 
 instance Pretty Atom where
   pPrint atom = text (show atom)
@@ -162,6 +165,18 @@ instance ToAtom Doc where
 
 -- Constant: indentation used across all code generators.
 indent = 4
+
+--------------------------------------------------------------------------------
+-- Misc pretty-printing assistance.  Not exhaustive; whatever I happen to need:
+
+instance Pretty a => Pretty (S.Set a) where
+  pPrint x = pPrint (S.toList x)
+
+instance Pretty a => Pretty (AM.AtomMap a) where
+  pPrint x = pPrint (AM.toList x)
+
+instance (Pretty k, Pretty v) => Pretty (M.Map k v) where
+  pPrint x = pPrint (M.toList x)
 
 --------------------------------------------------------------------------------
 -- Testing and Assertion Utilities

@@ -129,6 +129,7 @@ upload:
 #====================================================================================================
 
 
+
 #====================================================================================================
 # Below is the (entirely separate) makefile for the translator.
 #====================================================================================================
@@ -138,37 +139,39 @@ HSOURCE=SrcLoc.hs Main.hs GatherGraph.hs AST.hs Codegen/CppOld.hs Codegen/Haskel
         CncGraph.hs CncViz.hs TraceVacuum.hs Curses.hs Util.hs \
         Passes/ReadHarch.hs Passes/ReadCnC.hs Passes/TypeDefs.hs
 
+BUILDDIR= ./build/
+#BUILDDIR= ./
 HCNCNAME=cnc
 
 install: 
 	rm -f Intel/Cnc/Spec/Version.hs
 	$(MAKE) Intel/Cnc/Spec/Version.hs $(HCNCNAME).stripped
-	cp $(HCNCNAME).stripped `which $(HCNCNAME)`
+	cp $(BUILDDIR)/$(HCNCNAME).stripped `which $(HCNCNAME)`
 
 trans: 
 	@echo 
 	@echo ================================================================================
 	@echo   Building Translator.
 	@echo ================================================================================
-	$(MAKE) $(HCNCNAME)
+	$(MAKE) $(BUILDDIR)/$(HCNCNAME)
 
 Intel/Cnc/Spec/Version.hs: 
 	runhaskell extract_version.hs
 
-release: $(HCNCNAME).release
+release: $(BUILDDIR)/$(HCNCNAME).release
 
-$(HCNCNAME).release: $(HCNCNAME).stripped
+$(BUILDDIR)/$(HCNCNAME).release: $(BUILDDIR)/$(HCNCNAME).stripped
 	@echo Packing executable with UPX:
-	rm -f $(HCNCNAME).release
-	upx $(HCNCNAME).stripped -o $(HCNCNAME).release
+	rm -f $(BUILDDIR)/$(HCNCNAME).release
+	upx $(BUILDDIR)/$(HCNCNAME).stripped -o $(BUILDDIR)/$(HCNCNAME).release
 
-$(HCNCNAME).stripped: viz
+$(BUILDDIR)/$(HCNCNAME).stripped: viz
 	@echo Stripping executable to reduce size.
-	strip $(HCNCNAME) -o $(HCNCNAME).stripped
+	strip $(BUILDDIR)/$(HCNCNAME) -o $(BUILDDIR)/$(HCNCNAME).stripped
 
-$(HCNCNAME): preproc buildtrans
+$(BUILDDIR)/$(HCNCNAME): preproc buildtrans
 buildtrans: 
-	ghc $(GHCFLAGS) --make Intel/Cnc/Spec/Main.hs -o $(HCNCNAME) 
+	ghc $(GHCFLAGS) --make Intel/Cnc/Spec/Main.hs -odir $(BUILDDIR) -o $(BUILDDIR)/$(HCNCNAME) 
 # -fwarn-unused-imports
 #	ghc -c Intel/Cnc/Spec/CncLexer.hs 
 #	ghc -O --make Intel/Cnc/Spec/Main.hs -o $(HCNCNAME)
@@ -176,7 +179,7 @@ buildtrans:
 
 viz: preproc
 	ghc $(GHCFLAGS) -c Intel/Cnc/Spec/CncLexer.hs 
-	ghc $(GHCFLAGS) -DCNCVIZ --make Intel/Cnc/Spec/Main.hs -o $(HCNCNAME)
+	ghc $(GHCFLAGS) -DCNCVIZ --make Intel/Cnc/Spec/Main.hs -odir $(BUILDDIR) -o $(BUILDDIR)/$(HCNCNAME)
 
 preproc: Intel/Cnc/Spec/CncLexer.hs Intel/Cnc/Spec/CncGrammar.hs
 
@@ -197,14 +200,17 @@ wctrans:
 	(cd Intel/Cnc/Spec/; cloc-1.08.pl --by-file CncLexer.temp.hs CncGrammar.temp.hs $(HSOURCE))
 
 cleantrans:
-	rm -f $(HCNCNAME) $(HCNCNAME).bloated $(HCNCNAME).stripped $(HCNCNAME).release
-	(cd Intel/Cnc/Spec/; rm -f CncGrammar.hs CncLexer.hs *.o *.hi)
-	(cd Intel/Cnc/Spec/Codegen; rm -f *.o *.hi)
-	(cd Intel/Cnc/Spec/tests/; rm -f *.h)
+	rm -rf $(BUILDDIR)/$(HCNCNAME)  $(BUILDDIR)/$(HCNCNAME).* 
+	(cd Intel/Cnc/Spec/;         rm -f CncGrammar.hs CncLexer.hs *.hi)
+	(cd Intel/Cnc/Spec/Codegen;  rm -f  *.hi)
+	(cd $(BUILDDIR)/Intel/Cnc/Spec/;        rm -f *.o )
+	(cd $(BUILDDIR)/Intel/Cnc/Spec/Codegen; rm -f *.o )
+
 
 
 #====================================================================================================
 
 # cd graphPartitioner; $(MAKE)
 
-
+# Prevent odd make builtin rules re: cnc.sh
+.SUFFIXES:

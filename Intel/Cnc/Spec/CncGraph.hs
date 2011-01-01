@@ -4,7 +4,14 @@
 -- Data types and utilities for working with CnC Specifications (Graphs)
 -- Original Author: Ryan Newton
 ----------------------------------------------------------------------------------------------------
-module Intel.Cnc.Spec.CncGraph where
+module Intel.Cnc.Spec.CncGraph ( 
+				CncSpec (..), CncGraph, 
+				CncGraphNode (..), ColName, graphNodeName, isStepC, isReductionC, isTagC, isItemC,
+				
+                                upstreamNbrs, downstreamNbrs, builtinSteps,
+				getStepPrescriber
+				
+			       ) where
 
 import Intel.Cnc.Spec.Util 
 import Intel.Cnc.Spec.SrcLoc
@@ -56,6 +63,9 @@ graphNodeName (CGTags  n) = fromAtom n
 graphNodeName (CGItems n) = fromAtom n
 graphNodeName (CGReductions n) = fromAtom n
 
+instance Pretty CncGraphNode where
+  pPrint = text . show 
+
 instance Show CncSpec where
   show = show . pPrint
 
@@ -72,6 +82,7 @@ instance Pretty CncSpec where
 	   sep (L.map (\(x,y) -> pp((fromAtom x)::String,y)) $ AM.toList reductions) $$
 
       text (show graph)
+
 
 ----------------------------------------------------------------------------------------------------
 
@@ -135,3 +146,6 @@ nbrHelper adjacent (spec@CncSpec{..}) nodelab =
 -- | Extract a subgraph of the full CnC graph that only contains step collections (including 'env').
 stepOnlyGraph :: CncGraph -> Gr ColName ()
 stepOnlyGraph = error "stepOnlyGraph: TODO: implement me"
+
+
+----------------------------------------------------------------------------------------------------

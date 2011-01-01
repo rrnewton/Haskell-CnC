@@ -7,7 +7,9 @@
 -- The main entrypoint is "assembleSpec".
 ----------------------------------------------------------------------------------------------------
 
-module Intel.Cnc.Spec.GatherGraph ( coalesceGraph ) where
+module Intel.Cnc.Spec.GatherGraph ( coalesceGraph,
+				    exampleGraph, tests_gathergraph
+				  ) where
 import Intel.Cnc.Spec.AST
 import Intel.Cnc.Spec.TagFun
 import Intel.Cnc.Spec.CncGraph
@@ -24,6 +26,8 @@ import Control.Monad
 import Data.Graph.Inductive as G
 --import Data.Graph.Inductive.NodeMap as NM
 import Debug.Trace
+
+import Test.HUnit
 
 ----------------------------------------------------------------------------------------------------
 
@@ -48,8 +52,7 @@ coalesceGraph name parsed =
 
   rm = Map.fromList$ Prelude.map (\ (a,b) -> (b,a)) $ labNodes g2
 
-  allnodes = --trace "Collecting allnodes" $
-	     collectInsts parsed $ collectDecls parsed
+  allnodes = collectInsts parsed $ collectDecls parsed
   collect stmt = 
    case stmt of 
       Chain start links -> coalesceChain allnodes start links
@@ -151,7 +154,7 @@ coalesceChain allnodes start ls = loop (process start) ls
 	       insert         = insMapEdgeM (pnode, node, mkTagFun (show (node,pnode)) exps pexps) 
 	       insert_flipped = insMapEdgeM (pnode, node, mkTagFun (show (pnode,node)) pexps exps) 
 	   in
-	   trace ("Inserting produce/consume edge: "++ show (pnode, L.map stripDecor  pexps, node, L.map stripDecor  exps)) $
+	   trace ("TEMPTOGGLE: Inserting produce/consume edge: "++ show (pnode, L.map stripDecor  pexps, node, L.map stripDecor  exps)) $
 	   do case (pnode, node) of 
 	        -- Valid combinations for a producer relation:
 		-- This is tricky because depending on whether the left or the right
@@ -181,7 +184,7 @@ coalesceChain allnodes start ls = loop (process start) ls
 	   -- This is a bit simpler because there is only one valid prescribe:
 	   do case (pnode, node) of 
 	        (CGTags _, CGSteps _) -> 
-		    trace ("Inserting tag->step edge: "++ show (pnode, L.map stripDecor pexps, node, L.map stripDecor  exps)) $
+		    trace ("TEMPTOGGLE: Inserting tag->step edge: "++ show (pnode, L.map stripDecor pexps, node, L.map stripDecor  exps)) $
 --		    insMapEdgeM (pnode, node, mkTagFun (node,exps) (pnode,pexps))
 		    insMapEdgeM (pnode, node, mkTagFun (show (node,exps)) exps pexps)
 	        (l,r) -> error$ "coalesceChain: invalid prescribe relation from '"++graphNodeName l++"' to '"++graphNodeName r++"'"
@@ -210,6 +213,8 @@ instToNode (CncSpec { .. }) inst =
 -- FIXME: these are currently only for the LEGACY syntax:
 	InstStepCol _ name _  -> CGSteps$ toAtom name
 	InstTagCol  _ name _  -> CGTags$  toAtom name
+
+--        InstReductionCol _ _ _ -> TODO
 
 	InstStepOrTags _ name _  -> 
 	    case classify $ toAtom name of 
@@ -241,17 +246,24 @@ seedWorld =
 	  ,  harchtree= error "CncSpec: harchtree uninitialized"
 	  }
 
-example =   
+-- A very simple graph for testing:
+exampleGraph =   
   coalesceGraph "foo" $
   L.map (mapDecor (\_ -> UnhelpfulSpan "")) $
   [  DeclareTags () (toAtom "T") (Just (TSym (toAtom "int")))
   ,  DeclareSteps () (toAtom "S")
+  ,  DeclareItems () (toAtom "I") Nothing
   ,  Chain [InstName () "T"] [PrescribeLink () [InstName () "S"]]
+  ,  Chain [InstName () "S"] [ProduceLink () [InstName () "I"]]
   ]
 
--- T should be the prescriber to S:
--- FIXME TODO: Set up HUnit here...
-testGetStepPrescriber = getStepPrescriber example (toAtom "S") 
+
+tests_gathergraph = 
+    testSet "GatherGraph" 
+      [ testCase "" "getStepPrescriber: T should be the prescriber to S "$  
+	(toAtom "T") ~=? getStepPrescriber exampleGraph (toAtom "S") 
+      ]
+
 
 ----------------------------------------------------------------------------------------------------
 
