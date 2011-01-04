@@ -39,14 +39,14 @@ int S3::execute( const int & tag, ctxt & c) const
 }
 
 /*
-Here is a quick check that the output is correct (6684686229).
+Here is a quick check (haskell code) that the output is correct (6684686229).
 
 let s1 = map sum $ transpose $ inits [0..9]
 let s2 = map product $ transpose $ inits s1
 let s3 = sum s2
 
-s1: [0,9,16,21,24,25,24,21,16,9]
-s2: [0,387420489,4294967296,1801088541,191102976,9765625,331776,9261,256,9]
+s1 is [0,9,16,21,24,25,24,21,16,9]
+s2 is [0,387420489,4294967296,1801088541,191102976,9765625,331776,9261,256,9]
 s3 is 6684686229
 
 */

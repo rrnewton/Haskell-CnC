@@ -28,6 +28,7 @@ import Intel.Cnc.Spec.Version
 
 import Data.Maybe ( fromJust )
 import qualified Data.Map as M
+import qualified Data.Set as S
 import Data.List
 --import Data.Function
 
@@ -54,7 +55,7 @@ import Intel.Cnc.Spec.CncViz as Viz
 import Control.Concurrent
 #endif
 
-----------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------486
 
 data Flag 
     = Verbose Int | Version | Help | Debug 
@@ -71,7 +72,7 @@ data Flag
     | UbigraphOpt
     | VacuumViz  | Vacuum
     | SynthSpec String    
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
     
 
 run_modes :: [(String, [OptDescr Flag], String)]
@@ -282,7 +283,6 @@ main2 argv = do
   -- Read and process option flags:
   ----------------------------------------------------------------------------------------------------
 
-
   -- Do a little pre-processing of the opts so we can catch --version:
   let (common_opts,_,_) = getOpt Permute common_options argv
   when (Version `elem` common_opts) $  do printHeader; exitSuccess
@@ -301,6 +301,8 @@ main2 argv = do
 	       ls  -> simpleErr ""$ "Prefix '"++first++"' could refer to multiple modes:  "
 	                          ++ concat (intersperse ", "$ map fst3 ls)
       verbosity = foldl (\ lvl opt -> case opt of Verbose (-1) -> lvl+1; Verbose n -> n; _ -> lvl) 1 common_opts
+
+      -- uncommon: filter out options that get special treatment first:
       -- This is annoying but I can't think of a systematic way:							      
       uncommmon (Verbose _) = False
       uncommmon (Version  ) = False
@@ -318,13 +320,18 @@ main2 argv = do
 
   evaluate mode -- Force the above unsafePerformIO 
 
-  (opts,files) <- 
+  -- For now none of the command line flags attach any meaning to
+  -- DUPLICATES, and some of the configuration actions need to only
+  -- take place once.  (For example, it would be disasterous to enable
+  -- DonePlugins more than once.)  Thus we treat 'opts' as a set:
+  (opts_set,files) <- 
      --case getOpt' Permute (mode_opts) rest of
      -- Need common options to avoid error messages:
      case getOpt' Permute (common_options ++ mode_opts) rest of 
-       (o,n,[], [] ) -> return (filter uncommmon o,n)
+       (o,n,[], [] ) -> return (S.fromList$ filter uncommmon o, n)
        (o,n,bad,[] ) -> simpleErr ""$ "Unrecognized options in "++mode++" mode: "++ concat (intersperse " " bad)
-       (_,_,_,errs)  -> simpleErr mode$ concat errs
+       (_,_,_,errs)  -> simpleErr mode$ concat errs  
+  let opts = S.toList opts_set
 
   when helpmode $ 
     do --putStrLn "Mode specific options:"
@@ -338,7 +345,9 @@ main2 argv = do
        print_usage_common
        exitSuccess
 
-  ------------------------------------------------------------	       
+  ----------------------------------------------------------------------------------------------------
+  -- Now begins the per-mode behavior:
+  ----------------------------------------------------------------------------------------------------
   case mode of 
 
    "harchpart" -> do 
@@ -380,7 +389,7 @@ main2 argv = do
 	  alldone = do putStrLn$ cnctag++"Reached end of trace.  Exiting."
 		       exitSuccess
 
-      -- TEMPTOGGLE -- this is just for testing:
+      -- TEMPTOGGLE -- GETCOUNT SUMMARIZATION PRINTOUTS : this is just for testing:
       when (debug) $ do
 	    let fn (GetI _ (_,tag)) = map fst (reads tag :: [((Int,Int,Int),String)])
 		fn _ = [] 
@@ -438,7 +447,7 @@ main2 argv = do
 	    alldone
 
 #ifdef CNCVIZ
-      when (VacuumViz `elem` opts) $ do
+      when (VacuumViz `S.member` opts_set) $ do
 	    let guiactions = traceToGUI thetrace
 
 	    -- This prints it out ASAP so it doesn't follow the actual playback unfortunately...
@@ -451,7 +460,9 @@ main2 argv = do
 #endif
 
 
-   ------------------------------------------------------------	       
+   ------------------------------------------------------------------- 
+   -- The most important mode of all: translate .cnc files to headers.
+   ------------------------------------------------------------------- 
    "translate" -> do 
       let codegenmode_option o = o `elem` [Cpp, CppOld, Haskell] 
 	  codegenmode = case filter codegenmode_option opts of
@@ -469,6 +480,10 @@ main2 argv = do
 	 Cpp -> return ()
 	 _   -> return ()
 
+      -- Sanity check on mode flags:
+      when (AutoDone `S.member` opts_set && AutoDoneDbg `S.member` opts_set) $
+	   error$ "translate: cannot activate --autodone and --autodonedbg at the same time"
+
       -- Process options for this mode:
       config <- foldM (\ cfg opt -> do 
        case opt of 
@@ -483,15 +498,17 @@ main2 argv = do
          Debug       -> return cfg{ gendebug=True, wrapall=True }
          GenTracing  -> return cfg{ gentracing=True } 
          GenDepends  -> return cfg{ gendepends=True } 
-         AutoDone    -> return cfg{ plugins= reductionDonePlugin False : plugins cfg } 
-         AutoDoneDbg -> return cfg{ plugins= reductionDonePlugin True : plugins cfg } 
+
+-- TODO: In the future all the activated DonePlugins will need to be combined.  For now, there's only one.
+         AutoDone    -> return cfg{ plugins= convertDonePlugin reductionDonePlugin  : plugins cfg } 
+         AutoDoneDbg -> return cfg{ plugins= convertDonePlugin reductionDonePlugin  : plugins cfg } 
          NoStepDefs  -> return cfg{ genstepdefs=False } 
 
 	 m | codegenmode_option m -> return cfg
 	 o -> simpleErr mode ("Internal error: Currently unhandled option: "++ show o ++"\n")
        ) default_codegen_config opts
 
-      ------------------------------------------------------------
+
       -- Now do the actual translation (if we get to here):
       ------------------------------------------------------------
 
@@ -521,6 +538,7 @@ main2 argv = do
 	_ -> error$ "Not a codegen mode: "++ show codegenmode
 
    _ -> error "Really egregious internal error"
+
   --------------------------------------------------------------------------------
   -- Finished with mode dispatch
   --------------------------------------------------------------------------------

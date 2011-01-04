@@ -78,7 +78,6 @@ instance Functor TagExp where
 --mkTagFun (node1,exps1) (node2,exps2) = 
 mkTagFun :: String -> [Exp SrcSpan] -> [Exp SrcSpan] -> Maybe TagFun
 mkTagFun ctxtmsg exps1 exps2 = 
- trace ("MKTAGFUN "++ ctxtmsg) $
  let e1s = Prelude.map checkConvertTF exps1
      e2s = Prelude.map checkConvertTF exps2
  in if all isTEVar e1s

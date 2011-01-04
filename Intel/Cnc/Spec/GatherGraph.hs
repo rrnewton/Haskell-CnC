@@ -149,12 +149,9 @@ coalesceChain allnodes start ls = loop (process start) ls
          forM_ insts $ \ (node,exps) -> 
          forM_ prevs $ \ (pnode,pexps) -> 
            let 
-	       -- insert1 = insMapEdgeM (pnode, node, mkTagFun (node,exps) (pnode,pexps)) 
-	       -- insert_flipped = insMapEdgeM (pnode, node, mkTagFun (pnode,pexps) (node,exps)) 
 	       insert         = insMapEdgeM (pnode, node, mkTagFun (show (node,pnode)) exps pexps) 
 	       insert_flipped = insMapEdgeM (pnode, node, mkTagFun (show (pnode,node)) pexps exps) 
 	   in
-	   trace ("TEMPTOGGLE: Inserting produce/consume edge: "++ show (pnode, L.map stripDecor  pexps, node, L.map stripDecor  exps)) $
 	   do case (pnode, node) of 
 	        -- Valid combinations for a producer relation:
 		-- This is tricky because depending on whether the left or the right
@@ -162,7 +159,7 @@ coalesceChain allnodes start ls = loop (process start) ls
 		-- differently.
 	        (CGSteps _, CGItems _)      -> insert_flipped
 	        (CGSteps _, CGReductions _) -> insert_flipped
-	        (CGSteps _, CGTags _)       -> insert
+	        (CGSteps _, CGTags _)       -> insert_flipped
 
                 -- NOTE: Tag functions always relative to the step collection.
 		-- Flip the tag components for generating the tag function:
@@ -184,8 +181,6 @@ coalesceChain allnodes start ls = loop (process start) ls
 	   -- This is a bit simpler because there is only one valid prescribe:
 	   do case (pnode, node) of 
 	        (CGTags _, CGSteps _) -> 
-		    trace ("TEMPTOGGLE: Inserting tag->step edge: "++ show (pnode, L.map stripDecor pexps, node, L.map stripDecor  exps)) $
---		    insMapEdgeM (pnode, node, mkTagFun (node,exps) (pnode,pexps))
 		    insMapEdgeM (pnode, node, mkTagFun (show (node,exps)) exps pexps)
 	        (l,r) -> error$ "coalesceChain: invalid prescribe relation from '"++graphNodeName l++"' to '"++graphNodeName r++"'"
               loop processed tl

@@ -26,3 +26,6 @@ main = do
   trans "mandel.cnc"
   trans "eigensolver.cnc"
 
+
+
+-- TODO: line set comparison

@@ -11,30 +11,32 @@ endif
 
 all: $(EXES)
 
+CNCTOOL="../build/cnc"
+
 #============================================================
 # Currently we give a separate rule for each test to exercise
 # different translator options:
 
 tagfun_checking_valid.h: tagfun_checking_valid.cnc  
-	../cnc trans --autodonedbg --debug $<
+	$(CNCTOOL) trans --autodonedbg --debug $<
 
 tagfun_depends.h: tagfun_depends.cnc
-	../cnc trans --autodonedbg --depends $<
+	$(CNCTOOL) trans --autodonedbg --depends $<
 
 simple_cycle.h: simple_cycle.cnc
-	../cnc trans --autodonedbg  $<
+	$(CNCTOOL) trans --autodonedbg  $<
 
 bigger_cycle.h: bigger_cycle.cnc
-	../cnc trans --autodonedbg  $<
+	$(CNCTOOL) trans --autodonedbg  $<
 
 two_cycles.h: two_cycles.cnc
-	../cnc trans --autodonedbg  $<
+	$(CNCTOOL) trans --autodonedbg  $<
 
 reduction_test.h: reduction_test.cnc
-	../cnc trans --autodonedbg  $<
+	$(CNCTOOL) trans --autodonedbg  $<
 
 reduction_test2.h: reduction_test.cnc
-	../cnc trans --autodonedbg  $<
+	$(CNCTOOL) trans --autodonedbg  $<
 
 #============================================================
 
@@ -61,6 +63,8 @@ reduction_test2.h: reduction_test.cnc
 %.exe : %.cpp %.h
 	time g++ $(FLAGS) $< -o $@ 
 #	time g++ $(FLAGS) $^ -o $@ 
+	@echo
+	@echo
 
 run:
 	@echo; echo; echo "================================================================================"

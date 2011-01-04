@@ -712,6 +712,8 @@ wrap_item_or_reduction_collection which colName ty1 ty2 classname stp plug_map f
 			   -- decls = commacat args'
 			   -- vars  = commacat $ map (text . snd) args
 			   doplugs project = execEasyEmit$ 
+			       -- FIXME: HACK:
+			       when (length args Prelude.>= 2) $
 		               forM_ (AM.findWithDefault [] stp plug_map) $ \ hooks ->
 				   project hooks (Syn$ t$ snd$ head args, Syn$ t$ snd$ head$tail args, colName)
 					         (Syn$ t$ snd$ head args, Syn$ t$ snd$ head$tail args)
@@ -750,7 +752,7 @@ wrap_item_or_reduction_collection which colName ty1 ty2 classname stp plug_map f
 						    do comm (" [tagfun_check] Checking tag function "++ show arg ++" -> "++ show exp)
 						       -- TODO: use normal variable decl here:
 						       putD$ tagty <+> (fromAtom arg) <+> t"=" <+> t"* m_context->tag" <> semi
-						       assert (head args EE.== Syn (pPrint exp))
+						       when (not$ null args)$ assert (head args EE.== Syn (pPrint exp)) -- FIXME -- afer factoring fix this head args
 						 _ -> error "internal error: tag function correctness not fully implemented yet.  Finish me."
 
 				             _ -> error$ "internal error: tag function correctness codegen: \n w"++show ls

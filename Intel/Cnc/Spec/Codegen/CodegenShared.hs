@@ -6,6 +6,10 @@
 -- TODO / FIXME:
 -- whenDone hook can be removed now.
 
+-- Environment will currently be decremented below zero because of
+-- upstream reduction collections.. only active collections should
+-- count for that.
+
 --------------------------------------------------------------------------------
 
 module Intel.Cnc.Spec.Codegen.CodegenShared 
@@ -31,8 +35,6 @@ import qualified Prelude as P
 import Test.HUnit
 import qualified Data.Graph.Inductive as G
 import Data.Graph.Analysis.Algorithms.Common
-
-import Debug.Trace
 
 import Intel.Cnc.Spec.GatherGraph (exampleGraph)
 import Text.PrettyPrint.HughesPJClass
@@ -356,6 +358,7 @@ basicCycleAnalysis (spec@CncSpec{graph, steps, items, reductions, nodemap, realm
 -- -------------------------------------------------------------------------------------------------
 
 -- Used in this file only:
+countername :: Int -> Syntax
 countername num = Syn$t$ "done_counter" ++ show num
 
 
@@ -374,65 +377,48 @@ newtype  DonePlugin = DonePlugin (CncGraphNode -> Maybe (EasyEmit ()))
 composeDonePlugins :: DonePlugin -> DonePlugin -> DonePlugin 
 convertDonePlugin :: DonePlugin -> CodeGenPlugin
 
-
-
--- Here we specify two different (well, one inherited from the other)
--- plugins that share the same graph analysis.
-autodonePlugin      :: Bool -> CodeGenPlugin 
---reductionDonePlugin :: Bool -> CodeGenPlugin 
-
 -- | The autodone plugin introduces counters for step collections and
 -- | tracks when they are completely finished ("done").
-autodonePlugin      debug  = 
-  convertDonePlugin autodone_base
-
-
--- reductionDonePlugin = autodonePlugin
+autodonePlugin      :: DonePlugin
 
 -- -- | The reduction-done plugin extends autodone by introducing counters
 -- -- for reduction collections and signalling all_done()
-reductionDonePlugin debug = -- spec = 
---    __reduction debug (basicCycleAnalysis spec) spec
-  convertDonePlugin reduction_doneplug
-
--- ************* TODO / FIXME: ***************
--- Currently the above two functions REPLICATE the cycle analysis.  Fix this by either:
---   (1) rearchitecting the code that adds plugins in Main.hs to call basicCycleAnalysis once.
---   (2) memoizing basicCycleAnalysis
-
+reductionDonePlugin :: DonePlugin
 
 --------------------------------------------------------------------------------
--- Most basic done plugin.
+-- autodone: Most basic done plugin.
 --------------------------------------------------------------------------------
 
-autodone_base :: DonePlugin
--- This is a basic plugin that tracks done-ness but doesn't DO anything.
-autodone_base = DonePlugin $ 
+-- This is a basic plugin that tracks done-ness but doesn't actually DO anything.
+autodonePlugin = DonePlugin $ 
 	        \ node -> if isStepC node 
 			  then Just$ return ()
 			  else Nothing
 
--- This is more of a 
-reduction_doneplug = DonePlugin $ 
+-- This one actually does something useful: signal done for reductions.
+reductionDonePlugin = DonePlugin $ 
   let 
       debug_autodone = True
-      main = Syn$ t"FIXMEFIXME"
   in 
-  trace "REDUCTION DONE BEING USED "$
   \ node -> 
     if isReductionC node then Just$ 
-      trace "REDUCTION DONE - CODEGEN INVOKED "$
-      do
-	 let redC = graphNodeName node
-	     counter = main `dot` countername redC		       
-	 x <- tmpvar TInt 
-	 set x ((function (counter `dot` "fetch_and_increment")) [])
-	 if_ (x == 1)
-	     (do comm "[reduction_done] When the dependencies of a reduction collection are done, signal all_done() on it"
-		 when debug_autodone$
-		   app (function "printf") [stringconst$ " [reduction_done] Signaling all_done() for "++ show redC ++".\n"]
-		 app (function (main `dot` atomToSyn redC `dot` "all_done")) [])
-	     (return ())
+      do let redC = graphNodeName node
+
+         comm "[reduction_done] When the dependencies of a reduction collection are done, signal all_done() on it"
+	 when debug_autodone$
+	      app (function "printf") [stringconst$ " [reduction_done] Signaling all_done() for "++ show redC ++".\n"]
+	 app (function (atomToSyn redC `dot` "all_done")) []
+
+
+	 --     counter = countername 9999
+	 -- x <- tmpvar TInt 
+	 -- set x ((function (counter `dot` "fetch_and_increment")) [])
+	 -- if_ (x == 1)
+	 --     (do comm "[reduction_done] When the dependencies of a reduction collection are done, signal all_done() on it"
+	 -- 	 when debug_autodone$
+	 -- 	   app (function "printf") [stringconst$ " [reduction_done] Signaling all_done() for "++ show redC ++".\n"]
+	 -- 	 app (function (atomToSyn redC `dot` "all_done")) [])
+	 --     (return ())
     else Nothing
 
 
@@ -452,8 +438,6 @@ convertDonePlugin (DonePlugin dpgfun)
 		  (spec@CncSpec{graph, steps, items, reductions, nodemap}) 
 		  stpC 
     = 
-      trace ("TEMPTOGGLE: convertDonePlugin GRAPH: "++ show (graph)) $
-      trace ("TEMPTOGGLE: convertDonePlugin NODESET: "++ show numbered_nodesets) $
       Just this
   where 
       debug_autodone = True
@@ -466,6 +450,8 @@ convertDonePlugin (DonePlugin dpgfun)
       -- "passive" collections may be tracked as well.
       -- (TODO: we could track only what is upstream of the collections of interest to dpgfun)
       pred cncNode = isStepC cncNode || isJust (dpgfun cncNode)
+
+      isActiveCollection = isStepC 
 
       stpind = counter_lookup stpC
       -- This maps each unique counter onto the corresponding set of CncSteps:
@@ -480,11 +466,11 @@ convertDonePlugin (DonePlugin dpgfun)
       env_ind :: Int = index_map AM.! (toAtom special_environment_name)
      
       -- Find all up or downstream counters from a set of nodes.
-      nbr_counters updown_map set = 
+      nbr_counters filt updown_map set = 
             -- Compute a set consisting of all downstream *counters* (step groups), not steps:
 	    S.toList $ 
 	    S.map ((index_map AM.!) . graphNodeName) $
-	    S.filter pred $ 
+	    S.filter filt $ 
 	    nbr_set updown_map set
       -- Find up or downstream graph nodes (chunking cycles together).
       nbr_set updown_map set = 
@@ -497,29 +483,28 @@ convertDonePlugin (DonePlugin dpgfun)
        {
 	whenDone = \ set -> do
 	  comm "[autodone] As we become done, we decrement our downstream counters."
-          let downcounters = nbr_counters downstream_map set
+          let downcounters = nbr_counters pred downstream_map set
 	      upstream     = nbr_set upstream_map set
 
 	  when debug_autodone$ 
 	    app (function$ "printf") [stringconst$ " [autodone] Node(s) done "
 				      ++ show ((map graphNodeName $ S.toList set) :: [Atom])
 					      ++", upstream deps met: " ++ 
-				              show ((map graphNodeName $ filter pred$ S.toList upstream)
+				              show ((map graphNodeName $ filter isActiveCollection$ S.toList upstream)
 						    :: [Atom]) ++"\n"]
 	  forM_ downcounters $ \ cntr -> do
 	     app (function$ funname cntr) []
 	  -- Finally, inject code from all the DonePlugins that are active:
-	  trace ("TEMPTOGGLE: SEQUENCING DONEPLUG ACTIONS " ++ show set) $
-	    sequence_ (catMaybes$ map dpgfun$ S.toList set)
-          comm "TEMPTOGGLE: DONEPLUG HERE"
+          sequence_ (catMaybes$ map dpgfun$ S.toList set)
 
        , addGlobalState = 
 	-- This only happens ONCE, not per step-collection, and it declares ALL the counters:
 	if is_maincontext
 	then (do comm "[autodone] Maintain a piece of state for each tracked subgraph: the done counter"
 		 forM_ numbered_nodesets $ \ (ind, ndset) -> do 
-		   comm$ "Counter "++ show ind ++ ": Serves node(s): " ++ 
-			 concat (intersperse " "$ map graphNodeName (S.toList ndset))
+                   let names_str = concat (intersperse " "$ map graphNodeName (S.toList ndset))
+		   comm$ "Counter "++ show ind ++ ": Serves node(s): " ++ names_str
+			 
 		   var (TSym "tbb::atomic<int>") (countername ind)
 		   -- "We also introduce a procedure that transitions a group of nodes into a done state:"
 		   funDef voidTy (funname ind) [] $ \() -> do 
@@ -527,7 +512,10 @@ convertDonePlugin (DonePlugin dpgfun)
                       let name = countername ind
 		      set x (function (name `dot` "fetch_and_decrement") [])
 		      when debug_autodone$ 
- 			app (function "printf") [stringconst$ " [autodone] Decremented "++synToStr name++" to %d\n", 
+ 			app (function "printf") [stringconst$ " [autodone] Decremented ("++
+			                         names_str ++ 
+			                         -- synToStr name++
+						 ") to %d\n", 
 						 x-1]
 		      if_ (x == 1)
 			  (
@@ -543,7 +531,7 @@ convertDonePlugin (DonePlugin dpgfun)
 		  when debug_autodone$ do 
 		     app (function "printf") [stringconst$ " [autodone] Initializing done counters...\n"]
 		  forM_ numbered_nodesets $ \ (ind, ndset) -> do
-		     let counters = nbr_counters upstream_map ndset
+		     let counters = nbr_counters isStepC upstream_map ndset
 			 numcounters = length counters
 		     if ind P.== env_ind then 
 		       alwaysAssertEq "Env should not have upstream" [] counters $ do

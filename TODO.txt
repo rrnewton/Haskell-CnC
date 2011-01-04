@@ -3,6 +3,11 @@
   Haskell CnC Runtime
 --------------------------------------------------------------------------------
 
+Specific, relatively small tasks/fixes:
+
+  (*) delete the output header file if an error is thrown. 
+      (don't leave partial files)
+
 Things to work on:
 
   (*) Explore why including the library into the application still
@@ -23,6 +28,7 @@ Things to work on:
       finalize action is finished.
     
   (*) Remove lingering IORef usages and replace with HotVar type.
+
 
 
 --------------------------------------------------------------------------------
