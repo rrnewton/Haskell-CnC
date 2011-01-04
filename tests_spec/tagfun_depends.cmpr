@@ -1,0 +1,53 @@
+Running with tagfun checking.
+ [autodone] Initializing done counters...
+ [autodone] env: Incrementing S refcount to 2
+ [autodone] env: Incrementing S refcount to 3
+ [autodone] env: Incrementing S refcount to 4
+ [autodone] env: Incrementing S refcount to 5
+ [autodone] env: Incrementing S refcount to 6
+ [autodone] env: Incrementing S refcount to 7
+ [autodone] env: Incrementing S refcount to 8
+ [autodone] env: Incrementing S refcount to 9
+ [autodone] env: Incrementing S refcount to 10
+ [autodone] Environment waiting, considered done.
+ [autodone] Decremented (env) to 0
+ [autodone] Node(s) done [env], upstream deps met: []
+ [autodone] Decremented (S) to 9
+ [autodone] env NOT DONE
+Step(9): Begun.
+  Step(9), gets of In succeeded
+ [autodone] Decremented (S) to 8
+ [autodone] env NOT DONE
+Step(1): Begun.
+  Step(1), gets of In succeeded
+ [autodone] Decremented (S) to 7
+ [autodone] env NOT DONE
+Step(8): Begun.
+  Step(8), gets of In succeeded
+ [autodone] Decremented (S) to 6
+ [autodone] env NOT DONE
+Step(7): Begun.
+  Step(7), gets of In succeeded
+ [autodone] Decremented (S) to 5
+ [autodone] env NOT DONE
+Step(6): Begun.
+  Step(6), gets of In succeeded
+ [autodone] Decremented (S) to 4
+ [autodone] env NOT DONE
+Step(5): Begun.
+  Step(5), gets of In succeeded
+ [autodone] Decremented (S) to 3
+ [autodone] env NOT DONE
+Step(4): Begun.
+  Step(4), gets of In succeeded
+ [autodone] Decremented (S) to 2
+ [autodone] env NOT DONE
+Step(3): Begun.
+  Step(3), gets of In succeeded
+ [autodone] Decremented (S) to 1
+ [autodone] env NOT DONE
+Step(2): Begun.
+  Step(2), gets of In succeeded
+ [autodone] Decremented (S) to 0
+ [autodone] Node(s) done [S], upstream deps met: [env]
+Retrieve a single item, index 3: 33.000000

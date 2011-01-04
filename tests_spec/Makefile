@@ -12,6 +12,7 @@ endif
 all: $(EXES)
 
 CNCTOOL="../build/cnc"
+#CNCTOOL="../cnc.sh"
 
 #============================================================
 # Currently we give a separate rule for each test to exercise
@@ -35,29 +36,10 @@ two_cycles.h: two_cycles.cnc
 reduction_test.h: reduction_test.cnc
 	$(CNCTOOL) trans --autodonedbg  $<
 
-reduction_test2.h: reduction_test.cnc
+reduction_test2.h: reduction_test2.cnc
 	$(CNCTOOL) trans --autodonedbg  $<
 
 #============================================================
-
-# tagfun_checking_valid.exe: tagfun_checking_valid.cpp tagfun_checking_valid.h
-# 	g++ $(FLAGS) tagfun_checking_valid.cpp -o $@
-
-# tagfun_depends.exe: tagfun_depends.cpp tagfun_depends.h
-# 	g++ $(FLAGS) tagfun_depends.cpp -o $@
-
-
-# simple_cycle.exe: simple_cycle.cpp simple_cycle.h
-# 	g++ $(FLAGS) simple_cycle.cpp -o $@
-
-# bigger_cycle.exe: bigger_cycle.cpp bigger_cycle.h
-# 	g++ $(FLAGS) bigger_cycle.cpp -o $@
-
-# reduction_test.exe: reduction_test.cpp reduction_test.h
-# 	g++ $(FLAGS) reduction_test.cpp -o $@
-
-# reduction_test2.exe: reduction_test2.cpp reduction_test2.h
-# 	g++ $(FLAGS) reduction_test2.cpp -o $@
 
 
 %.exe : %.cpp %.h

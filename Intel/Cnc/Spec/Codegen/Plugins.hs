@@ -254,6 +254,15 @@ composeDonePlugins (DonePlugin dp1) (DonePlugin dp2) = DonePlugin$
       ls -> Just$ sequence_ ls
 
 
+-- There's an important distinction here.  Not all nodes that
+-- have done *signaled* must also decrement their downstream.
+-- Passive nodes NEEDNT be marked explicitly as done for active
+-- downstream nodes to be done.
+isActiveCollection = isStepC -- For now only step collections are ACTIVE.
+
+-- Don't know why this isn't in the standard lib.
+set_any pred = S.fold (\ a b -> b || pred a) False 
+
 -- Conversion from done plugin to a normal plugin.
 convertDonePlugin (DonePlugin dpgfun)
 		  (spec@CncSpec{graph, steps, items, reductions, nodemap}) 
@@ -270,13 +279,15 @@ convertDonePlugin (DonePlugin dpgfun)
       -- ALL step collections must be tracked, and some subset of the
       -- "passive" collections may be tracked as well.
       -- (TODO: we could track only what is upstream of the collections of interest to dpgfun)
-      pred cncNode = isStepC cncNode || isJust (dpgfun cncNode)
+      hasDoneSignaled cncNode = isStepC cncNode || isJust (dpgfun cncNode)
+      -- NOTE: this is in contrast with isActiveCollection above.
 
-      isActiveCollection = isStepC 
-
-      stpind = counter_lookup stpC
-      -- This maps each unique counter onto the corresponding set of CncSteps:
-      numbered_nodesets :: [(Int, S.Set CncGraphNode)] = M.toList rev_index_map
+      -- This includes unique counters we need for the tracked subset of collections:
+      numbered_nodesets :: [(Int, S.Set CncGraphNode)] = 
+	  -- This is a bit odd... but if ANY node within the set is of
+	  -- interest to us, we include that counter:
+	  L.filter (\ (i,set) -> set_any hasDoneSignaled set) $
+	  M.toList rev_index_map
       counter_lookup stp = case AM.lookup stp index_map of 
 			     Just x -> x
 			     Nothing -> error$ "autodonePlugin: Could not find counter corresponding to step: "++ show stp
@@ -286,45 +297,54 @@ convertDonePlugin (DonePlugin dpgfun)
       -- The index of the counter associated with the environment:
       env_ind :: Int = index_map AM.! (toAtom special_environment_name)
      
-      -- Find all up or downstream counters from a set of nodes.
-      nbr_counters filt updown_map set = 
-            -- Compute a set consisting of all downstream *counters* (step groups), not steps:
-	    S.toList $ 
-	    S.map ((index_map AM.!) . graphNodeName) $
-	    S.filter filt $ 
-	    nbr_set updown_map set
-      -- Find up or downstream graph nodes (chunking cycles together).
-      nbr_set updown_map set = 
+      -- Find up or downstream *graph nodes* (chunking cycles together).
+      nbr_set filt updown_map set = 
+         S.filter filt $ 
          S.unions $ 
 	  map (\nd -> AM.findWithDefault S.empty (graphNodeName nd) updown_map) $
 	      S.toList set
+      -- Convert nodes to counters:
+      nbr_set_to_counters set = 
+            -- Compute a set consisting of all downstream *counters* (step groups), not steps:
+	    S.toList $ 
+	    S.map ((index_map AM.!) . graphNodeName) $
+            set
+
+      stpind = counter_lookup stpC
 
       -- Bind the "methodtable" to 'this' so it can be recursively referenced:
       this = defaultHooksTable
        {
-	whenDone = \ set -> do
-	  comm "[autodone] As we become done, we decrement our downstream counters."
-          let downcounters = nbr_counters pred downstream_map set
-	      upstream     = nbr_set upstream_map set
+	whenDone = \ thisset -> do
+          let 
+	      -- CAREFUL: we signal to ALL relevant downstream, but upstream we care only about Active.
+              downcounters = nbr_set_to_counters$ 
+	                     nbr_set hasDoneSignaled    downstream_map thisset
+	      upstream     = nbr_set isActiveCollection upstream_map   thisset
 
 	  when debug_autodone$ 
 	    app (function$ "printf") [stringconst$ " [autodone] Node(s) done "
-				      ++ show ((map graphNodeName $ S.toList set) :: [Atom])
+				      ++ show ((map graphNodeName $ S.toList thisset) :: [Atom])
 					      ++", upstream deps met: " ++ 
-				              show ((map graphNodeName $ filter isActiveCollection$ S.toList upstream)
+				              show ((map graphNodeName $ 
+						     filter isActiveCollection$ S.toList upstream)
 						    :: [Atom]) ++"\n"]
-	  forM_ downcounters $ \ cntr -> do
-	     app (function$ funname cntr) []
+
+          -- Here we do the real decrementing, but ONLY if we OURSELVES are an "active" collection:
+	  if set_any isActiveCollection$ thisset
+	   then do comm "[autodone] As we become done, we decrement our downstream counters."
+		   forM_ downcounters $ \ cntr -> app (function$ funname cntr) []
+	   else comm "[autodone] NOT decrementing downstream because this node(set) does not create control instances!"
 	  -- Finally, inject code from all the DonePlugins that are active:
-          sequence_ (catMaybes$ map dpgfun$ S.toList set)
+          sequence_ (catMaybes$ map dpgfun$ S.toList thisset)
 
        , addGlobalState = 
+        let names_str ndset = concat (intersperse " "$ map graphNodeName (S.toList ndset)) in
 	-- This only happens ONCE, not per step-collection, and it declares ALL the counters:
 	if is_maincontext
 	then (do comm "[autodone] Maintain a piece of state for each tracked subgraph: the done counter"
-		 forM_ numbered_nodesets $ \ (ind, ndset) -> do 
-                   let names_str = concat (intersperse " "$ map graphNodeName (S.toList ndset))
-		   comm$ "Counter "++ show ind ++ ": Serves node(s): " ++ names_str
+		 forM_ numbered_nodesets $ \ (ind, ndset) -> do                    
+		   comm$ "Counter "++ show ind ++ ": Serves node(s): " ++ names_str ndset
 			 
 		   var (TSym "tbb::atomic<int>") (countername ind)
 		   -- "We also introduce a procedure that transitions a group of nodes into a done state:"
@@ -334,14 +354,10 @@ convertDonePlugin (DonePlugin dpgfun)
 		      set x (function (name `dot` "fetch_and_decrement") [])
 		      when debug_autodone$ 
  			app (function "printf") [stringconst$ " [autodone] Decremented ("++
-			                         names_str ++ 
-			                         -- synToStr name++
-						 ") to %d\n", 
+			                         names_str ndset ++ ") to %d\n", 
 						 x-1]
 		      if_ (x == 1)
-			  (
-    		              whenDone this ndset 
-			  )
+			  (whenDone this ndset)
 			  (when debug_autodone $
 			    app (function "printf") [stringconst$ " [autodone] "++show stpC++" NOT DONE\n"])
 	           comm ""
@@ -352,20 +368,19 @@ convertDonePlugin (DonePlugin dpgfun)
 		  when debug_autodone$ do 
 		     app (function "printf") [stringconst$ " [autodone] Initializing done counters...\n"]
 		  forM_ numbered_nodesets $ \ (ind, ndset) -> do
-		     let counters = nbr_counters isStepC upstream_map ndset
+		     let nbrs        = nbr_set isActiveCollection upstream_map ndset
+			 counters    = nbr_set_to_counters nbrs
 			 numcounters = length counters
 		     if ind P.== env_ind then 
 		       alwaysAssertEq "Env should not have upstream" [] counters $ do
 		       comm$ "  Counter "++ show ind ++ " represents the environment and is initialized to one."
                        set (countername ind) 1
                       else do
-		       comm$ "  Counter "++ show ind ++ " initalized to "++ show numcounters ++" for upstream deps "++ show counters
+		       comm$ "  Counter "++ show ind ++ " (representing "++ names_str ndset
+			       ++") initalized to "++ show numcounters 
+			     ++" for upstream deps "++ names_str nbrs
+			       -- show ((map graphNodeName $ S.toList nbrs)::[Atom])
   		       set (countername ind) (fromIntegral numcounters)
-
-		  -- when debug_autodone$ do 
-		  --    let cycs = (map (map graphNodeName . S.toList) cycs_wname) :: [[Atom]]
-		  --    app (function "printf") [stringconst$ "   [autodone] Cycles detected: "
-		  -- 			       ++show cycs++"\n"]
 	     )
 	else (return (), return ())
 
@@ -375,11 +390,13 @@ convertDonePlugin (DonePlugin dpgfun)
 
       , beforeTagPut = \ (priv,main, tgC) tag -> 
 	  do comm "[autodone] Increment the counter that tracks downstream step instances:"
-	     let downstream = map graphNodeName $ filter isStepC $ downstreamNbrs spec (CGTags tgC)
+	     let downstream = map graphNodeName $ filter isActiveCollection $ 
+			      downstreamNbrs spec (CGTags tgC)
 	     forM_ downstream $ \ destC -> do
 		let counter = main `dot` countername (counter_lookup destC)
 		when debug_autodone$ 
-		   app (function "printf") [stringconst$ " [autodone] "++show stpC++": Incrementing "++show destC++" refcount to %d\n", 
+		   app (function "printf") [stringconst$ " [autodone] "++show stpC++
+					    ": Incrementing "++show destC++" refcount to %d\n", 
 					    "1 + (int)" +++ counter]
 		app (function (counter `dot` "fetch_and_increment")) []
 

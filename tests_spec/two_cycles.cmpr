@@ -1,0 +1,135 @@
+ [autodone] Initializing done flags/counters...
+ [autodone] env: Incrementing S1 refcount to 1
+ [autodone] Environment waiting, considered done.
+Step1 exec with tag 0
+ [autodone] S1: Incrementing S2 refcount to 2
+ [autodone] S1: Decremented own refcount to 1
+Step2 exec with tag 1
+ [autodone] S2: Incrementing S1 refcount to 2
+ [autodone] S2: Incrementing S3 refcount to 1
+ [autodone] S2: Decremented own refcount to 1
+Step3 exec with tag 2
+ [autodone] S3: Incrementing S4 refcount to 2
+ [autodone] S3: Decremented own refcount to 1
+Step4 exec with tag 3
+ [autodone] S4: Incrementing S3 refcount to 2
+ [autodone] S4: Decremented own refcount to 1
+Step3 exec with tag 4
+ [autodone] S3: Incrementing S4 refcount to 2
+ [autodone] S3: Decremented own refcount to 1
+Step4 exec with tag 5
+ [autodone] S4: Incrementing S3 refcount to 2
+ [autodone] S4: Decremented own refcount to 1
+Step3 exec with tag 6
+ [autodone] S3: Incrementing S4 refcount to 2
+ [autodone] S3: Decremented own refcount to 1
+Step4 exec with tag 7
+ [autodone] S4: Incrementing S3 refcount to 2
+ [autodone] S4: Decremented own refcount to 1
+Step3 exec with tag 8
+ [autodone] S3: Incrementing S4 refcount to 2
+ [autodone] S3: Decremented own refcount to 1
+Step4 exec with tag 9
+ [autodone] S4: Incrementing S3 refcount to 2
+ [autodone] S4: Decremented own refcount to 1
+Step3 exec with tag 10
+ [autodone] S3: Incrementing S4 refcount to 2
+ [autodone] S3: Decremented own refcount to 1
+Step4 exec with tag 11
+ [autodone] S4: Decremented own refcount to 0
+ [autodone] S4 NOT DONE
+Step1 exec with tag 2
+ [autodone] S1: Incrementing S2 refcount to 2
+ [autodone] S1: Decremented own refcount to 1
+Step2 exec with tag 3
+ [autodone] S2: Incrementing S1 refcount to 2
+ [autodone] S2: Incrementing S3 refcount to 1
+ [autodone] S2: Decremented own refcount to 1
+Step3 exec with tag 4
+ [autodone] S3: Incrementing S4 refcount to 2
+ [autodone] S3: Decremented own refcount to 1
+Step4 exec with tag 5
+ [autodone] S4: Incrementing S3 refcount to 2
+ [autodone] S4: Decremented own refcount to 1
+Step3 exec with tag 6
+ [autodone] S3: Incrementing S4 refcount to 2
+ [autodone] S3: Decremented own refcount to 1
+Step4 exec with tag 7
+ [autodone] S4: Incrementing S3 refcount to 2
+ [autodone] S4: Decremented own refcount to 1
+Step3 exec with tag 8
+ [autodone] S3: Incrementing S4 refcount to 2
+ [autodone] S3: Decremented own refcount to 1
+Step4 exec with tag 9
+ [autodone] S4: Incrementing S3 refcount to 2
+ [autodone] S4: Decremented own refcount to 1
+Step3 exec with tag 10
+ [autodone] S3: Incrementing S4 refcount to 2
+ [autodone] S3: Decremented own refcount to 1
+Step4 exec with tag 11
+ [autodone] S4: Decremented own refcount to 0
+ [autodone] S4 NOT DONE
+Step1 exec with tag 4
+ [autodone] S1: Incrementing S2 refcount to 2
+ [autodone] S1: Decremented own refcount to 1
+Step2 exec with tag 5
+ [autodone] S2: Incrementing S1 refcount to 2
+ [autodone] S2: Incrementing S3 refcount to 1
+ [autodone] S2: Decremented own refcount to 1
+Step3 exec with tag 6
+ [autodone] S3: Incrementing S4 refcount to 2
+ [autodone] S3: Decremented own refcount to 1
+Step4 exec with tag 7
+ [autodone] S4: Incrementing S3 refcount to 2
+ [autodone] S4: Decremented own refcount to 1
+Step3 exec with tag 8
+ [autodone] S3: Incrementing S4 refcount to 2
+ [autodone] S3: Decremented own refcount to 1
+Step4 exec with tag 9
+ [autodone] S4: Incrementing S3 refcount to 2
+ [autodone] S4: Decremented own refcount to 1
+Step3 exec with tag 10
+ [autodone] S3: Incrementing S4 refcount to 2
+ [autodone] S3: Decremented own refcount to 1
+Step4 exec with tag 11
+ [autodone] S4: Decremented own refcount to 0
+ [autodone] S4 NOT DONE
+Step1 exec with tag 6
+ [autodone] S1: Incrementing S2 refcount to 2
+ [autodone] S1: Decremented own refcount to 1
+Step2 exec with tag 7
+ [autodone] S2: Incrementing S1 refcount to 2
+ [autodone] S2: Incrementing S3 refcount to 1
+ [autodone] S2: Decremented own refcount to 1
+Step3 exec with tag 8
+ [autodone] S3: Incrementing S4 refcount to 2
+ [autodone] S3: Decremented own refcount to 1
+Step4 exec with tag 9
+ [autodone] S4: Incrementing S3 refcount to 2
+ [autodone] S4: Decremented own refcount to 1
+Step3 exec with tag 10
+ [autodone] S3: Incrementing S4 refcount to 2
+ [autodone] S3: Decremented own refcount to 1
+Step4 exec with tag 11
+ [autodone] S4: Decremented own refcount to 0
+ [autodone] S4 NOT DONE
+Step1 exec with tag 8
+ [autodone] S1: Incrementing S2 refcount to 2
+ [autodone] S1: Decremented own refcount to 1
+Step2 exec with tag 9
+ [autodone] S2: Incrementing S1 refcount to 2
+ [autodone] S2: Incrementing S3 refcount to 1
+ [autodone] S2: Decremented own refcount to 1
+Step3 exec with tag 10
+ [autodone] S3: Incrementing S4 refcount to 2
+ [autodone] S3: Decremented own refcount to 1
+Step4 exec with tag 11
+ [autodone] S4: Decremented own refcount to 0
+ [autodone] S4 NOT DONE
+Step1 exec with tag 10
+ [autodone] S1: Incrementing S2 refcount to 2
+ [autodone] S1: Decremented own refcount to 1
+Step2 exec with tag 11
+ [autodone] S2: Decremented own refcount to 0
+ [autodone] S2: Node(s) done [S2,S1,T2,T1], deps met: [CGSteps env]
+Wait completed.

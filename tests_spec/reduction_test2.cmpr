@@ -1,0 +1,171 @@
+ [autodone] Initializing done counters...
+ [autodone] env: Incrementing S3 refcount to 2
+ [autodone] env: Incrementing S2 refcount to 2
+ [autodone] env: Incrementing S1 refcount to 2
+ [autodone] env: Incrementing S3 refcount to 3
+ [autodone] env: Incrementing S2 refcount to 3
+ [autodone] env: Incrementing S1 refcount to 3
+ [autodone] env: Incrementing S3 refcount to 4
+ [autodone] env: Incrementing S2 refcount to 4
+ [autodone] env: Incrementing S1 refcount to 4
+ [autodone] env: Incrementing S3 refcount to 5
+ [autodone] env: Incrementing S2 refcount to 5
+ [autodone] env: Incrementing S1 refcount to 5
+ [autodone] env: Incrementing S3 refcount to 6
+ [autodone] env: Incrementing S2 refcount to 6
+ [autodone] env: Incrementing S1 refcount to 6
+ [autodone] env: Incrementing S3 refcount to 7
+ [autodone] env: Incrementing S2 refcount to 7
+ [autodone] env: Incrementing S1 refcount to 7
+ [autodone] env: Incrementing S3 refcount to 8
+ [autodone] env: Incrementing S2 refcount to 8
+ [autodone] env: Incrementing S1 refcount to 8
+ [autodone] env: Incrementing S3 refcount to 9
+ [autodone] env: Incrementing S2 refcount to 9
+ [autodone] env: Incrementing S1 refcount to 9
+ [autodone] env: Incrementing S3 refcount to 10
+ [autodone] env: Incrementing S2 refcount to 10
+ [autodone] env: Incrementing S1 refcount to 10
+ [autodone] env: Incrementing S3 refcount to 11
+ [autodone] env: Incrementing S2 refcount to 11
+ [autodone] env: Incrementing S1 refcount to 11
+ [autodone] Environment waiting, considered done.
+ [autodone] Decremented (env) to 0
+ [autodone] Node(s) done [env], upstream deps met: []
+ [autodone] Decremented (S3) to 10
+ [autodone] env NOT DONE
+ [autodone] Decremented (S2) to 10
+ [autodone] env NOT DONE
+ [autodone] Decremented (S1) to 10
+ [autodone] env NOT DONE
+S1(9) begun
+ [autodone] Decremented (S1) to 9
+ [autodone] env NOT DONE
+S2(9) begun
+S3(9) begun
+S1(8) begun
+ [autodone] Decremented (S1) to 8
+ [autodone] env NOT DONE
+S2(8) begun
+S3(8) begun
+S1(7) begun
+ [autodone] Decremented (S1) to 7
+ [autodone] env NOT DONE
+S2(7) begun
+S3(7) begun
+S1(6) begun
+ [autodone] Decremented (S1) to 6
+ [autodone] env NOT DONE
+S2(6) begun
+S3(6) begun
+S1(5) begun
+ [autodone] Decremented (S1) to 5
+ [autodone] env NOT DONE
+S2(5) begun
+S3(5) begun
+S1(4) begun
+ [autodone] Decremented (S1) to 4
+ [autodone] env NOT DONE
+S2(4) begun
+S3(4) begun
+S1(3) begun
+ [autodone] Decremented (S1) to 3
+ [autodone] env NOT DONE
+S2(3) begun
+S3(3) begun
+S1(2) begun
+ [autodone] Decremented (S1) to 2
+ [autodone] env NOT DONE
+S2(2) begun
+S3(2) begun
+S1(1) begun
+ [autodone] Decremented (S1) to 1
+ [autodone] env NOT DONE
+S2(1) begun
+S3(1) begun
+S1(0) begun
+ [autodone] Decremented (S1) to 0
+ [autodone] Node(s) done [S1], upstream deps met: [env]
+ [autodone] Decremented (R1) to 0
+ [autodone] Node(s) done [R1], upstream deps met: [S1]
+ [reduction_done] Signaling all_done() for R1.
+S2(1) begun
+ [autodone] Decremented (S2) to 9
+ [autodone] env NOT DONE
+S2(2) begun
+ [autodone] Decremented (S2) to 8
+ [autodone] env NOT DONE
+S2(3) begun
+ [autodone] Decremented (S2) to 7
+ [autodone] env NOT DONE
+S2(4) begun
+ [autodone] Decremented (S2) to 6
+ [autodone] env NOT DONE
+S2(5) begun
+ [autodone] Decremented (S2) to 5
+ [autodone] env NOT DONE
+S2(6) begun
+ [autodone] Decremented (S2) to 4
+ [autodone] env NOT DONE
+S2(7) begun
+ [autodone] Decremented (S2) to 3
+ [autodone] env NOT DONE
+S2(8) begun
+ [autodone] Decremented (S2) to 2
+ [autodone] env NOT DONE
+S2(9) begun
+ [autodone] Decremented (S2) to 1
+ [autodone] env NOT DONE
+S2(0) begun
+ [autodone] Decremented (S2) to 0
+ [autodone] Node(s) done [S2], upstream deps met: [env]
+ [autodone] Decremented (R2) to 0
+ [autodone] Node(s) done [R2], upstream deps met: [S2]
+ [reduction_done] Signaling all_done() for R2.
+S3(4) begun
+Put into r3 4, 191102976.000000
+ [autodone] Decremented (S3) to 9
+ [autodone] env NOT DONE
+S3(8) begun
+Put into r3 8, 256.000000
+ [autodone] Decremented (S3) to 8
+ [autodone] env NOT DONE
+S3(1) begun
+Put into r3 1, 387420489.000000
+ [autodone] Decremented (S3) to 7
+ [autodone] env NOT DONE
+S3(5) begun
+Put into r3 5, 9765625.000000
+ [autodone] Decremented (S3) to 6
+ [autodone] env NOT DONE
+S3(9) begun
+Put into r3 9, 9.000000
+ [autodone] Decremented (S3) to 5
+ [autodone] env NOT DONE
+S3(2) begun
+Put into r3 2, 4294967296.000000
+ [autodone] Decremented (S3) to 4
+ [autodone] env NOT DONE
+S3(6) begun
+Put into r3 6, 331776.000000
+ [autodone] Decremented (S3) to 3
+ [autodone] env NOT DONE
+S3(3) begun
+Put into r3 3, 1801088541.000000
+ [autodone] Decremented (S3) to 2
+ [autodone] env NOT DONE
+S3(7) begun
+Put into r3 7, 9261.000000
+ [autodone] Decremented (S3) to 1
+ [autodone] env NOT DONE
+S3(0) begun
+Put into r3 0, 0.000000
+ [autodone] Decremented (S3) to 0
+ [autodone] Node(s) done [S3], upstream deps met: [env]
+ [autodone] Decremented (R3) to 0
+ [autodone] Node(s) done [R3], upstream deps met: [S3]
+ [reduction_done] Signaling all_done() for R3.
+
+R1: 0.000000 9.000000 16.000000 21.000000 24.000000 25.000000 24.000000 21.000000 16.000000 9.000000 
+R2: 0.000000 387420489.000000 4294967296.000000 1801088541.000000 191102976.000000 9765625.000000 331776.000000 9261.000000 256.000000 9.000000 
+R3[0] = 6684686229.000000
