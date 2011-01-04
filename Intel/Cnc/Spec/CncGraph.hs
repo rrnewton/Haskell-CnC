@@ -14,7 +14,6 @@ module Intel.Cnc.Spec.CncGraph (
 			       ) where
 
 import Intel.Cnc.Spec.Util 
-import Intel.Cnc.Spec.SrcLoc
 import Intel.Cnc.Spec.AST
 import Intel.Cnc.Spec.TagFun
 import Data.List as L

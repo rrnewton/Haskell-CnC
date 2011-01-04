@@ -14,7 +14,6 @@ import Text.PrettyPrint.HughesPJClass
 import Intel.Cnc.Spec.Util
 import Intel.Cnc.Spec.SrcLoc
 import Intel.Cnc.Spec.AST
-import Debug.Trace
 
 ------------------------------------------------------------
 -- Type definition.

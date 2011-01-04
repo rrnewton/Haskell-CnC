@@ -25,7 +25,6 @@ import StringTable.AtomSet as AS
 import Control.Monad
 import Data.Graph.Inductive as G
 --import Data.Graph.Inductive.NodeMap as NM
-import Debug.Trace
 
 import Test.HUnit
 

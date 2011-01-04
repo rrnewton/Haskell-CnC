@@ -15,6 +15,7 @@
 module Intel.Cnc.Spec.Codegen.CppOld where
 
 import Intel.Cnc.Spec.Codegen.CodegenShared
+import Intel.Cnc.Spec.Codegen.Plugins
 
 import Intel.Cnc.Spec.AST 
 import Intel.Cnc.Spec.TagFun
@@ -38,12 +39,9 @@ import qualified Data.Map as M
 import Data.List
 import Data.Maybe
 import Data.Graph.Inductive hiding (empty)
---import Debug.Trace
 
 import qualified StringTable.AtomMap as AM
 import qualified StringTable.AtomSet as AS
-
-import Debug.Trace
 
 ----------------------------------------------------------------------------------------------------
 

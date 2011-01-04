@@ -80,12 +80,12 @@ Executable haskell-cnc-runTests
 
 Executable cnc
   Main-is:           Intel/Cnc/Spec/Main.hs
-  Build-Depends:     base >= 3 && < 5, directory, process, prettyclass, 
+  Build-Depends:     base >= 3 && < 5, directory, process, prettyclass, pretty
                      , stringtable-atom, filepath, split, graphviz
                      , parsec >= 3.1.0
                      , hubigraph, haxr, HTTP, network
                      , hscurses, ansi-terminal
-                     , fgl, graphalyze 
+                     , fgl, Graphalyze 
   cpp-options: -DCNCVIZ
 -- interpolatedstring-qq, genericserialize, -- [2010.07.23] Removing for now
 -- happy, alex 

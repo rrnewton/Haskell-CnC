@@ -15,9 +15,11 @@ import Intel.Cnc.Spec.GatherGraph
 import Intel.Cnc.Spec.Util hiding(t)
 import Intel.Cnc.Spec.TraceVacuum
 
-import Intel.Cnc.Spec.Codegen.CodegenShared
+import Intel.Cnc.Spec.GraphAnalysis
 import Intel.Cnc.Spec.Codegen.CppOld
-
+import Intel.Cnc.Spec.Codegen.CodegenShared
+import Intel.Cnc.Spec.Codegen.Plugins
+import Intel.Cnc.Spec.Codegen.Plugins.ReductionDone
 
 import qualified  Intel.Cnc.EasyEmit as EE -- TEMPTOGGLE
 
@@ -46,7 +48,7 @@ import System.Exit
 import Text.Printf
 import Text.PrettyPrint.HughesPJClass
 import Test.HUnit
-import Debug.Trace
+-- import Debug.Trace
 
 -- These expand the file size quite a bit.  Not committing to include right now:
 -- #define CNCVIZ
@@ -557,7 +559,7 @@ all_unit_tests =
  , test_traceVacuum
  , EE.tests_easyemit
  , test_readharch
- , tests_codegenshared
+ , tests_graphanalysis
  , tests_gathergraph
  ]
 
