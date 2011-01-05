@@ -18,10 +18,7 @@ import Control.Monad
 
 reductionDonePlugin :: DonePlugin
 reductionDonePlugin = DonePlugin $ 
-  let 
-      debug_autodone = True
-  in 
-  \ node -> 
+  \ debug_autodone node -> 
     if isReductionC node then Just$ 
       do let redC = graphNodeName node
 
@@ -30,15 +27,5 @@ reductionDonePlugin = DonePlugin $
 	      app (function "printf") [stringconst$ " [reduction_done] Signaling all_done() for "++ show redC ++".\n"]
 	 app (function (atomToSyn redC `dot` "all_done")) []
 
-
-	 --     counter = countername 9999
-	 -- x <- tmpvar TInt 
-	 -- set x ((function (counter `dot` "fetch_and_increment")) [])
-	 -- if_ (x == 1)
-	 --     (do comm "[reduction_done] When the dependencies of a reduction collection are done, signal all_done() on it"
-	 -- 	 when debug_autodone$
-	 -- 	   app (function "printf") [stringconst$ " [reduction_done] Signaling all_done() for "++ show redC ++".\n"]
-	 -- 	 app (function (atomToSyn redC `dot` "all_done")) [])
-	 --     (return ())
     else Nothing
 

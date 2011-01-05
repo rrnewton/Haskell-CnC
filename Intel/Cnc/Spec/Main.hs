@@ -502,8 +502,8 @@ main2 argv = do
          GenDepends  -> return cfg{ gendepends=True } 
 
 -- TODO: In the future all the activated DonePlugins will need to be combined.  For now, there's only one.
-         AutoDone    -> return cfg{ plugins= convertDonePlugin reductionDonePlugin  : plugins cfg } 
-         AutoDoneDbg -> return cfg{ plugins= convertDonePlugin reductionDonePlugin  : plugins cfg } 
+         AutoDone    -> return cfg{ plugins= convertDonePlugin False reductionDonePlugin  : plugins cfg } 
+         AutoDoneDbg -> return cfg{ plugins= convertDonePlugin True reductionDonePlugin  : plugins cfg } 
          NoStepDefs  -> return cfg{ genstepdefs=False } 
 
 	 m | codegenmode_option m -> return cfg

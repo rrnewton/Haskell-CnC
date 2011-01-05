@@ -41,28 +41,10 @@ reduction_test2.h: reduction_test2.cnc
 
 #============================================================
 
-
 %.exe : %.cpp %.h
 	time g++ $(FLAGS) $< -o $@ 
-#	time g++ $(FLAGS) $^ -o $@ 
 	@echo
 	@echo
-
-run:
-	@echo; echo; echo "================================================================================"
-	./tagfun_checking_valid.exe 
-	@echo; echo; echo "================================================================================"
-	./tagfun_depends.exe 
-	@echo; echo; echo "================================================================================"
-	./simple_cycle.exe 
-	@echo; echo; echo "================================================================================"
-	./bigger_cycle.exe
-	@echo; echo; echo "================================================================================"
-	./two_cycles.exe
-	@echo; echo; echo "================================================================================"
-	./reduction_test.exe
-	@echo; echo; echo "================================================================================"
-	./reduction_test2.exe
 
 clean:
 	rm -f *.o *.exe tagfun_checking_valid.h tagfun_depends.h simple_cycle.h bigger_cycle.h

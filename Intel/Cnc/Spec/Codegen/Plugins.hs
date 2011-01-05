@@ -212,23 +212,17 @@ countername num = Syn$t$ "done_counter" ++ show num
 
 -- 'Done' plugins are composable with one another.
 -- A done plugin is both a predicate and a codegenerator that contributes to the "whenDone" method.
-newtype  DonePlugin = DonePlugin (CncGraphNode -> Maybe (EasyEmit ()))
-
---  and contain two main ingredients:
---   * A predicate that indicates which cnc graph nodes should have their done-ness tracked.
---   * A code generator that contributes to the final "whenDone" method.
--- data DonePlugin = DonePlugin { nodePred :: CncGraphNode -> Bool, 
--- 			       doneHook :: CncGraphNode -> EasyEmit () }
+-- The additional bool argument is a debug-mode flag.
+newtype  DonePlugin = DonePlugin (Bool -> CncGraphNode -> Maybe (EasyEmit ()))
 
 -- All the DonePlugins used in a run of the translator should be
 -- composed together before conversion into a regular plugin.
 composeDonePlugins :: DonePlugin -> DonePlugin -> DonePlugin 
-convertDonePlugin :: DonePlugin -> CodeGenPlugin
+convertDonePlugin :: Bool -> DonePlugin -> CodeGenPlugin
 
 -- | The autodone plugin introduces counters for step collections and
 -- | tracks when they are completely finished ("done").
 autodonePlugin      :: DonePlugin
-
 
 --------------------------------------------------------------------------------
 -- autodone: Most basic done plugin.
@@ -237,19 +231,18 @@ autodonePlugin      :: DonePlugin
 -- This is a basic plugin that tracks done-ness but doesn't actually DO anything.
 -- See other files in the Plugins/ directory for more meaningful Done functionality.
 autodonePlugin = DonePlugin $ 
-	        \ node -> if isStepC node 
-			  then Just$ return ()
-			  else Nothing
-
-
+	        \ debug node -> 
+		    if isStepC node 
+		    then Just$ return ()
+		    else Nothing
 
 --------------------------------------------------------------------------------
 -- Composing and Converting done plugins.
 --------------------------------------------------------------------------------
 
 composeDonePlugins (DonePlugin dp1) (DonePlugin dp2) = DonePlugin$ 
-  \ cncnode -> 
-    case catMaybes [dp1 cncnode, dp2 cncnode]  of 
+  \ debug cncnode -> 
+    case catMaybes [dp1 debug cncnode, dp2 debug cncnode]  of 
       [] -> Nothing
       ls -> Just$ sequence_ ls
 
@@ -264,13 +257,13 @@ isActiveCollection = isStepC -- For now only step collections are ACTIVE.
 set_any pred = S.fold (\ a b -> b || pred a) False 
 
 -- Conversion from done plugin to a normal plugin.
-convertDonePlugin (DonePlugin dpgfun)
+-- TODO: Currently debug mode is set for ALL done plugins.  We may want finer grained control.
+convertDonePlugin debug_autodone (DonePlugin dpgfun)
 		  (spec@CncSpec{graph, steps, items, reductions, nodemap}) 
 		  stpC 
     = 
       Just this
   where 
-      debug_autodone = True
       BasicCycleAnalysis {index_map, rev_index_map, upstream_map, downstream_map} = basicCycleAnalysis spec
  
       funname     num = Syn$t$ "decr_done_counter"  ++ show num
@@ -279,7 +272,7 @@ convertDonePlugin (DonePlugin dpgfun)
       -- ALL step collections must be tracked, and some subset of the
       -- "passive" collections may be tracked as well.
       -- (TODO: we could track only what is upstream of the collections of interest to dpgfun)
-      hasDoneSignaled cncNode = isStepC cncNode || isJust (dpgfun cncNode)
+      hasDoneSignaled cncNode = isStepC cncNode || isJust (dpgfun debug_autodone cncNode)
       -- NOTE: this is in contrast with isActiveCollection above.
 
       -- This includes unique counters we need for the tracked subset of collections:
@@ -336,7 +329,7 @@ convertDonePlugin (DonePlugin dpgfun)
 		   forM_ downcounters $ \ cntr -> app (function$ funname cntr) []
 	   else comm "[autodone] NOT decrementing downstream because this node(set) does not create control instances!"
 	  -- Finally, inject code from all the DonePlugins that are active:
-          sequence_ (catMaybes$ map dpgfun$ S.toList thisset)
+          sequence_ (catMaybes$ map (dpgfun debug_autodone) $ S.toList thisset)
 
        , addGlobalState = 
         let names_str ndset = concat (intersperse " "$ map graphNodeName (S.toList ndset)) in
