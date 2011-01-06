@@ -7,6 +7,8 @@ import Test.HUnit
 import Debug.Trace
 import qualified Data.Set as S
 
+import Text.Regex
+
 ----------------------------------------------------------------------------------------------------
 --   First some global constants:
 ----------------------------------------------------------------------------------------------------
@@ -18,16 +20,27 @@ root = ".."
 -- Or in this case built by the Makefile (yuck, but no partial-target builds in cabal atm):
 cnc = root ++ "/build/cnc"
 
+
+-- Each test is associated with a line-preprocessor:
 all_tests = 
  [
-   "tagfun_checking_valid" 
- , "tagfun_depends" 
- , "simple_cycle" 
- , "bigger_cycle"
- , "two_cycles"
- , "reduction_test"
- , "reduction_test2"
+   ("tagfun_checking_valid", strip_refcounts)
+ , ("tagfun_depends" ,       strip_refcounts)
+ , ("simple_cycle" ,         strip_refcounts)
+ , ("bigger_cycle",          strip_refcounts)
+ , ("two_cycles",            strip_refcounts)
+ , ("reduction_test",        strip_refcounts)
+ , ("reduction_test2",       strip_refcounts)
  ]
+
+strip_refcounts =
+-- traceFun "strip_refcounts" $
+  \ line ->
+    subRegex (mkRegex "refcount to [0123456789]+")
+ 	     (subRegex (mkRegex "Decremented .* to [0123456789]+")
+	               line 
+	               "Decremented!!!")
+  	     "refcount to XX" 
 
 ----------------------------------------------------------------------------------------------------
 --   next the main script that performs the test
@@ -48,7 +61,7 @@ test_cases numthreads =
     testSet ("translator, num threads = "++numthreads) $ 
     map (each_test numthreads) all_tests
 
-each_test numthreads name = 
+each_test numthreads (name, project) = 
   testCase "" ("Running, " ++ numthreads ++" thread(s): "++ name ) $ test $
      do out <- run$ setenv [("CNC_NUM_THREADS", numthreads)] $
  	            ("./"++ name ++".exe") -|- tee [name++".out"]
@@ -56,14 +69,17 @@ each_test numthreads name =
 	putStrLn$ "     Out was "++ show (length (out::String)) ++" expected was " ++ show (length expected)
 	putStrLn$ "   Equal? "++ show (out == expected)
 
-        let set_eq = lineSetEqual out expected
-	    s1 = S.fromList$ lines out
-	    s2 = S.fromList$ lines expected
+        let s1 = S.fromList $ map project $ lines out
+	    s2 = S.fromList $ map project $ lines expected 
+	    set_eq = s1 == s2
+
 	putStrLn$ "   Set Equal? "++ show set_eq
 
         when (not set_eq) $ do
           let d1 = S.difference s1 s2
 	      d2 = S.difference s2 s1
+
+          print s1
 
           putStrLn$ "     Diff1: " 
           putStrLn$ "------------------------------------------------------------" 
@@ -74,7 +90,7 @@ each_test numthreads name =
 	  mapM_ putStrLn (S.toList d2)
           putStrLn$ "------------------------------------------------------------" 
 
-	assert (lineSetEqual out expected)
+	assert set_eq
 	putStrLn$ ""
 	return ()
  
@@ -109,6 +125,16 @@ testSet name ls =
        spacer = (take (length header) $ repeat '=')
 
 
+traceFun :: (Show a, Show b) => String -> (a -> b) -> (a -> b)
+traceFun name f = 
+ trace (name ++": closure used.") $
+ \ x -> 
+   trace (name++": called with input "++ show x) $
+     let result = f x in 
+     trace (name++": result was:"++ show result) 
+	   result
+
+
 ----------------------------------------------------------------------------------------------------
 -- Currently UNUSED utilities
 ----------------------------------------------------------------------------------------------------
@@ -131,3 +157,9 @@ trans file =
      let cmd = cnc ++ " trans " ++ dubquote file
      putStrLn$ "Running command: " ++ cmd
      runIO$ cmd
+
+
+temptest =
+    subRegex (mkRegex "Incrementing .* refcount to [0123456789]+")
+ 	     "DOncrementing boboo refcount to 888"
+  	     "BLAH" 
