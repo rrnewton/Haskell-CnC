@@ -29,6 +29,7 @@ desugarTypeDefs input =
     case ty of 
      TInt      -> TInt
      TFloat    -> TFloat
+     TDouble   -> TDouble
      TSym atom -> case AM.lookup atom synonyms of 
 		    Nothing -> TSym atom
 		    Just ty -> ty -- Easy, no constructor application

@@ -24,6 +24,7 @@ import GHC.Exts -- For IsString
 
 import StringTable.Atom
 import Text.PrettyPrint.HughesPJ
+import Text.PrettyPrint.HughesPJClass 
 import Test.HUnit
 
 import qualified Prelude as P
@@ -42,10 +43,17 @@ newtype EasyEmit a = EE (S.State EEState a)
 type EEState = ([Doc],Int)
 
 -- | Run a syntax-emitting computation and render it to a document.
+
+
 runEasyEmit :: EasyEmit a -> (a,Doc)
-runEasyEmit (EE m) = (a, vcat (reverse ls))
+runEasyEmit m = (a,b)
+ where (a,_,b) = rawRunEasyEmit 0 m
+
+-- This full version includes the counter:
+rawRunEasyEmit :: Int -> EasyEmit a -> (a, Int, Doc)
+rawRunEasyEmit start (EE m) = (a, cnt, vcat (reverse ls))
  where 
-  (a,(ls,_)) = S.runState m ([], 0)
+  (a,(ls,cnt)) = S.runState m ([], start)
 
 execEasyEmit :: EasyEmit a -> Doc
 execEasyEmit = snd . runEasyEmit
@@ -78,6 +86,8 @@ instance StringBuilder EasyEmit where
       let (res, (ls,cnt)) = S.runState m ([],0) 
       in (render$ vcat$ reverse ls, res)
 
+instance ToAtom Syntax where
+   toAtom d = toAtom$ deSyn d
 
 
 --------------------------------------------------------------------------------
@@ -95,16 +105,24 @@ data Syntax = Syn Doc
 deSyn (Syn s) = s
 synToStr = render . deSyn 
 
+fromInt = Syn . int 
+
 atomToSyn = Syn . text . fromAtom
 strToSyn  = Syn . text 
 
 (Syn a) +++ (Syn b) = Syn (a <> b)
 
-
 (Syn a) `dot`   (Syn b) = Syn (a <> text "." <> b)
 (Syn a) `arrow` (Syn b) = Syn (a <> text "->" <> b)
 
+dereference (Syn a) = Syn$ parens (text "*" <> a)
+addressOf   (Syn a) = Syn$ parens (text "&" <> a)
+
+-- Array subscript operator:
+arrsub (Syn a) (Syn b) = Syn$ (a <> text "[" <> b <> text "]")
+
 -- Adds implicit newline at the end:
+addChunk :: Syntax -> EasyEmit ()
 addChunk (Syn doc) = 
   do (ls,c) <- S.get
      S.put (doc : ls, c)
@@ -182,6 +200,17 @@ instance Ord Syntax Syntax where
 instance Eq Syntax Syntax where
     (Syn a) == (Syn b) = Syn (parens $ a <> " == " <> b )   
 
+-- Use a C++ constant 
+constant :: String -> Syntax
+constant = fromString
+
+stringconst :: String -> Syntax
+stringconst str = Syn$ dubquotes$ escapeString str
+
+-- new :: Syntax -> [Syntax] -> Syntax
+new :: Type -> [Syntax] -> Syntax
+new ty args = Syn$ "new" <+> (deSyn$ function (Syn$ pPrint ty) args)
+
 
 --------------------------------------------------------------------------------
 -- Declaring variables
@@ -191,23 +220,40 @@ instance Eq Syntax Syntax where
 var :: Type -> Syntax -> EasyEmit Syntax
 var ty (Syn name) = do addLine (Syn (cppType ty <+> name ))
 		       return (Syn name)
--- Without names:
-tmpvar :: Type -> EasyEmit Syntax
-tmpvar ty = do Syn name <- gensym "tmp"
-	       addLine (Syn (cppType ty <+> name ))
-	       return (Syn name)
-
-gensym root = 
-   do (ls,cnt) <- S.get
-      S.put (ls,cnt+1)
-      return$ Syn$ root <> int cnt
-	   
 
 -- With initialization expression:
 varinit :: Type -> Syntax -> Syntax -> EasyEmit Syntax
 varinit ty (Syn name) (Syn rhs) = 
    do addLine (Syn (cppType ty <+> name <+> "=" <+> rhs))
       return (Syn name)
+
+-- A var declaration with a constructor invocation.
+classvar :: Type -> Syntax -> [Syntax] -> EasyEmit Syntax
+classvar ty (Syn name) args =
+   do addLine (Syn (cppType ty <+> name <+> pcommasep (map deSyn args)))
+      return (Syn name)
+
+-- Without names:
+----------------------------------------
+gensym root = 
+   do (ls,cnt) <- S.get
+      S.put (ls,cnt+1)
+      return$ Syn$ root <> int cnt
+
+tmpvar :: Type -> EasyEmit Syntax
+tmpvar ty = do name <- gensym "tmp"
+	       var ty name
+
+tmpvarinit :: Type -> Syntax -> EasyEmit Syntax
+tmpvarinit ty rhs = 
+   do name <- gensym "tmp"
+      varinit ty name rhs
+	   
+-- A var declaration with a constructor invocation.
+tmpclassvar :: Type -> [Syntax] -> EasyEmit Syntax
+tmpclassvar ty args =
+   do name <- gensym "obj"
+      classvar ty name args
 
 
 ------------------------------------------------------------
@@ -302,22 +348,24 @@ function :: Syntax -> [Syntax] -> Syntax
 function (Syn name) = 
   \ args -> Syn$ name <> (pcommasep$ map deSyn args)
 
--- Use a C++ constant 
-constant :: String -> Syntax
-constant = fromString
-
-stringconst :: String -> Syntax
-stringconst str = Syn$ dubquotes$ escapeString str
 
 -- Common case: for loop over a range with integer index:
 ------------------------------------------------------------
+-- Input is [Inclusive,Exclusive) range.
+forLoopSimple :: (Syntax,Syntax) -> (Syntax -> EasyEmit ()) -> EasyEmit ()
 forLoopSimple (start,end) fn = 
-  do --var <- forValueOnly (tmpvar TInt)
+  do 
      Syn var <- gensym "i"
-     --init <- execEasyEmit varinit TInt "i" (int start)
-     let body = execEasyEmit$ fn (Syn var)
-     addChunk$ Syn$ hangbraces ("for " <> parens ( cppType TInt <+> var <+> "=" <+> int start <> semi <+>
-						   var <+> "<" <+> int end <> semi <+>
+     (ls,oldcnt) <- S.get
+
+     let (_,newcnt,body) = rawRunEasyEmit oldcnt $ fn (Syn var)
+
+     -- To maintain uniqueness we take the counter mods from the body.
+     -- TODO: A cleaner way to do this would be to include the indent level in the state monad and NOT LEAVE IT.
+     S.put (ls, newcnt)
+
+     addChunk$ Syn$ hangbraces ("for " <> parens ( cppType TInt <+> var <+> "=" <+> deSyn start <> semi <+>
+						   var <+> "<" <+> deSyn end <> semi <+>
 						   var <> "++"
 						 )) indent $
 	            body
@@ -337,10 +385,6 @@ classLike prefix postfix (Syn name) (Syn inherits) m =
 	   hsep (if inherits P.== empty
 		 then [name]
 		 else [name <+> colon, inherits])
-     -- putD 
-     -- putS " : "
-     -- putD inherits
-     -- addChunk ""
      block m
      addChunkPrevLine$ strToSyn postfix 
 
@@ -350,9 +394,11 @@ cppClass = classLike "class" ";"
 cppStruct :: Syntax -> Syntax -> EasyEmit () -> EasyEmit ()
 cppStruct = classLike "struct" ";"
 
-cppConstructor :: Syntax -> [Syntax] -> [(Syntax,Syntax)] -> EasyEmit () -> EasyEmit ()
+-- Arg list is (type,argname) and init list is (name,expression/value)
+cppConstructor :: Syntax -> [(Type,Syntax)] -> [(Syntax,Syntax)] -> EasyEmit () -> EasyEmit ()
 cppConstructor (Syn name) args inits body = 
-    classLike "" "" (Syn$ name <> parens (commasep$ map deSyn args)) 
+    let fn (t,x) = pPrint t <+> deSyn x in
+    classLike "" "" (Syn$ name <> parens (commasep$ map fn args)) 
 		    (Syn$ commasep$ map (\ (a,b) -> deSyn a <> parens (deSyn b)) inits)
 	      body
 
@@ -370,8 +416,6 @@ block m =
      addChunk "{"
      addChunk$ Syn$ nest indent body
      addChunk "}"
-
-
 
 
 
@@ -415,6 +459,11 @@ class (Boolean bool, Eq a bool) => Ord a bool | a -> bool where
 infix  4  ==, /=, <, <=, >=, >
 infixr 3  &&
 infixr 2  ||
+
+
+----------------------------------------------------------------------------------------------------
+-- Internal helpers:
+----------------------------------------------------------------------------------------------------
 
 
 ----------------------------------------------------------------------------------------------------

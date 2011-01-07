@@ -1,5 +1,6 @@
 #!/usr/bin/env runhaskell 
 
+import Data.List
 import Control.Monad
 import HSH
 import HSH.ShellEquivs
@@ -7,7 +8,10 @@ import Test.HUnit
 import Debug.Trace
 import qualified Data.Set as S
 
-import Text.Regex
+import System.Environment
+
+-- import Text.Regex
+import Text.Regex.Posix
 
 ----------------------------------------------------------------------------------------------------
 --   First some global constants:
@@ -33,33 +37,50 @@ all_tests =
  , ("reduction_test2",       strip_refcounts)
  ]
 
+-- TODO: This needs to be made a lot nicer...
 strip_refcounts =
--- traceFun "strip_refcounts" $
-  \ line ->
-    subRegex (mkRegex "refcount to [0123456789]+")
- 	     (subRegex (mkRegex "Decremented .* to [0123456789]+")
-	               line 
-	               "Decremented!!!")
-  	     "refcount to XX" 
+--  traceFun "strip_refcounts" $
+    killAfter "Decremented .* to" .
+    killAfter  "Incrementing .* refcount to"
+ 
+
+-- Kill the rest of the line after a pattern match.
+killAfter pat line = 
+  case line =~ pat :: (String,String,String) of 
+    (_,"",_) -> line
+    (before,match,after) ->  before ++ match
+
+--  let (before,match,after) = (line =~ )
+
 
 ----------------------------------------------------------------------------------------------------
 --   next the main script that performs the test
 ----------------------------------------------------------------------------------------------------
 
 main = do
-  putStrLn$ "running tests of cnc translator..."
+  args <- getArgs
+  putStrLn$ "Running tests of cnc translator..."
+  tests <- case args of 
+	       [] -> do putStrLn$ "Running *all* tests."
+			return all_tests
+	       [str] -> 
+		 do let filtered = filter (isPrefixOf str . fst) all_tests
+		    putStrLn$ "Running a subset of tests: "++ show (map fst filtered)
+		    return$ filtered
+	       _ -> error "run_tests.hs script takes zero or one arguments"
+
 
   let myPut msg True  () = do putStrLn ""; putStrLn$ msg
       myPut msg False () = return ()
   runTestText (PutText myPut ()) $
-    TestList [ test_cases "1"
-	     , test_cases "4"
+    TestList [ test_cases "1" tests
+	     , test_cases "4" tests
 	     ]
   return ()
 
-test_cases numthreads = 
+test_cases numthreads tests = 
     testSet ("translator, num threads = "++numthreads) $ 
-    map (each_test numthreads) all_tests
+    map (each_test numthreads) tests
 
 each_test numthreads (name, project) = 
   testCase "" ("Running, " ++ numthreads ++" thread(s): "++ name ) $ test $
@@ -158,8 +179,3 @@ trans file =
      putStrLn$ "Running command: " ++ cmd
      runIO$ cmd
 
-
-temptest =
-    subRegex (mkRegex "Incrementing .* refcount to [0123456789]+")
- 	     "DOncrementing boboo refcount to 888"
-  	     "BLAH" 

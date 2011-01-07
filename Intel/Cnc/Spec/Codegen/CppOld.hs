@@ -585,8 +585,8 @@ generate_wrapper_context (CodeGenConfig{gendebug})
 		       comm "The constructor here needs to grab a reference from the main context:"
 
 		       cppConstructor (Syn wrapper)
-			    [Syn$ param (mkRef maincontext)      (t"p"),
-			     Syn$ param (mkPtr classname) (t"c")] -- Args.
+			    [(TRef$ litType maincontext, s"p"),
+			     (TPtr$ litType classname, s"c")] -- Args.
 			    [(Syn$ member, Syn$ t"p." <> textAtom tgC),
 			     (s"parent_context", s"p"),
 			     (s"m_context", s"c")]  -- Initialization.
@@ -659,7 +659,7 @@ generate_wrapper_context (CodeGenConfig{gendebug})
 		 cppConstructor (Syn classname)    -- Name.
 		     (if is_top_context            -- Args.
 		      then []
-		      else [Syn$ maincontext <> t" & p"]) 
+		      else [(TRef$ litType maincontext, s"p")]) 
 		     -- Lots of initializers:
 		     ((if is_top_context		      
 		       -- In this case we initialize our own copy of the context rather than taking it as argument:
@@ -793,8 +793,8 @@ wrap_item_or_reduction_collection which colName ty1 ty2 classname stp plug_map f
 		      putD$ t("CnC::"++ which ++"_collection") <> angles (cppType ty1 <>commspc<> cppType ty2) <> t" & " <> member <> semi $$ t"" 
                       comm "The constructor here needs to grab a reference from the main context:"
 	 	      cppConstructor (Syn wrapper)    -- Name.
-				     [Syn$ param (mkRef maincontext) (t"p"),
-				      Syn$ param (mkPtr classname)   (t"c")]
+				     [(TRef$ litType maincontext, s"p"),
+				      (TPtr$ litType classname, s"c")]
 		                     [(Syn$ member, Syn$ t"p." <> textAtom colName)]
 		                     (do set (s"m_context")      (s"c")  
 		                         set (s"parent_context") (s"&p"))

@@ -143,7 +143,10 @@ BUILDDIR= ./build/
 #BUILDDIR= ./
 HCNCNAME=cnc
 
-install: 
+$(BUILDDIR):
+	mkdir $(BUILDDIR)
+
+install: $(BUILDDIR)/$(HCNCNAME).stripped
 	rm -f Intel/Cnc/Spec/Version.hs
 	$(MAKE) Intel/Cnc/Spec/Version.hs $(HCNCNAME).stripped
 	cp $(BUILDDIR)/$(HCNCNAME).stripped `which $(HCNCNAME)`
@@ -169,15 +172,11 @@ $(BUILDDIR)/$(HCNCNAME).stripped: viz
 	@echo Stripping executable to reduce size.
 	strip $(BUILDDIR)/$(HCNCNAME) -o $(BUILDDIR)/$(HCNCNAME).stripped
 
-$(BUILDDIR)/$(HCNCNAME): preproc buildtrans
+$(BUILDDIR)/$(HCNCNAME): $(BUILDDIR) preproc buildtrans
 buildtrans: 
 	ghc $(GHCFLAGS) --make Intel/Cnc/Spec/Main.hs -odir $(BUILDDIR) -o $(BUILDDIR)/$(HCNCNAME) -fwarn-unused-imports
-# 
-#	ghc -c Intel/Cnc/Spec/CncLexer.hs 
-#	ghc -O --make Intel/Cnc/Spec/Main.hs -o $(HCNCNAME)
 
-
-viz: preproc
+viz: $(BUILDDIR) $(BUILDDIR) preproc
 	ghc $(GHCFLAGS) -c Intel/Cnc/Spec/CncLexer.hs 
 	ghc $(GHCFLAGS) -DCNCVIZ --make Intel/Cnc/Spec/Main.hs -odir $(BUILDDIR) -o $(BUILDDIR)/$(HCNCNAME)
 

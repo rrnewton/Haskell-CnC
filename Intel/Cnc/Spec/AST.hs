@@ -86,7 +86,8 @@ instance Decorated Exp where
 
 data Type =
    TInt
- | TFloat
+ | TFloat | TDouble
+ | TChar
  -- An abstract type not intpreted by CnC:
  | TSym Atom
  | TPtr Type
@@ -97,24 +98,35 @@ data Type =
  deriving (Eq,Ord,Show,Data,Typeable)
 
 instance Pretty (Type) where
- pPrint (TInt)      = text "int"
- pPrint (TFloat)    = text "float"
- pPrint (TSym str)  = text (fromAtom str)
- pPrint (TPtr ty)   = pPrint ty <> text "*"
- pPrint (TRef ty)   = pPrint ty <> text "&"
- pPrint (TDense ty) = text "dense" <+> pPrint ty 
- pPrint (TConst ty) = text "const" <+> pPrint ty 
- pPrint (TTuple ty) = text "(" <> commacat ty <> text ")"
+  pPrint = cppType
+ -- pPrint (TInt)      = text "int"
+ -- pPrint (TFloat)    = text "float"
+ -- pPrint (TDouble)   = text "double"
+ -- pPrint (TSym str)  = text (fromAtom str)
+ -- pPrint (TPtr ty)   = pPrint ty <> text "*"
+ -- pPrint (TRef ty)   = pPrint ty <> text "&"
+ -- pPrint (TDense ty) = text "dense" <+> pPrint ty 
+ -- pPrint (TConst ty) = text "const" <+> pPrint ty 
+ -- pPrint (TTuple ty) = text "(" <> commacat ty <> text ")"
 
+-- A literal text description of a type.  
+litType x = TSym (toAtom x)
+
+-- For now I'm not exposing type constructors as a separate variant:
+tyConstructor :: Doc -> Type -> Type
+tyConstructor doc ty = 
+  TSym (toAtom$ doc <> angles (pPrint ty))
 
 voidTy = TSym (toAtom "void")
 
 -- Converting types to C++ concrete syntax.
 cppType :: Type -> Doc
 cppType ty = case ty of 
-  TInt   -> t "int"
-  TFloat -> t "float"
-  TSym s -> textAtom s
+  TInt    -> t "int"
+  TFloat  -> t "float"
+  TDouble -> t "double"
+  TChar   -> t "char"
+  TSym s  -> textAtom s
   TPtr ty -> cppType ty <> t "*"
   TRef ty -> cppType ty <> t " &"
   TConst ty -> t"const" <+> cppType ty 
