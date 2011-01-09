@@ -260,12 +260,24 @@ tmpclassvar ty args =
 -- C++ Statements 
 ------------------------------------------------------------
 
+-- This is a function in the meta language that represents a function
+-- in the object language.
+type ObjFun = ([Syntax] -> Syntax)
+
 -- Variable Assignment:
 set :: Syntax -> Syntax -> EasyEmit ()
 set (Syn x) (Syn v) = addLine$ Syn$ x <+> "=" <+> v 
 
+-- Assignment for array locations:
+arrset :: Syntax -> Syntax -> Syntax -> EasyEmit ()
+arrset arr i rhs = set (arr `arrsub` i) rhs
+
+-- Assignment for a field R.x.
+fieldset :: Syntax -> Syntax -> Syntax -> EasyEmit ()
+fieldset arr x rhs = set (arr `dot` x) rhs
+
 -- Function application (command context):
-app :: ([Syntax] -> Syntax) -> [Syntax] -> EasyEmit ()
+app :: ObjFun -> [Syntax] -> EasyEmit ()
 app fn ls = addLine$ fn ls
 
 
@@ -307,7 +319,7 @@ assert (Syn exp) =
 -- applications of that function.
 class FunDefable args where
   -- This is VERY painful, but need to expose separate keywords for pre- and post- the function name/args.
-  funDefAttr :: String -> String -> Type -> Syntax -> [Type] -> (args -> EasyEmit ()) -> EasyEmit ([Syntax] -> Syntax)
+  funDefAttr :: String -> String -> Type -> Syntax -> [Type] -> (args -> EasyEmit ()) -> EasyEmit ObjFun
 
 instance FunDefable ()                            where funDefAttr pre post r n ts fn = funDefShared pre post r n ts fn (\ [] -> ())
 instance FunDefable Syntax                        where funDefAttr pre post r n ts fn = funDefShared pre post r n ts fn (\ [a] -> a)        
@@ -318,9 +330,9 @@ instance FunDefable [Syntax]                      where funDefAttr pre post r n 
 
 
 -- Terrible ugliness just to deal with those darn const qualifiers:
-funDef       :: FunDefable args => Type -> Syntax -> [Type] -> (args -> EasyEmit ()) -> EasyEmit ([Syntax] -> Syntax)
-constFunDef  :: FunDefable args => Type -> Syntax -> [Type] -> (args -> EasyEmit ()) -> EasyEmit ([Syntax] -> Syntax)
-inlineFunDef :: FunDefable args => Type -> Syntax -> [Type] -> (args -> EasyEmit ()) -> EasyEmit ([Syntax] -> Syntax)
+funDef       :: FunDefable args => Type -> Syntax -> [Type] -> (args -> EasyEmit ()) -> EasyEmit ObjFun
+constFunDef  :: FunDefable args => Type -> Syntax -> [Type] -> (args -> EasyEmit ()) -> EasyEmit ObjFun
+inlineFunDef :: FunDefable args => Type -> Syntax -> [Type] -> (args -> EasyEmit ()) -> EasyEmit ObjFun
 
 funDef       = funDefAttr "" ""
 constFunDef  = funDefAttr "" "const"
@@ -342,11 +354,14 @@ funDefShared pre postqualifiers retty (Syn name) tyls fn formTup  =
        return (\ args -> Syn$ name <> (pcommasep (map deSyn args)))
 
 
-
--- This is a normal function defined elsewhere:
-function :: Syntax -> [Syntax] -> Syntax
+-- This applies a C++ function referred to by name (defined elsewhere):
+function :: Syntax -> ObjFun
 function (Syn name) = 
   \ args -> Syn$ name <> (pcommasep$ map deSyn args)
+
+-- Shortcut for applying a method given an object or object reference.
+methcall :: Syntax -> Syntax -> ObjFun
+methcall obj meth args = obj `dot` (function meth args)
 
 
 -- Common case: for loop over a range with integer index:

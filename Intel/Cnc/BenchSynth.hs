@@ -108,6 +108,8 @@ simpleFlops2 ty n =
       y1 <- simpleFlops ty (n/2) y
       return (x1 + y1)
 
+noopKern :: ScalarKernel
+noopKern x = return x
 
 --------------------------------------------------------------------------------
 -- TBB backend, generate code to construct a TBB graph and TBB execute methods.
@@ -129,14 +131,46 @@ tbbEmitKernel =
 -- rTy = TFloat
 rTy = TDouble
 vTy = tyConstructor "concurrent_vector" rTy
-tname = "Sum"
+tname_reduce  = "Reducer"
+tname_produce = "Producer"
+
+
 rangeTy = tyConstructor "blocked_range" TInt
 
+-- Use a for loop to go over a blocked range:
+rangeFor range = forLoopSimple (range `dot` "begin()", range `dot` "end()") 
+
+parProduceStruct :: Syntax -> ScalarKernel2 -> EasyEmit ()
+parProduceStruct tname kernel =  do     
+    cppStruct tname "" $ do
+      prev   <- var rTy "prev"
+      outbuf <- var (TPtr vTy) "outbuf"
+
+      constFunDef voidTy "operator()" [TConst$ TRef rangeTy] $ \ range -> do
+	rangeFor range $ \ i -> do
+	   result <- kernel i prev
+	   arrset (dereference outbuf) i result
+
+      return ()
+
+parProduceFun :: Syntax -> EasyEmit ObjFun
+parProduceFun tname_produce = 
+  -- This expands
+  funDef rTy "ParProduceStage" [TInt, TRef rTy, TRef vTy] $ \ (size, inp, outp) -> do
+    app (function$ outp `dot` "grow_to_at_least") [size]
+    producer <- tmpvar (litType tname_produce)
+    fieldset producer "prev" inp
+    fieldset producer "outbuf" (addressOf outp)
+    app (function "parallel_for")
+	[function "blocked_range<int>" [0, methcall outp "size" []],
+	 producer]
+
+----------------------------------------
+
 -- Create the struct encapsulating the reduction operator:
-parReduceType :: Syntax -> ScalarKernel2 -> EasyEmit ()
-parReduceType tname op = 
+parReduceStruct :: Syntax -> ScalarKernel2 -> EasyEmit ()
+parReduceStruct tname kernel = 
  do 
-    let 
     cppStruct tname "" $ do
       val  <- var rTy "value"
       inp  <- var (TPtr vTy) "input_vals"
@@ -154,33 +188,40 @@ parReduceType tname op =
 	tmp <- tmpvar rTy
 	set tmp val
 	forLoopSimple (range `dot` "begin()", range `dot` "end()") $ \ i -> do 
-	   result <- op tmp (dereference inp `arrsub` i)
+	   result <- kernel tmp (dereference inp `arrsub` i)
 	   set tmp result
 	set val tmp
 
       funDef voidTy "join" [TRef$ litType tname] $ \ arg -> do
-	result <- op val (arg `dot` val)
+	result <- kernel val (arg `dot` val)
 	set val result
       return ()
 
 -- Create the function that calls parallel_reduce
-parReduceStage tname = 
-    funDef voidTy "ParReduceStage" [TRef vTy, TRef vTy] $ \ (inp, outp) -> 
+--parReduceFun :: Syntax -> EasyEmit ((Syntax,Syntax) -> EasyEmit Syntax)
+parReduceFun :: Syntax -> EasyEmit ObjFun
+parReduceFun tname = 
+    funDef voidTy "ParReduceStage" [TRef vTy, TRef rTy] $ \ (inp, outp) -> 
+--    funDef rTy "ParReduceStage" [TRef vTy, TRef vTy] $ \ (inp, outp) -> 
      do 
         total <- tmpvar (litType tname)
         set (total `dot` "input_vals")  (addressOf inp)
-        set (total `dot` "output_vals") (addressOf outp)
+--        set (total `dot` "output_vals") (addressOf outp)
 	let size = inp `dot` "size()"
 	app (function "parallel_reduce")
 	    [function (Syn$ pPrint rangeTy) [0,size] , total]
-	app (function$ outp `dot` "grow_to_at_least") [size]
+--	app (function$ outp `dot` "grow_to_at_least") [size]
 
-        -- putS "printf(\"\\n\");\n for (int i2 = 0; i2 < arg0.size(); i2++) { printf(\" Input[%d] = %lf\\n\", i2, arg0[i2]); }"
-
-        comm "Then in serial populate the next stage:"
 	final <- tmpvarinit rTy$  total `dot` "value" / size
-	forLoopSimple (0, size) $ \ i -> do 
-	   set (outp `arrsub` i) (final + i)
+        -- comm "Then in serial populate the next stage:"
+	-- forLoopSimple (0, size) $ \ i -> do 
+	--    set (outp `arrsub` i) (final + i)
+--	ret final
+        set outp final
+
+--        comm "Then invoke a parallel produce stage:"
+
+
 
 
 --tbb_header :: ByteString
@@ -190,19 +231,21 @@ tbb_header = "\
  \ #include <iostream>                     \n\
  \ #include \"tbb/task_scheduler_init.h\"  \n\
  \ #include \"tbb/parallel_reduce.h\"      \n\
+ \ #include \"tbb/parallel_for.h\"         \n\
  \ #include \"tbb/blocked_range.h\"        \n\
  \ #include \"tbb/concurrent_vector.h\"    \n\
  \ using namespace tbb;                    \n\
- \"
+ \ \n"
 
 -- Execute a linear chain of reductions:
-reduceChain dofree (length, width, flops) =
+produceReduceChain dofree (length, width, flops) 
+		   prodFun redFun  =
    do 
       app (function "printf") [stringconst "Running pipe of length %d, width %d, op flops %d\n", 
 			       length, width, flops]
 
-      comm "Create a series of reduction steps, separated by buffers, "
-      comm "as well as 'spreaders' that fan the reduced values back out."
+      comm "Create a series of reduction steps, separated by buffers, as well"
+      comm "as 'spreader' production steps that fan the reduced values back out."
 
       buf0 <- var (TPtr vTy) "buf0"
       set "buf0" (new vTy [])
@@ -212,11 +255,16 @@ reduceChain dofree (length, width, flops) =
         app (function$ (dereference "buf0") `dot` "push_back") [i];
 
       forLoopSimple (0, length) $ \i -> do
-	v <- var (TPtr vTy) "buf1"
-	set v (new vTy [])
-	app (function "ParReduceStage") [dereference buf0, dereference v]
+	buf1 <- var (TPtr vTy) "buf1"
+	set buf1 (new vTy [])
+
+        intmdt <- tmpvar rTy
+	app redFun  [dereference buf0, intmdt]
+	app prodFun [width, -- methcall buf0 "size"[], 
+		     intmdt, dereference buf1]
+
 	when dofree $ app (function "delete") [buf0]
-	set buf0 v
+	set buf0 buf1
 
       sum <- tmpvarinit rTy 0
       forLoopSimple (0, width) $ \i -> 
@@ -236,7 +284,7 @@ makeBenchFile (_numstages, _width, _flops) restfile mainbody  =
     length  <- var TInt "length"
     width   <- var TInt "width"
     flops   <- var TInt "flops"
-    restfile (length, width, flops)
+    pkg <- restfile (length, width, flops)
 
     funDef TInt "main" [TInt, TPtr$ TPtr TChar] $ \ (argc :: Syntax, argv :: Syntax) -> do
       if_ (argc >= 5)
@@ -254,7 +302,7 @@ makeBenchFile (_numstages, _width, _flops) restfile mainbody  =
       tmpclassvar (TSym "task_scheduler_init") [threads]
       app (function "printf") [stringconst "Initialized num threads to %d\n", threads]
 
-      mainbody (length, width, flops)
+      mainbody (length, width, flops) pkg
 
 
 -- Temp: run everything and generate one benchmark config to a file:
@@ -264,57 +312,23 @@ genFile =
    execEasyEmit$
     makeBenchFile (10,10,10) -- Defaults if no command line options are provided.
 	     (\ (length, width, flops) -> 
-	        do parReduceType  tname (simpleFlops2 rTy flops)
-		   parReduceStage tname 
+	        do parReduceStruct tname_reduce (simpleFlops2 rTy flops)
+	           putS ""
+		   redfn <-  parReduceFun tname_reduce 
+	           putS ""
+	           parProduceStruct tname_produce (simpleFlops2 rTy flops)
+	           putS ""
+		   prodfn <-  parProduceFun tname_produce
+	           putS ""
+	           return (prodfn,redfn)
 	     )
-             (\ (length, width, flops) -> 
-	        reduceChain False (length, width, flops)
+             (\ (length, width, flops) (prodfn,redfn) -> 
+	        produceReduceChain False (length, width, flops) prodfn redfn
 	     )
-
-{-
-      foldM_ (\ last next -> do 
-	        var (TPtr vTy) next 
-	        set next (new vTy [])
-	        app (function "ParReduceStage") [last, next]
-	        app (function "delete") [last]
-	        return next
-	     )
-	     "buf0"
-	     (Prelude.map (strToSyn . ("buf"++) . show) [1 .. numstages-1])
--}
 
 main = genFile
 
-
--- This is fairly ugly AND it would get a lot worse if we want to change the name of Sum.
-parReduceType2 :: EasyEmit ()
-parReduceType2 = putS$
- "struct Sum {                            \
- \\n     num_t value;                     \
- \\n     Sum() : value(0)     { }         \
- \\n     Sum( Sum& s, split ) {           \
- \\n         value = 0;                   \
- \\n         input_vals  = s.input_vals;  \
- \\n         output_vals = s.output_vals; \
- \\n      }\
- \\n      \
- \\n      void operator()( const blocked_range<int>& r ) {\
- \\n          num_t temp = value;\
- \\n          for( int i = r.begin(); i < r.end(); i++ )\
- \\n          {\
- \\n              temp += (*input_vals)[i];\
- \\n          }\
- \\n          value = temp;\
- \\n      }\
- \\n      void join( Sum& rhs ) {value += rhs.value;}\
- \\n       \
- \\n      vec* input_vals;\
- \\n      vec* output_vals;\
- \\n  };\
- \"
  
-
-
 --------------------------------------------------------------------------------
 -- CnC backend
 
