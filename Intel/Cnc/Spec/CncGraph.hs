@@ -70,17 +70,19 @@ instance Show CncSpec where
 
 instance Pretty CncSpec where
   pPrint (CncSpec{..}) = 
-      text "============= All Steps ======================"    $$ 
+      text "CncSpec{\n ------------- All Steps ----------------------"    $$ 
 	   hcat (intersperse (text ", ") $ L.map (text . fromAtom) $ AS.toList steps) $$
-      text "\n============= Tag Types ======================" $$ 
+      text "\n ------------- Tag Types ----------------------" $$ 
 	   sep (L.map (\(x,y) -> pp((fromAtom x)::String,y)) $ AM.toList tags) $$
-      text "\n============= Item Types =====================" $$ 
+      text "\n ------------- Item Types ---------------------" $$ 
 	   sep (L.map (\(x,y) -> pp((fromAtom x)::String,y)) $ AM.toList items) $$
 
-      text "\n=========== Reduction Ops/Types ==============" $$ 
+      text "\n ----------- Reduction Ops/Types --------------" $$ 
 	   sep (L.map (\(x,y) -> pp((fromAtom x)::String,y)) $ AM.toList reductions) $$
 
-      text (show graph)
+      text "\n ----------------- FGL Graph ------------------" $$ 
+      text (show graph) $$
+      text "}"
 
 
 ----------------------------------------------------------------------------------------------------

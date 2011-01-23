@@ -1,6 +1,20 @@
 {-# LANGUAGE OverloadedStrings, ScopedTypeVariables #-}
 
--- UNFINISHED!!!  (Barely started... this is a placeholder.)
+-- UNFINISHED!!!  
+
+{- HOWTO RUN (current as of [2011.01.23]):
+   ---------------------------------------
+   For now this is an executable entrypoint itself (Main).
+
+     runhaskell Intel/Cnc/BenchSynth.hs
+
+   The resulting file can be built with:
+
+     g++ -ltbb -ltbbmalloc test.cpp -o test.exe
+
+   Assuming you've got the environment set up right for tbb....
+       
+ -} 
 ----------------------------------------------------------------------------------------------------
 
 
@@ -13,10 +27,12 @@ module Main where
    This encompasses both kernel generation and graph generation.
  -}
 
-import Control.Monad
-import Data.ByteString.Char8
 import Intel.Cnc.Spec.AST
 import Intel.Cnc.Spec.Util hiding (app)
+import Intel.Cnc.Spec.MainExecutable
+
+import Control.Monad
+import Data.ByteString.Char8 hiding (putStrLn)
 import Text.PrettyPrint.HughesPJ
 import Text.PrettyPrint.HughesPJClass 
 import StringTable.Atom
@@ -82,13 +98,17 @@ default_tbb_bench_config =
 
 ----------------------------------------------------------------------------------------------------
 
--- A numeric computation on a single scalar.
--- Takes the name of a variable.  Returns the name of a variable that contains the result.
--- data ScalarKernel = ScalarKernel (Syntax -> EasyEmit Syntax)
-type ScalarKernel  = (Syntax -> EasyEmit Syntax)
-type ScalarKernel2 = (Syntax -> Syntax -> EasyEmit Syntax)
 
--- Perform approximately n flops:
+type VarName = Syntax
+
+-- A numeric computation on a single scalar.
+-- Takes the name of a variable.  
+-- Emits a block of code and returns the name of a variable that contains the result.
+-- data ScalarKernel = ScalarKernel (Syntax -> EasyEmit Syntax)
+type ScalarKernel  = (VarName -> EasyEmit VarName)
+type ScalarKernel2 = (VarName -> VarName -> EasyEmit VarName)
+
+-- Perform approximately n flops (where n is an expression returning int).
 simpleFlops :: Type -> Syntax -> ScalarKernel
 simpleFlops ty n = 
   -- ScalarKernel $ 
@@ -113,7 +133,6 @@ noopKern x = return x
 
 --------------------------------------------------------------------------------
 -- TBB backend, generate code to construct a TBB graph and TBB execute methods.
-
 
 -- Emit an entire graph as the complete text of a .cpp file.
 tbbEmitGraph :: GraphNode -> Doc 
@@ -140,8 +159,8 @@ rangeTy = tyConstructor "blocked_range" TInt
 -- Use a for loop to go over a blocked range:
 rangeFor range = forLoopSimple (range `dot` "begin()", range `dot` "end()") 
 
-parProduceStruct :: Syntax -> ScalarKernel2 -> EasyEmit ()
-parProduceStruct tname kernel =  do     
+tbb_parProduceStruct :: Syntax -> ScalarKernel2 -> EasyEmit ()
+tbb_parProduceStruct tname kernel =  do     
     cppStruct tname "" $ do
       prev   <- var rTy "prev"
       outbuf <- var (TPtr vTy) "outbuf"
@@ -153,8 +172,8 @@ parProduceStruct tname kernel =  do
 
       return ()
 
-parProduceFun :: Syntax -> EasyEmit ObjFun
-parProduceFun tname_produce = 
+tbb_parProduceFun :: Syntax -> EasyEmit ObjFun
+tbb_parProduceFun tname_produce = 
   -- This expands
   funDef rTy "ParProduceStage" [TInt, TRef rTy, TRef vTy] $ \ (size, inp, outp) -> do
     app (function$ outp `dot` "grow_to_at_least") [size]
@@ -167,10 +186,10 @@ parProduceFun tname_produce =
 
 ----------------------------------------
 
--- Create the struct encapsulating the reduction operator:
-parReduceStruct :: Syntax -> ScalarKernel2 -> EasyEmit ()
-parReduceStruct tname kernel = 
- do 
+-- Create the struct encapsulating the reduction operator for use with parallel_reduce:
+tbb_parReduceStruct :: Syntax -> ScalarKernel2 -> EasyEmit ()
+tbb_parReduceStruct tname kernel = 
+ do {
     cppStruct tname "" $ do
       val  <- var rTy "value"
       inp  <- var (TPtr vTy) "input_vals"
@@ -196,11 +215,12 @@ parReduceStruct tname kernel =
 	result <- kernel val (arg `dot` val)
 	set val result
       return ()
+  }
 
 -- Create the function that calls parallel_reduce
 --parReduceFun :: Syntax -> EasyEmit ((Syntax,Syntax) -> EasyEmit Syntax)
-parReduceFun :: Syntax -> EasyEmit ObjFun
-parReduceFun tname = 
+tbb_parReduceFun :: Syntax -> EasyEmit ObjFun
+tbb_parReduceFun tname = 
     funDef voidTy "ParReduceStage" [TRef vTy, TRef rTy] $ \ (inp, outp) -> 
 --    funDef rTy "ParReduceStage" [TRef vTy, TRef vTy] $ \ (inp, outp) -> 
      do 
@@ -238,7 +258,7 @@ tbb_header = "\
  \ \n"
 
 -- Execute a linear chain of reductions:
-produceReduceChain dofree (length, width, flops) 
+tbb_produceReduceChain dofree (length, width, flops) 
 		   prodFun redFun  =
    do 
       app (function "printf") [stringconst "Running pipe of length %d, width %d, op flops %d\n", 
@@ -312,60 +332,135 @@ genFile =
    execEasyEmit$
     makeBenchFile (10,10,10) -- Defaults if no command line options are provided.
 	     (\ (length, width, flops) -> 
-	        do parReduceStruct tname_reduce (simpleFlops2 rTy flops)
+	        do tbb_parReduceStruct tname_reduce (simpleFlops2 rTy flops)
 	           putS ""
-		   redfn <-  parReduceFun tname_reduce 
+		   redfn <-  tbb_parReduceFun tname_reduce 
 	           putS ""
-	           parProduceStruct tname_produce (simpleFlops2 rTy flops)
+	           tbb_parProduceStruct tname_produce (simpleFlops2 rTy flops)
 	           putS ""
-		   prodfn <-  parProduceFun tname_produce
+		   prodfn <-  tbb_parProduceFun tname_produce
 	           putS ""
 	           return (prodfn,redfn)
 	     )
              (\ (length, width, flops) (prodfn,redfn) -> 
-	        produceReduceChain False (length, width, flops) prodfn redfn
+	        tbb_produceReduceChain False (length, width, flops) prodfn redfn
 	     )
 
-main = genFile
+-- Temporary entrypoint:
+main = 
+  do putStrLn$ "Generating test.cpp file"
+     genFile
+     putStrLn$ "Finished generating"
 
  
 --------------------------------------------------------------------------------
 -- CnC backend
 
+-- UNFINISHED:
+
+cnc_parProduceFun :: Syntax -> EasyEmit ObjFun
+cnc_parProduceFun tname_produce = 
+  -- This expands
+  funDef rTy "ParProduceStage" [TInt, TRef rTy, TRef vTy] $ \ (size, inp, outp) -> do
+    app (function$ outp `dot` "grow_to_at_least") [size]
+    producer <- tmpvar (litType tname_produce)
+    fieldset producer "prev" inp
+    fieldset producer "outbuf" (addressOf outp)
+    app (function "parallel_for")
+	[function "blocked_range<int>" [0, methcall outp "size" []],
+	 producer]
+
+cnc_parProduceStruct :: Syntax -> ScalarKernel2 -> EasyEmit ()
+cnc_parProduceStruct tname kernel =  do     
+    cppStruct tname "" $ do
+      prev   <- var rTy "prev"
+      outbuf <- var (TPtr vTy) "outbuf"
+
+      constFunDef voidTy "operator()" [TConst$ TRef rangeTy] $ \ range -> do
+	rangeFor range $ \ i -> do
+	   result <- kernel i prev
+	   arrset (dereference outbuf) i result
+
+      return ()
+
+-- Emit the CnC context definition.
+-- Ideally we would use the translator itself to generate this!
+--
+-- However, right now we want to be able to use individual reducers,
+-- which is not efficent currently.
+cnc_produceReduceContext :: EasyEmit() 
+cnc_produceReduceContext = 
+  undefined
+
+-- This is one of those incomplete specs that doesn't include the
+-- produce/consume edges.
+ttt = readCnCFromStr (-1) "foo.cnc"
+  " tags<int>       T1;   \n\
+  \ steps           S1;   \n\
+  \ "
 
 
--- tags<int>       T1;
--- steps           S1;
--- reductions<int,int> R1(plus, 0);
--- env -> T1 :: S1 -> R1 -> env;
+{-
+struct my_context : public CnC::context< my_context >
+{
+    CnC::tag_collection< int, CnC::Internal::strided_range< int > > m_tags;
+    CnC::step_collection<FindPrimes> m_findPrimesStepC;
+    CnC::eager_reducer<int>* reducer;
+    CnC::item_collection<int,int> m_items; // THIS IS UGLY.
+   
+    my_context() 
+        : CnC::context< my_context >(),
+          m_findPrimesStepC( this, "FindPrimes" ),
+          m_tags( this )
+        , m_items(this)
+    {
+
+        reducer = new CnC::eager_reducer<int>(0, &sum_int,  &m_items);
+        prescribe( m_tags, m_findPrimesStepC );
+        produce ( this->m_env, m_tags );
+    }
+};
+
+--------------------------------------------------------------------------------
+
+tags<int>       T1;
+steps           S1;
+reductions<int,int> R1(plus, 0);
+env -> T1 :: S1 -> R1 -> env;
 
 
 
--- int plus(int x, int y) { return x + y; }
+int plus(int x, int y) { return x + y; }
 
--- #include<reduction_test.h>
+  #include<reduction_test.h>
 
--- template < class ctxt > 
--- int S1::execute( const int & tag, ctxt & c) const 
--- {
---     printf("Step(%d) begun\n", tag);
---     c.R1.put(0, tag);
---     printf(" Step(%d) reducer put finished\n", tag);
---     return CnC::CNC_Success;    
--- }
+template < class ctxt > 
+int S1::execute( const int & tag, ctxt & c) const 
+{
+    printf("Step(%d) begun\n", tag);
+    c.R1.put(0, tag);
+    printf(" Step(%d) reducer put finished\n", tag);
+    return CnC::CNC_Success;    
+}
 
--- int main () 
--- {
---     reduction_test_context context;
---     for(int i=0; i<10; i++) context.T1.put(i);
---     context.wait();
---     int n;
---     //    context.R1.done(0);
---     // context.R1.all_done();
---     context.R1.get(0, n);
---     printf("Retrieve reducer result at 0: %d\n", n);
---     return 0;
--- }
+int main () 
+{
+    reduction_test_context context;
+    for(int i=0; i<10; i++) context.T1.put(i);
+    context.wait();
+    int n;
+    //    context.R1.done(0);
+    // context.R1.all_done();
+    context.R1.get(0, n);
+    printf("Retrieve reducer result at 0: %d\n", n);
+    return 0;
+}
+
+
+-}
+
+
+
 
 
 
