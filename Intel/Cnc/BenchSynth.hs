@@ -29,7 +29,7 @@ module Main where
 
 import Intel.Cnc.Spec.AST
 import Intel.Cnc.Spec.Util hiding (app)
-import Intel.Cnc.Spec.MainExecutable
+import Intel.Cnc.Spec.MainExecutable as Comp
 
 import Control.Monad
 import Data.ByteString.Char8 hiding (putStrLn)
@@ -94,10 +94,11 @@ default_tbb_bench_config =
      }
 
 
-
+debug_benchsynth = True
 
 ----------------------------------------------------------------------------------------------------
-
+-- Reusable infrastructure -- not backend-specific.
+----------------------------------------------------------------------------------------------------
 
 type VarName = Syntax
 
@@ -114,6 +115,8 @@ simpleFlops ty n =
   -- ScalarKernel $ 
   \ inp -> do 
     tmp <- tmpvarinit ty inp
+    comm$ " Simple "++ synToStr n ++" FLOPs kernel, input "++ 
+	   synToStr inp ++" output "++ synToStr tmp
 --    forLoopSimple (0, fromInt (n `quot` 2)) $ \ ind -> do
     forLoopSimple (0, n/2) $ \ ind -> do
       set tmp ("2.0000001" * tmp)
@@ -124,15 +127,53 @@ simpleFlops ty n =
 simpleFlops2 :: Type -> Syntax -> ScalarKernel2
 simpleFlops2 ty n = 
   \ x y -> 
-   do x1 <- simpleFlops ty (n/2) x
+   do comm$ "Simple TWO argument "++ synToStr n ++" FLOPs kernel (combining two separate kernels):"
+      x1 <- simpleFlops ty (n/2) x
       y1 <- simpleFlops ty (n/2) y
+      comm$ "END TWO argument kernel, output = " ++ synToStr (x1 + y1)
       return (x1 + y1)
 
 noopKern :: ScalarKernel
 noopKern x = return x
 
---------------------------------------------------------------------------------
+makeBenchFile :: (Int,Int,Int) -- length, width flops
+	      -> ((Syntax, Syntax, Syntax) -> EasyEmit a)
+	      -> ((Syntax, Syntax, Syntax) -> a -> EasyEmit ())
+	      -> EasyEmit ObjFun
+-- Put together a complete, executable benchmark file:
+makeBenchFile (_numstages, _width, _flops) restfile mainbody  =
+ do 
+    putS tbb_header
+    comm "Create global variables for benchmark dimensions/parameters:"
+    threads <- var TInt "threads"
+    length  <- var TInt "length"
+    width   <- var TInt "width"
+    flops   <- var TInt "flops"
+    pkg <- restfile (length, width, flops)
+
+    funDef TInt "main" [TInt, TPtr$ TPtr TChar] $ \ (argc :: Syntax, argv :: Syntax) -> do
+      if_ (argc >= 5)
+	  (do app (function "printf") [stringconst "Reading command line arguments: threads, length, width, op flops\n"]
+              set threads$ function "strtol" [argv `arrsub` 1, 0, 10]
+	      set length $ function "strtol" [argv `arrsub` 2, 0, 10]
+	      set width  $ function "strtol" [argv `arrsub` 3, 0, 10]
+	      set flops  $ function "strtol" [argv `arrsub` 4, 0, 10])
+	  (do app (function "printf") [stringconst "No command line arguments: using default benchmark params.\n"]
+	      set threads $ 1
+	      set length  $ fromInt _numstages
+	      set width   $ fromInt _width
+	      set flops   $ fromInt _flops)
+
+      tmpclassvar (TSym "task_scheduler_init") [threads]
+      app (function "printf") [stringconst "Initialized num threads to %d\n", threads]
+
+      mainbody (length, width, flops) pkg
+
+
+
+----------------------------------------------------------------------------------------------------
 -- TBB backend, generate code to construct a TBB graph and TBB execute methods.
+----------------------------------------------------------------------------------------------------
 
 -- Emit an entire graph as the complete text of a .cpp file.
 tbbEmitGraph :: GraphNode -> Doc 
@@ -173,8 +214,9 @@ tbb_parProduceStruct tname kernel =  do
       return ()
 
 tbb_parProduceFun :: Syntax -> EasyEmit ObjFun
-tbb_parProduceFun tname_produce = 
-  -- This expands
+tbb_parProduceFun tname_produce = do
+  comm "This stage expands the single reduced scalar from the previous reduce "
+  comm "stage back into an array of values."
   funDef rTy "ParProduceStage" [TInt, TRef rTy, TRef vTy] $ \ (size, inp, outp) -> do
     app (function$ outp `dot` "grow_to_at_least") [size]
     producer <- tmpvar (litType tname_produce)
@@ -261,68 +303,38 @@ tbb_header = "\
 tbb_produceReduceChain dofree (length, width, flops) 
 		   prodFun redFun  =
    do 
-      app (function "printf") [stringconst "Running pipe of length %d, width %d, op flops %d\n", 
+
+      let printf = function "printf"
+
+      app printf [stringconst "Running pipe of length %d, width %d, op flops %d\n", 
 			       length, width, flops]
+      app printf [stringconst "------------------------------------------------------------\n"]
+      
 
       comm "Create a series of reduction steps, separated by buffers, as well"
       comm "as 'spreader' production steps that fan the reduced values back out."
 
-      buf0 <- var (TPtr vTy) "buf0"
-      set "buf0" (new vTy [])
-
-      comm "We start off the computation with an input domain here:"
-      forLoopSimple (0, width) $ \ i -> do 
-        app (function$ (dereference "buf0") `dot` "push_back") [i];
-
+      val0 <- varinit (rTy) "val0" 1 
       forLoopSimple (0, length) $ \i -> do
-	buf1 <- var (TPtr vTy) "buf1"
-	set buf1 (new vTy [])
+        when debug_benchsynth $ 
+	    app printf [stringconst "Round %d, initial value = %lf\n", i, val0]
+      	intmdt <- varinit (TPtr vTy) "intermediate_buf" (new vTy [])
+	app prodFun [width, val0, dereference intmdt]
 
-        intmdt <- tmpvar rTy
-	app redFun  [dereference buf0, intmdt]
-	app prodFun [width, -- methcall buf0 "size"[], 
-		     intmdt, dereference buf1]
+        when debug_benchsynth $ 
+	  do app printf [stringconst "Round %d, buf: [ ", i]
+             forLoopSimple (0, width) $ \j -> do 
+	       app printf [stringconst "%lf ", (dereference intmdt) `arrsub` j]
+	     app printf [stringconst "]\n"]
 
-	when dofree $ app (function "delete") [buf0]
-	set buf0 buf1
+        val1   <- var (rTy) "val1" 
+	app redFun  [dereference intmdt, val1]
+	when dofree $ app (function "delete") [intmdt]
+	set val0 val1
 
-      sum <- tmpvarinit rTy 0
-      forLoopSimple (0, width) $ \i -> 
-	set sum (sum + "(*buf0)" `arrsub` i)
-
-      putS$ "printf(\"Final spot check sum: %lf\\n\", "++ synToStr sum++");"
-      when dofree $ app (function "delete") [buf0]
+      putS$ "printf(\"Final spot check sum: %lf\\n\", "++ synToStr val0 ++");"
       ret 0
 
-
--- Put together a complete, executable benchmark file:
-makeBenchFile (_numstages, _width, _flops) restfile mainbody  =
- do 
-    putS tbb_header
-    comm "Create global variables for benchmark dimensions/parameters:"
-    threads <- var TInt "threads"
-    length  <- var TInt "length"
-    width   <- var TInt "width"
-    flops   <- var TInt "flops"
-    pkg <- restfile (length, width, flops)
-
-    funDef TInt "main" [TInt, TPtr$ TPtr TChar] $ \ (argc :: Syntax, argv :: Syntax) -> do
-      if_ (argc >= 5)
-	  (do app (function "printf") [stringconst "Reading command line arguments: threads, length, width, op flops\n"]
-              set threads$ function "strtol" [argv `arrsub` 1, 0, 10]
-	      set length $ function "strtol" [argv `arrsub` 2, 0, 10]
-	      set width  $ function "strtol" [argv `arrsub` 3, 0, 10]
-	      set flops  $ function "strtol" [argv `arrsub` 4, 0, 10])
-	  (do app (function "printf") [stringconst "No command line arguments: using default benchmark params.\n"]
-	      set threads $ 1
-	      set length  $ fromInt _numstages
-	      set width   $ fromInt _width
-	      set flops   $ fromInt _flops)
-
-      tmpclassvar (TSym "task_scheduler_init") [threads]
-      app (function "printf") [stringconst "Initialized num threads to %d\n", threads]
-
-      mainbody (length, width, flops) pkg
 
 
 -- Temp: run everything and generate one benchmark config to a file:
@@ -357,6 +369,8 @@ main =
 -- CnC backend
 
 -- UNFINISHED:
+
+-- Here we would like to reuse the main spec compiler code to do some of the work for us.
 
 cnc_parProduceFun :: Syntax -> EasyEmit ObjFun
 cnc_parProduceFun tname_produce = 

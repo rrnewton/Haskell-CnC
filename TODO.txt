@@ -6,7 +6,7 @@
 Specific, relatively small tasks/fixes:
 
   (*) delete the output header file if an error is thrown. 
-      (don't leave partial files)
+      (don't leave partial files, or leave them with a .CRASH or .ERR suffix)
 
 Things to work on:
 
