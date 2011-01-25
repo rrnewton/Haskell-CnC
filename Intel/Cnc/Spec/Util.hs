@@ -34,7 +34,8 @@ import qualified Data.Set as S
 -- I couldn't find a nice simple version of this in hackage or the
 -- standard libraries so here we roll our own (trivial) StringBuilder class.
 
-
+-- NOTE: It would be nice to do all this with ByteString, but alas the
+-- pretty printing infrastructure uses Strings.
 class Monad m => StringBuilder m where 
   putS  :: String -> m ()
   putD  :: Doc -> m () 

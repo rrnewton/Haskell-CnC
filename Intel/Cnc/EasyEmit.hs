@@ -403,9 +403,11 @@ classLike prefix postfix (Syn name) (Syn inherits) m =
      block m
      addChunkPrevLine$ strToSyn postfix 
 
+-- | Takes: name, inheritance expression, and a body.
 cppClass :: Syntax -> Syntax -> EasyEmit () -> EasyEmit ()
 cppClass = classLike "class" ";"
 
+-- | Takes: name, inheritance expression, and a body.
 cppStruct :: Syntax -> Syntax -> EasyEmit () -> EasyEmit ()
 cppStruct = classLike "struct" ";"
 

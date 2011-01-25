@@ -39,6 +39,10 @@ Tag functions:
 
  (*) Generate tag-function-correctess-enforcing code for all gets and puts. 
 
+Correctness checking: 
+
+ (*) Detect put-before get.
+
 Traces: 
  (*) Currently the system reads traces but doesn't record them to disk
      (in compressed, binary format)

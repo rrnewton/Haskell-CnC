@@ -42,9 +42,9 @@ default_codegen_config =
       , gendepends  = False
       , gendebug    = False
       , wrapall     = False
-      , plugins     = [testplugin]
+      , plugins     = []
+--      , plugins     = [testplugin]
 --      , plugins     = [autodonePlugin]
 --      , plugins     = []
      }
-
 
