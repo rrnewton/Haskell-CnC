@@ -11,6 +11,10 @@ endif
 
 all: $(EXES)
 
+run:
+	runhaskell ./run_tests.hs
+
+
 CNCTOOL="../build/cnc"
 #CNCTOOL="../cnc.sh"
 

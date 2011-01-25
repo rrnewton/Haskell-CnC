@@ -87,26 +87,27 @@ each_test numthreads (name, project) =
      do out <- run$ setenv [("CNC_NUM_THREADS", numthreads)] $
  	            ("./"++ name ++".exe") -|- tee [name++".out"]
 	expected <- readFile$ name ++ ".cmpr"
-	putStrLn$ "     Out was "++ show (length (out::String)) ++" expected was " ++ show (length expected)
-	putStrLn$ "   Equal? "++ show (out == expected)
 
         let s1 = S.fromList $ map project $ lines out
 	    s2 = S.fromList $ map project $ lines expected 
 	    set_eq = s1 == s2
 
-	putStrLn$ "   Set Equal? "++ show set_eq
-
         when (not set_eq) $ do
           let d1 = S.difference s1 s2
 	      d2 = S.difference s2 s1
 
-          print s1
+          putStrLn$ " FAIL: "
+	  putStrLn$ "   Output string length "++ show (length (out::String)) ++", expected length " ++ show (length expected)
+	  -- putStrLn$ "   Output/expected equal? "++ show (out == expected)
+	  -- putStrLn$ "   Output/expected lines set-equal? "++ show set_eq
 
-          putStrLn$ "     Diff1: " 
+--          print s1
+
+          putStrLn$ "     Diff1, in actual output but not expected: " 
           putStrLn$ "------------------------------------------------------------" 
 	  mapM_ putStrLn (S.toList d1)
           putStrLn$ "------------------------------------------------------------" 
-          putStrLn$ "     Diff2: " 
+          putStrLn$ "     Diff2, in expected but not actual output: " 
           putStrLn$ "------------------------------------------------------------" 
 	  mapM_ putStrLn (S.toList d2)
           putStrLn$ "------------------------------------------------------------" 
