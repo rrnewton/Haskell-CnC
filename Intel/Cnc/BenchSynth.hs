@@ -130,13 +130,24 @@ simpleFlops ty n =
 
 -- A version with two arguments:
 simpleFlops2 :: Type -> Syntax -> ScalarKernel2
-simpleFlops2 ty n = 
+-- simpleFlops2 ty n = 
+--   \ x y -> 
+--    do comm$ "Simple TWO argument "++ synToStr n ++" FLOPs kernel (combining two separate kernels):"
+--       x1 <- simpleFlops ty (n/2) x
+--       y1 <- simpleFlops ty (n/2) y
+--       comm$ "END TWO argument kernel, output = " ++ synToStr (x1 + y1)
+--       return (x1 + y1)
+
+-- This one is associative and commutative:
+simpleFlops2 ty flps = 
   \ x y -> 
-   do comm$ "Simple TWO argument "++ synToStr n ++" FLOPs kernel (combining two separate kernels):"
-      x1 <- simpleFlops ty (n/2) x
-      y1 <- simpleFlops ty (n/2) y
-      comm$ "END TWO argument kernel, output = " ++ synToStr (x1 + y1)
-      return (x1 + y1)
+   do comm$ "Simple TWO argument "++ synToStr flps ++" FLOPs kernel, inputs: "++
+	    synToStr x ++" "++ synToStr y
+      tmp <- tmpvarinit ty (x + y)
+      forLoopSimple (0, flps) $ \ _ -> set tmp ("0.0000001" + tmp)
+      comm$ "END TWO argument kernel, output: " ++ synToStr tmp
+      return tmp
+
 
 -- funappKern  f x   = function f [x]
 -- funappKern2 f x y = function f [x,y]
@@ -339,10 +350,21 @@ genTbbFile filename =
     execEasyEmit$
      makeBenchFile tbb_header (10,10,10) -- Defaults if no command line options are provided.
 	      (\ (length, width, flops) -> 
-		 do tbb_parReduceStruct tname_reduce (simpleFlops2 rTy flops);     putS ""
-		    redfn <-  tbb_parReduceFun tname_reduce ; 	                  putS ""
-		    tbb_parProduceStruct tname_produce (simpleFlops2 rTy flops);   putS ""
-		    prodfn <-  tbb_parProduceFun tname_produce;                    putS ""
+		 do 
+	            putS ""; comm "This function is used to do the actual FLOPs: "
+	            cnc_reduceOp "simpleFlops2" flops
+
+		    --funDef rTy "simpleFlops2" [TInt, rTy,rTy] $ \ (flops, x,y) -> do
+	            -- funDef rTy "simpleFlops2" [rTy,rTy] $ \ (x,y) -> do
+		    --   x <- simpleFlops2 rTy flops x y
+		    --   ret x
+	            putS ""
+--                    let kern x y = return (function "simpleFlops2" ["flops",x,y])
+                    let kern x y = return (function "simpleFlops2" [x,y])
+	            tbb_parReduceStruct tname_reduce kern;       putS ""
+		    redfn <-  tbb_parReduceFun tname_reduce; 	 putS ""
+		    tbb_parProduceStruct tname_produce kern;     putS ""
+		    prodfn <-  tbb_parProduceFun tname_produce;  putS ""
 		    return (prodfn,redfn)
 	      )
 	      (\ (threads, length, width, flops) (prodfn,redfn) -> do
@@ -379,7 +401,7 @@ genCnCFile filename = do
 		  do 
 		     comm ""
 		     comm "First declare some types/functions that are needed *before* the spec:"
-		     cnc_reduceOp flops
+		     cnc_reduceOp "reduce_op" flops
 		     comm ""
 		     comm "And here's an unfortunate (hopefully temporary) global variable:" 
 		     var rTy "prev"
@@ -391,7 +413,8 @@ genCnCFile filename = do
 		     comm ""
 		     comm "================================================================================"
                      comm "Next add the step implementations."
-		     cnc_parProduceReduceStep (simpleFlops2 rTy flops)
+                     let kern x y = return (function "reduce_op" [x,y])
+		     cnc_parProduceReduceStep kern
 		     return ()
 	       )
 	       (\ (threads, length, width, flops) () -> 
@@ -419,11 +442,12 @@ cnc_parProduceReduceStep kernel = do
 	 putS "return CnC::CNC_Success;"
   return ()
 
-cnc_reduceOp flops = do
+cnc_reduceOp name flops = do
   putS ""
-  funDef rTy "reduce_op" [rTy,rTy] $ \ (x,y) -> do
-    x <- simpleFlops2 rTy flops x y
-    ret x
+  funDef rTy name [rTy,rTy] $ \ (x,y) -> do
+    new <- simpleFlops2 rTy flops x y
+    app (function "printf") [stringconst "Computed %lf from %lf and %lf, flops %d\n", new,x,y, flops]
+    ret new
 
 -- Emit the CnC context definition.
 -- Ideally we would use the translator itself to generate this!
