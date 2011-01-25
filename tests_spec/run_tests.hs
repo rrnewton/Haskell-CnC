@@ -38,13 +38,14 @@ all_tests =
  ]
 
 -- TODO: This needs to be made a lot nicer...
+-- Right now it just kills the tail ends of lines that deal with refcounts.
 strip_refcounts =
 --  traceFun "strip_refcounts" $
     killAfter "Decremented .* to" .
     killAfter  "Incrementing .* refcount to"
  
 
--- Kill the rest of the line after a pattern match.
+-- | Kill the rest of the line after a pattern match.
 killAfter pat line = 
   case line =~ pat :: (String,String,String) of 
     (_,"",_) -> line

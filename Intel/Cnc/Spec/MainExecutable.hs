@@ -44,6 +44,7 @@ import System.FilePath.Posix
 import System.IO
 import System.IO.Unsafe
 import System.Exit
+import qualified System.Directory as Dir
 
 import Text.Printf
 import Text.PrettyPrint.HughesPJClass
@@ -203,9 +204,12 @@ readCnCFromStr verbosity file str = do
 
   let parsed = runCncParser file str
 
+      parsed' = if null parsed 
+                then error "ERROR: CnC file contained no statements!\n Empty spec not considered valid."
+		else parsed
       ----------------------------------------
       -- Pass 1: desugar type
-      p1 = desugarTypeDefs parsed
+      p1 = desugarTypeDefs parsed'
 
       ----------------------------------------
       final_statements = p1
@@ -501,7 +505,8 @@ harchpartCommand opts = do
 -- Implementation of translate mode.
 ----------------------------------------------------------------------------------------------------
 
-translateCommand verbosity opts_set files = do 
+translateCommand verbosity opts_set files =   
+   do 
       let 
           opts = S.toList opts_set
 	  mode = "translate"
@@ -555,13 +560,26 @@ translateCommand verbosity opts_set files = do
       ------------------------------------------------------------
 
       graph <- readCnCFile verbosity file 
+
+      -- For clarity of error messages, let's force this before begin "emitCpp" below:
+      evaluate graph
+
       let appname = takeBaseName file  
 	  base = takeDirectory file </> appname 
 	  toFile outname msg str = 
-	   do outhand <- openFile outname WriteMode
-	      when (verbosity>0)$ putStrLn$ cnctag++"Generating "++msg++", output to: " ++ outname
-	      writeSB outhand $ str
-	      hClose outhand
+           do x <- try 
+		    (do outhand <- openFile outname WriteMode
+		        when (verbosity>0)$ putStrLn$ cnctag++"Generating "++msg++", output to: " ++ outname
+		        writeSB outhand $ str
+		        hClose outhand)
+              case x of 
+	        Left (ex) -> 
+		    do let err = outname ++ ".ERR"
+		       putStrLn$ cnctag++"Spec "++ verb ++" failed, moving partially written file to " ++ err
+		       putStrLn$ cnctag++"Rethrowing error, see below: "
+		       Dir.renameFile outname err
+		       throw (ex :: SomeException)
+		Right _ -> return ()
 
       case codegenmode of
 	CppOld -> 
@@ -580,6 +598,9 @@ translateCommand verbosity opts_set files = do
 	_ -> error$ "Not a codegen mode: "++ show codegenmode
 
 
+
+verb = "translation" 
+-- verb = "compilation" 
 
 ------------------------------------------------------------------------------------------------------------------------
 -- Testing 
