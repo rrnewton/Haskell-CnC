@@ -409,7 +409,7 @@ traceToGUI trace =
 
 
 
-t29 = traceToGUI $ tracefile sample_trace
+t29 = traceToGUI $ parseCncTrace sample_trace
 
 t30 = playback emptyGUIState t29 
 

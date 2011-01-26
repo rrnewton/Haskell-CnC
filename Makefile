@@ -146,10 +146,14 @@ HCNCNAME=cnc
 $(BUILDDIR):
 	mkdir $(BUILDDIR)
 
-install: $(BUILDDIR)/$(HCNCNAME).stripped
+# This is for use in the context of a complete Intel CnC distribution.
+install: 
 	rm -f Intel/Cnc/Spec/Version.hs
-	$(MAKE) Intel/Cnc/Spec/Version.hs $(HCNCNAME).stripped
-	cp $(BUILDDIR)/$(HCNCNAME).stripped `which $(HCNCNAME)`
+#	$(MAKE) Intel/Cnc/Spec/Version.hs $(HCNCNAME).stripped
+#	cp $(BUILDDIR)/$(HCNCNAME).stripped `which $(HCNCNAME)`
+	$(MAKE) Intel/Cnc/Spec/Version.hs release
+	if [ -e ../../distro/ ]; then mkdir -p ../../distro/bin/$(CNC_ARCH_PLATFORM)/; fi
+	if [ -e ../../distro/ ]; then cp $(BUILDDIR)/$(HCNCNAME).release ../../distro/bin/$(CNC_ARCH_PLATFORM)/cnc; fi
 
 trans: 
 	@echo 

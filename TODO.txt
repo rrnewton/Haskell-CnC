@@ -35,14 +35,17 @@ Things to work on:
 Tag functions:
 
  (*) Generate tag-function-correctess-enforcing code for all gets and puts. 
+     (Generalize this functionality and put it in a plugin.)
 
 Correctness checking: 
 
  (*) Detect put-before get.
 
 Traces: 
+ (*) This should be a a priority-candidate for conversion to ByteString.
+
  (*) Currently the system reads traces but doesn't record them to disk
-     (in compressed, binary format)
+     (e.g. in compressed, binary format)
 
  (*) Ubigraph Trace visualization works but doesn't allow reversing
      time and controlling playback rate.

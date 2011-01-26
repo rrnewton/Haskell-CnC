@@ -6,8 +6,26 @@
 -- Original Author: Ryan Newton
 ----------------------------------------------------------------------------------------------------
 
-module Intel.Cnc.Spec.Util where
+module Intel.Cnc.Spec.Util 
+  (
+   -- Reexported globals:
+   special_environment_name, cnctag, hcnc_name, 
 
+   fst3, snd3, thd3,
+
+   commasep, commspc, commacat, 
+   t, pp, angles, textAtom, toDoc, app,
+   dubquotes, escapeString, hangbraces, indent, putD, putS, runSB, writeSB,
+   struct, pad, assignCast, mkPtr, deref, thunkapp, mkConstRef, mkPtr, mkRef, assign,
+   StringBuilder,  
+
+   collapseMaybe, 
+
+   alwaysAssertEq, testSet, testCase
+  )
+where
+
+import Intel.Cnc.Spec.Globals
 import Text.PrettyPrint.HughesPJClass
 import Control.Monad.State
 import Control.Exception as CE
@@ -218,16 +236,3 @@ testSet name ls =
  where header = "Running tests for module " ++ show name 
        spacer = (take (length header) $ repeat '=')
 
-
---------------------------------------------------------------------------------
--- These should be moved to a "globals" file:
---------------------------------------------------------------------------------
-
--- "Official" output from our process should be tagged in the following way:
---cnctag = ""
-cnctag = "[CnC] "
-
---hcnc_name = "hcnc"
-hcnc_name = "cnc"
-
-special_environment_name = "env"

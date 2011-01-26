@@ -33,6 +33,7 @@ import Data.Maybe ( fromJust )
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.List
+import qualified Data.ByteString.Lazy.Char8 as B
 
 import Control.Monad hiding (when)
 import Control.Exception 
@@ -66,13 +67,15 @@ data Flag
     | AutoDone | AutoDoneDbg
     | Cpp | CppOld | Haskell
  -- | Input String  | LibDir String
-    | Output String
+    | Output String 
     | HarchPart String
     | HarchViz String
     | NullOpt
     | DotOpt
     | VizOpt
     | UbigraphOpt
+    -- Trace mode:
+    | Pack String -- | Unpack
     | VacuumViz  | Vacuum
     | SynthSpec String    
   deriving (Show, Eq, Ord)
@@ -142,11 +145,17 @@ translate_options =
 trace_options ::  [OptDescr Flag]
 trace_options = 
      [ 
-        Option ['o']    ["output"] (ReqArg Output "FILE") "write the captured trace to FILE in compressed binary format"
+        Option ['p']    ["pack"]   (ReqArg Pack "FILE")   "write the captured trace to FILE in compressed binary format"
+--     ,  Option ['u']    ["unpack"] (NoArg Unpack) "unpack input file from binary format into ASCII on stdout"
 #ifdef CNCVIZ
      ,  Option []       ["viz"] (NoArg VacuumViz) "use trace to visualize graph execution using ubigraph"
 #endif
+
+
+-- TEMPTOGGLE: This feature is not implemented yet:
+#if 0
      ,  Option []       ["synth"] (ReqArg SynthSpec "FILE") "use trace to synthesize a draft .cnc Spec for the program"
+#endif
      ,  Option []       ["debug"] (NoArg Debug)             "print parsed trace to validate parsing"
      ]
 
@@ -167,7 +176,7 @@ printHeader = do
   putStrLn$ "The fabulous, multi-purpose CnC Specification Tool, version "++ version
   putStrLn$ "Part of the Intel(R) Concurrent Collections (CnC) Project"
   putStrLn$ "Built on: " ++ builddate
-  putStrLn$ "Copyright 2010 Intel Corporation."
+  putStrLn$ "Copyright 2011 Intel Corporation."
 
 when b action = if b then action else return ()
 
@@ -377,31 +386,43 @@ mainWithArgStrings argv = do
 			return stdin 
 		else do putStrLn$ cnctag++"Reading trace from file "++ show(head files)
 			(openFile (head files) ReadMode)
-      str <- hGetContents handle
-      let thetrace = tracefile $ lines str
-	  fn deb opt = 
+      str <- B.hGetContents handle
+      let is_packed = isPackedTrace str
+      when is_packed $ putStrLn$ cnctag++"Trace is in packed (binary) format."
+      let thetrace = if is_packed
+		     then unpackCncTrace str
+		     else parseCncTrace$ lines$  B.unpack str
+          debug = foldl fn False opts
+	  fn deb opt =  
             case opt of 
 	       VacuumViz      -> deb
 	       Debug          -> True
 	       SynthSpec file -> error "Internal error, spec synthesis not implemented yet"
-	       Output    file -> error "Internal error, trace output not implemented yet"
-	       _ -> error$ "Internal error, not handled: "++ show opt
-          debug = foldl fn False opts
+	       Pack file   -> deb
+--	       Unpack -> deb
+	       _ -> error$ "Internal error, not handled in this mode: "++ show opt
+
+          ispack (Pack _)   = True
+--          ispack (Unpack ) = True
+          ispack _          = False
+
 	  alldone = do putStrLn$ cnctag++"Reached end of trace.  Exiting."
 		       exitSuccess
 
+     --------------------------------------------------------------------------------
+     -- PROOF OF CONCEPT:
       -- TEMPTOGGLE -- GETCOUNT SUMMARIZATION PRINTOUTS : this is just for testing:
-      when (debug) $ do
-	    let fn (GetI _ (_,tag)) = map fst (reads tag :: [((Int,Int,Int),String)])
+     -- Disabling for now [2011.01.25], bring back later:
+      when (False && debug) $ do
+	    let 
+	        -- Here we need to collect all get events and take statistics:
+	        fn (GetI _ (_,tag)) = map fst (reads tag :: [((Int,Int,Int),String)])
 		fn _ = [] 
-
                 -- TEMP: TODO: GENERALIZE
                 getname (GetI _ (nm,_)) = [nm]
 		getname _ = []
                 names = concat$ map getname thetrace
-
-                tags = concat$ map fn thetrace
-
+                tags  = concat$ map fn thetrace
 
 		collected = foldl (\ acc tup -> M.insertWith (+) tup 1 acc) M.empty tags
 		keys = M.keys collected
@@ -411,6 +432,7 @@ mainWithArgStrings argv = do
 			      , foldl1 max $ map fst3 keys
 			      , foldl1 max $ map snd3 keys
 			      , foldl1 max $ map thd3 keys)
+	        -- Text formatting details:
 		(l1,l2,l3,u1,u2,u3) = bounds keys
 		biggest = foldl1 max $ M.elems collected
 		-- Amount of space needed for biggest number:
@@ -441,6 +463,20 @@ mainWithArgStrings argv = do
 	    --mapM_ print (sortBy (compare `on` snd) $ M.toList collected)
 
 	    alldone
+
+     -- END PROOF OF CONCEPT
+     --------------------------------------------------------------------------------
+
+--      case sort $ filter ispack opts of 
+      case filter ispack opts of 
+       [] -> return ()
+       [Pack file] -> do putStrLn$ cnctag++"Packing trace to file "++ show file
+			 B.writeFile file (packCncTrace thetrace)
+			 alldone 
+       -- [Unpack] -> do bstr <- B.hGetContents handle
+       -- 		      B.putStr$ (unpackCncTrace bstr)
+       -- 		      alldone
+       ls -> error$ "ERROR: bad combination of pack/unpack options: "++ show ls
 
       -- In debugging mode we just print the parsed trace:
       when (debug) $ do

@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, ScopedTypeVariables #-}
+{-# LANGUAGE RecordWildCards, ScopedTypeVariables, DeriveDataTypeable  #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 ----------------------------------------------------------------------------------------------------
 -- "Vacuum" mode is for sucking up trace output and doing useful things with it.
@@ -9,9 +9,28 @@
 -- Original Author: Ryan Newton
 ----------------------------------------------------------------------------------------------------
 
-module Intel.Cnc.Spec.TraceVacuum where
+module Intel.Cnc.Spec.TraceVacuum 
+    ( 
+      NameTag, CncTraceEvent (..),  
+      parseCncTrace, 
+      packCncTrace, unpackCncTrace, isPackedTrace, 
+      sample_trace, test_traceVacuum
+    )
+ where
 
 import Intel.Cnc.Spec.Util
+import Intel.Cnc.Spec.Version 
+
+import Debug.Trace
+
+import Data.Maybe
+import Data.Data
+import Data.Binary
+import Data.Binary.Generic
+
+import qualified Data.ByteString.Lazy.Char8 as B
+
+import Codec.Compression.GZip
 
 import Text.Parsec
 -- import Text.Parsec.Char
@@ -34,7 +53,13 @@ data CncTraceEvent =
  | StartStep NameTag 
  | EndStep   NameTag 
  | PARSEFAIL String -- For debugging purposes record the failures.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Data, Typeable)
+
+-- For now we just use a defaault binary encoding.  We could
+-- standardize this if it was going to be read by any other tools....
+instance Binary CncTraceEvent where
+  put = putGeneric
+  get = getGeneric
 
 -- We should parse tags that we can make sense of, namely scalars and tuples.
 data CncTraceTag = 
@@ -43,21 +68,15 @@ data CncTraceTag =
  | TTFloat Float
 
 --------------------------------------------------------------------------------
--- Parsing traces
+-- Parsing and Encoding traces
 
 spc = oneOf " \t"
 whitespc = many spc
 defaultStepContext = (toAtom special_environment_name,"")
 
-doParse :: Parser CncTraceEvent -> String -> CncTraceEvent
-doParse p input
-  = case (parse p "" input) of
-      Left err -> PARSEFAIL input
-      Right x  -> x
-
-tracefile :: [String] -> [CncTraceEvent]
---tracefile lines = loop (error "No enclosing step!") lines
-tracefile lines = loop defaultStepContext lines
+-- | This converts the lines of a trace file into a parsed trace.
+parseCncTrace :: [String] -> [CncTraceEvent]
+parseCncTrace lines = loop defaultStepContext lines
  where 
   loop enclosing [] = []
   loop enclosing (line:tl) = 
@@ -69,6 +88,48 @@ tracefile lines = loop defaultStepContext lines
      in case parsed of 
 	   Nothing -> rest
 	   Just x  -> (x:rest)
+
+
+------------------------------------------------------------
+-- Pack traces into a binary format:
+------------------------------------------------------------
+
+-- Convention: Our file format is simple.  We have one line of plain
+-- ASCII for identification, and then a gzipped BLOb containing the
+-- marshalled haskell datatype.
+
+preface = "Intel CnC binary trace file, version "
+tagline = preface ++ version ++ "\n"
+
+
+-- NOTE: Could strip the PARSEFAIL entries upon packing.
+--       Something to think about...
+packCncTrace :: [CncTraceEvent] -> B.ByteString 
+packCncTrace trace =
+ B.append (B.pack tagline)
+          (compress (encode trace))
+
+unpackCncTrace :: B.ByteString -> [CncTraceEvent]
+unpackCncTrace bstr = 
+   -- tail chops off the '\n' character:
+   decode$ decompress$ B.tail rest 
+ where 
+  (fst,rest) = B.break (=='\n') bstr
+
+
+-- | Check the first bytes in the stream to tell if its a CnC trace:
+isPackedTrace :: B.ByteString -> Bool
+isPackedTrace = B.isPrefixOf (B.pack preface)
+  
+
+--------------------------------------------------------------------------------
+-- Helpers:
+
+doParse :: Parser CncTraceEvent -> String -> CncTraceEvent
+doParse p input
+  = case (parse p "" input) of
+      Left err -> PARSEFAIL input
+      Right x  -> x
 
 
 cnc_identifier = 
@@ -115,7 +176,7 @@ balanced_nest open close = loop [] 0
           if n==0 then return (reverse acc)
   	   else loop (c:acc) (n-1)
 
-------------------------------------------------------------------------------------------------------------------------
+
 
 
 
@@ -143,6 +204,7 @@ test_traceVacuum =
  testSet "TraceVacuum" $ 
  let tP = tryParse (traceline defaultStepContext) 
      sample = map (tryParse (traceline defaultStepContext)) sample_trace
+     sample' = catMaybes sample
      isfail (Just (PARSEFAIL _)) = True
      isfail _ = False
      tC = testCase ""
@@ -158,7 +220,8 @@ test_traceVacuum =
  , tC "sample trace: #success"$  111 ~=? length (filter (not . isfail) sample)
  , tC "sample trace: #noparse"$   16 ~=? length (filter (==Nothing) sample)
 
- , tC "balanced nesting"      $  Just"foo (a) (b c) bar" ~=? tryParse (balanced_nest '(' ')') "foo (a) (b c) bar) baz"		              
+ , tC "balanced nesting"      $  Just"foo (a) (b c) bar" ~=? tryParse (balanced_nest '(' ')') "foo (a) (b c) bar) baz"		      
+ , tC "unpack . pack = id " $ sample' ~=? (unpackCncTrace$ packCncTrace sample')
  ]
 
 sample_trace = 
