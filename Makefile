@@ -167,7 +167,8 @@ Intel/Cnc/Spec/Version.hs:
 
 release: $(BUILDDIR)/$(HCNCNAME).release
 
-$(BUILDDIR)/$(HCNCNAME).release: $(BUILDDIR)/$(HCNCNAME).stripped
+$(BUILDDIR)/$(HCNCNAME).release: 
+	GHCFLAGS="-O2" $(MAKE) $(BUILDDIR)/$(HCNCNAME).stripped
 	@echo Packing executable with UPX:
 	rm -f $(BUILDDIR)/$(HCNCNAME).release
 	upx $(BUILDDIR)/$(HCNCNAME).stripped -o $(BUILDDIR)/$(HCNCNAME).release
@@ -181,7 +182,8 @@ buildtrans:
 	ghc $(GHCFLAGS) --make Intel/Cnc/Spec/Main.hs -odir $(BUILDDIR) -o $(BUILDDIR)/$(HCNCNAME) -fwarn-unused-imports
 
 viz: $(BUILDDIR) $(BUILDDIR) preproc
-	ghc $(GHCFLAGS) -c Intel/Cnc/Spec/CncLexer.hs 
+#	ghc $(GHCFLAGS) -c Intel/Cnc/Spec/CncLexer.hs 
+	ghc             -odir $(BUILDDIR) -c Intel/Cnc/Spec/CncLexer.hs 
 	ghc $(GHCFLAGS) -DCNCVIZ --make Intel/Cnc/Spec/Main.hs -odir $(BUILDDIR) -o $(BUILDDIR)/$(HCNCNAME)
 
 preproc: Intel/Cnc/Spec/CncLexer.hs Intel/Cnc/Spec/CncGrammar.hs

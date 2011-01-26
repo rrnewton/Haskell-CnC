@@ -75,7 +75,7 @@ data Flag
     | VizOpt
     | UbigraphOpt
     -- Trace mode:
-    | Pack String -- | Unpack
+    | Pack String 
     | VacuumViz  | Vacuum
     | SynthSpec String    
   deriving (Show, Eq, Ord)
@@ -146,7 +146,6 @@ trace_options ::  [OptDescr Flag]
 trace_options = 
      [ 
         Option ['p']    ["pack"]   (ReqArg Pack "FILE")   "write the captured trace to FILE in compressed binary format"
---     ,  Option ['u']    ["unpack"] (NoArg Unpack) "unpack input file from binary format into ASCII on stdout"
 #ifdef CNCVIZ
      ,  Option []       ["viz"] (NoArg VacuumViz) "use trace to visualize graph execution using ubigraph"
 #endif
@@ -399,14 +398,13 @@ mainWithArgStrings argv = do
 	       Debug          -> True
 	       SynthSpec file -> error "Internal error, spec synthesis not implemented yet"
 	       Pack file   -> deb
---	       Unpack -> deb
 	       _ -> error$ "Internal error, not handled in this mode: "++ show opt
 
           ispack (Pack _)   = True
---          ispack (Unpack ) = True
           ispack _          = False
-
-	  alldone = do putStrLn$ cnctag++"Reached end of trace.  Exiting."
+	  alldone = do let len = length thetrace
+		       evaluate len 
+		       putStrLn$ cnctag++"Reached end of trace (length "++ show len++").  Exiting."
 		       exitSuccess
 
      --------------------------------------------------------------------------------
@@ -473,9 +471,6 @@ mainWithArgStrings argv = do
        [Pack file] -> do putStrLn$ cnctag++"Packing trace to file "++ show file
 			 B.writeFile file (packCncTrace thetrace)
 			 alldone 
-       -- [Unpack] -> do bstr <- B.hGetContents handle
-       -- 		      B.putStr$ (unpackCncTrace bstr)
-       -- 		      alldone
        ls -> error$ "ERROR: bad combination of pack/unpack options: "++ show ls
 
       -- In debugging mode we just print the parsed trace:
@@ -496,6 +491,8 @@ mainWithArgStrings argv = do
 	    alldone
 #endif
 
+      -- Well, with nothing else to do might as well read to the end and then exit:
+      alldone
 
    ------------------------------------------------------------------- 
    -- The most important mode of all: translate .cnc files to headers.
