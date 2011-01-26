@@ -1,6 +1,6 @@
 Name:           haskell-cnc
 
-Version:        0.1.3.107
+Version:        0.1.3.108
 -- [2010.11.10] 0.1.3.100 Bumping slightly after change to CNC_ASSUME_TR1
 -- [2010.11.10] 0.1.3.101 New scheme for extracting version from cabal file.
 -- [2010.12.06] 0.1.3.102 Bumped for recent translator plugin rearchitecture.
@@ -9,6 +9,7 @@ Version:        0.1.3.107
 -- [2010.12.06] 0.1.3.105 Bumped for done-signalling for reductions.
 -- [2011.01.25] 0.1.3.106 Bumped for signifcant work in various areas.
 -- [2011.01.25] 0.1.3.107 Bumped for new binary trace recording.
+-- [2011.01.25] 0.1.3.108 Bumped for new binary trace format.
 
 License: BSD3
 License-file:   LICENSE

@@ -168,7 +168,7 @@ Intel/Cnc/Spec/Version.hs:
 #release: $(BUILDDIR)/$(HCNCNAME).release
 # $(BUILDDIR)/$(HCNCNAME).release: 
 release:
-	GHCFLAGS="-O2" $(MAKE) $(BUILDDIR)/$(HCNCNAME).stripped
+	GHCFLAGS="-rtsopts -O2" $(MAKE) $(BUILDDIR)/$(HCNCNAME).stripped
 	@echo Packing executable with UPX:
 	rm -f $(BUILDDIR)/$(HCNCNAME).release
 	upx $(BUILDDIR)/$(HCNCNAME).stripped -o $(BUILDDIR)/$(HCNCNAME).release

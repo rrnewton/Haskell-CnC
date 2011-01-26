@@ -37,6 +37,7 @@ import Data.List
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as BL
 
+import Codec.Compression.GZip (decompress)
 import Control.Monad hiding (when)
 import Control.Exception 
 
@@ -388,8 +389,10 @@ mainWithArgStrings argv = do
 		else do putStrLn$ cnctag++"Reading trace from file "++ show(head files)
 			(openFile (head files) ReadMode)
       str <- BL.hGetContents handle
-      let is_packed = isPackedTrace str
-      when is_packed $ putStrLn$ cnctag++"Trace is in packed (binary) format."
+      let is_packed  = isPackedTrace str
+	  is_gzipped = isGZipped str
+      when is_packed  $ putStrLn$ cnctag++"Trace is in packed (binary) format."
+      when is_gzipped $ putStrLn$ cnctag++"Trace is GZipped, decompressing."
       let thetrace = if is_packed
 		     then unpackCncTrace str
 --		     else parseCncTrace$ lines$  BL.unpack str
@@ -398,7 +401,8 @@ mainWithArgStrings argv = do
 			  -- Currently the parser works in terms of a list of lines, with lines being STRICT bytestrings.
 			  -- But the extra conversion may make this pointless.  Perhaps the parser should use lazy bytestrings directly.
 			  map (B.concat . BL.toChunks) $ 
-			  BL.lines$ str
+			  BL.lines$ 
+			  (if is_gzipped then decompress str else str)
           debug = foldl fn False opts
 	  fn deb opt =  
             case opt of 

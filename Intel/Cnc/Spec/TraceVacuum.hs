@@ -14,6 +14,7 @@ module Intel.Cnc.Spec.TraceVacuum
       NameTag, CncTraceEvent (..),  
       parseCncTrace, 
       packCncTrace, unpackCncTrace, isPackedTrace, 
+      isGZipped,
       sample_trace, test_traceVacuum
     )
  where
@@ -21,20 +22,20 @@ module Intel.Cnc.Spec.TraceVacuum
 import Intel.Cnc.Spec.Util
 import Intel.Cnc.Spec.Version 
 
+import Debug.Trace
 import Data.Maybe
 import Data.Data
 import Data.Binary
-import Data.Binary.Generic
+-- import Data.Binary.Generic
 
 import qualified Data.ByteString.Lazy.Char8 as BL
+import qualified Data.ByteString.Lazy as BLW
 import qualified Data.ByteString.Char8 as B
 
 import Codec.Compression.GZip
+import Control.Monad
 
 import Text.Parsec as P
--- import Text.Parsec.Char
--- import Text.Parsec.Combinator
--- import Text.Parsec.String
 import Text.Parsec.ByteString
 
 import Test.HUnit
@@ -55,12 +56,6 @@ data CncTraceEvent =
  | EndStep   NameTag 
  | PARSEFAIL B.ByteString -- For debugging purposes record the failures.
   deriving (Show, Eq, Data, Typeable)
-
--- For now we just use a default binary encoding.  We could
--- standardize this if it was going to be read by any other tools....
-instance Binary CncTraceEvent where
-  put = putGeneric
-  get = getGeneric
 
 -- We should parse tags that we can make sense of, namely scalars and tuples.
 data CncTraceTag = 
@@ -94,9 +89,21 @@ parseCncTrace lines = loop defaultStepContext lines
 	   Just x  -> (x:rest)
 
 
-------------------------------------------------------------
+-- Test if a stream of bytes is GZip format.
+-- This uses the magic bytes at the beginning of the file: 1f8b
+isGZipped :: BL.ByteString -> Bool
+-- An alternative would be to just TRY to uncompress it and catch an exception...
+-- But that would be awful sloppy...
+isGZipped bs = 
+    -- Byte 1f = 31, and 8b = 139
+   prefix == [31,139]
+   -- I'm seeing 8b1f on hexdump... that's a bit weird.
+ where 
+  prefix = take 2 $ BLW.unpack bs
+
+--------------------------------------------------------------------------------
 -- Pack traces into a binary format:
-------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 -- Convention: Our file format is simple.  We have one line of plain
 -- ASCII for identification, and then a gzipped BLOb containing the
@@ -105,21 +112,72 @@ parseCncTrace lines = loop defaultStepContext lines
 preface = "Intel CnC binary trace file, version "
 tagline = preface ++ version ++ "\n"
 
+-- [2011.01.26] Switching this to a CUSTOM binary format rather than
+-- using a default (Data.Binary.Generic) one.
+
+-- FORMAT CHANGE LOG:
+-- ------------------
+-- Ver 0.1.3.107 -- using Data.Binary.Generic encoding
+-- Ver 0.1.3.108 -- Wrote new Data.Binary instance.
+--                  This version uses compressed format inspite of stack/space problems [2011.01.26]
+
+{-
+-- For a first cut we use[d] a default binary encoding.  We could
+-- standardize this if it was going to be read by any other tools....
+instance Binary CncTraceEvent where
+  put = putGeneric
+  get = getGeneric
+-}
+
+
+do_compress = True
 
 -- NOTE: Could strip the PARSEFAIL entries upon packing.
 --       Something to think about...
 packCncTrace :: [CncTraceEvent] -> BL.ByteString 
 packCncTrace trace =
- BL.append (BL.pack tagline)
-          (compress (encode trace))
+ BL.append (BL.pack tagline)$
+       (if do_compress then compress else id)
+       (encode trace)
 
 unpackCncTrace :: BL.ByteString -> [CncTraceEvent]
 unpackCncTrace bstr = 
    -- tail chops off the '\n' character:
-   decode$ decompress$ BL.tail rest 
+   decode$ 
+   (if do_compress then  decompress else id) $
+   BL.tail rest 
  where 
   (fst,rest) = BL.break (=='\n') bstr
 
+
+-- Actually this is not YET a fully specified binary format because it
+-- depends on the Data.Binary representation of LISTS.  We should lock
+-- this down if we want it to be read by non-haskell languages.  (Of
+-- course, the binary package itself is bound to never change this
+-- format for compatibility.)
+
+instance Binary CncTraceEvent where 
+    put x =  
+      -- This is pretty much a pile of boilerplate:
+      case x of 
+        Prescribe a b -> do putWord8 0; put a; put b 
+        PutI a b      -> do putWord8 1; put a; put b
+        GetI a b      -> do putWord8 2; put a; put b
+        PutT a b      -> do putWord8 3; put a; put b
+        StartStep nm  -> do putWord8 4; put nm
+        EndStep   nm  -> do putWord8 5; put nm
+        PARSEFAIL str -> do putWord8 6; put str
+
+    get = do tag <- getWord8 
+	     case tag of 
+	       0 -> liftM2 Prescribe get get 
+	       1 -> liftM2 PutI      get get 
+	       2 -> liftM2 GetI      get get 
+	       3 -> liftM2 PutT      get get 
+	       4 -> liftM StartStep get 
+	       5 -> liftM EndStep   get 
+	       6 -> liftM PARSEFAIL get 
+	       _ -> error$ "Unmarshalling CncTraceEvent, got bad tag byte: "++ show tag
 
 -- | Check the first bytes in the stream to tell if its a CnC trace:
 isPackedTrace :: BL.ByteString -> Bool
@@ -233,7 +291,13 @@ test_traceVacuum =
  , tC "sample trace: #noparse"$   16 ~=? length (filter (==Nothing) sample)
 
  , tC "balanced nesting"      $  Just"foo (a) (b c) bar" ~=? tryParse (balanced_nest '(' ')') "foo (a) (b c) bar) baz"		      
+
+ , tC "encode . decode = id for NameTag" $ 
+      let x = ("Hi"::Atom, BL.pack "There") in
+      x ~=? decode (encode x)
+
  , tC "unpack . pack = id " $ sample' ~=? (unpackCncTrace$ packCncTrace sample')
+
  ]
 
 sample_trace = 
