@@ -33,7 +33,9 @@ import Data.Maybe ( fromJust )
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.List
-import qualified Data.ByteString.Lazy.Char8 as B
+
+import qualified Data.ByteString.Char8 as B
+import qualified Data.ByteString.Lazy.Char8 as BL
 
 import Control.Monad hiding (when)
 import Control.Exception 
@@ -385,12 +387,18 @@ mainWithArgStrings argv = do
 			return stdin 
 		else do putStrLn$ cnctag++"Reading trace from file "++ show(head files)
 			(openFile (head files) ReadMode)
-      str <- B.hGetContents handle
+      str <- BL.hGetContents handle
       let is_packed = isPackedTrace str
       when is_packed $ putStrLn$ cnctag++"Trace is in packed (binary) format."
       let thetrace = if is_packed
 		     then unpackCncTrace str
-		     else parseCncTrace$ lines$  B.unpack str
+--		     else parseCncTrace$ lines$  BL.unpack str
+		     else parseCncTrace$ 
+			  -- TODO: We need to examine the efficiency of this:
+			  -- Currently the parser works in terms of a list of lines, with lines being STRICT bytestrings.
+			  -- But the extra conversion may make this pointless.  Perhaps the parser should use lazy bytestrings directly.
+			  map (B.concat . BL.toChunks) $ 
+			  BL.lines$ str
           debug = foldl fn False opts
 	  fn deb opt =  
             case opt of 
@@ -414,7 +422,7 @@ mainWithArgStrings argv = do
       when (False && debug) $ do
 	    let 
 	        -- Here we need to collect all get events and take statistics:
-	        fn (GetI _ (_,tag)) = map fst (reads tag :: [((Int,Int,Int),String)])
+	        fn (GetI _ (_,tag)) = map fst (reads (B.unpack tag) :: [((Int,Int,Int), String)])
 		fn _ = [] 
                 -- TEMP: TODO: GENERALIZE
                 getname (GetI _ (nm,_)) = [nm]
@@ -469,7 +477,7 @@ mainWithArgStrings argv = do
       case filter ispack opts of 
        [] -> return ()
        [Pack file] -> do putStrLn$ cnctag++"Packing trace to file "++ show file
-			 B.writeFile file (packCncTrace thetrace)
+			 BL.writeFile file (packCncTrace thetrace)
 			 alldone 
        ls -> error$ "ERROR: bad combination of pack/unpack options: "++ show ls
 

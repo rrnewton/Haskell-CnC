@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, ScopedTypeVariables, DeriveDataTypeable  #-}
+{-# LANGUAGE RecordWildCards, ScopedTypeVariables, DeriveDataTypeable, OverloadedStrings  #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 ----------------------------------------------------------------------------------------------------
 -- "Vacuum" mode is for sucking up trace output and doing useful things with it.
@@ -21,21 +21,21 @@ module Intel.Cnc.Spec.TraceVacuum
 import Intel.Cnc.Spec.Util
 import Intel.Cnc.Spec.Version 
 
-import Debug.Trace
-
 import Data.Maybe
 import Data.Data
 import Data.Binary
 import Data.Binary.Generic
 
-import qualified Data.ByteString.Lazy.Char8 as B
+import qualified Data.ByteString.Lazy.Char8 as BL
+import qualified Data.ByteString.Char8 as B
 
 import Codec.Compression.GZip
 
-import Text.Parsec
+import Text.Parsec as P
 -- import Text.Parsec.Char
 -- import Text.Parsec.Combinator
-import Text.Parsec.String
+-- import Text.Parsec.String
+import Text.Parsec.ByteString
 
 import Test.HUnit
 import StringTable.Atom
@@ -43,7 +43,8 @@ import StringTable.Atom
 --------------------------------------------------------------------------------
 
 --type NameTag = (String,String)
-type NameTag = (Atom,String)
+-- type NameTag = (Atom,String)
+type NameTag = (Atom, B.ByteString)
 
 data CncTraceEvent = 
    Prescribe Atom Atom
@@ -52,10 +53,10 @@ data CncTraceEvent =
  | PutT NameTag NameTag
  | StartStep NameTag 
  | EndStep   NameTag 
- | PARSEFAIL String -- For debugging purposes record the failures.
+ | PARSEFAIL B.ByteString -- For debugging purposes record the failures.
   deriving (Show, Eq, Data, Typeable)
 
--- For now we just use a defaault binary encoding.  We could
+-- For now we just use a default binary encoding.  We could
 -- standardize this if it was going to be read by any other tools....
 instance Binary CncTraceEvent where
   put = putGeneric
@@ -70,17 +71,20 @@ data CncTraceTag =
 --------------------------------------------------------------------------------
 -- Parsing and Encoding traces
 
-spc = oneOf " \t"
+-- spc :: ParsecT s u m Char
+spc :: Parser Char
+spc = oneOf (" \t" :: String)
 whitespc = many spc
+
+defaultStepContext :: NameTag
 defaultStepContext = (toAtom special_environment_name,"")
 
 -- | This converts the lines of a trace file into a parsed trace.
-parseCncTrace :: [String] -> [CncTraceEvent]
+parseCncTrace :: [B.ByteString] -> [CncTraceEvent]
 parseCncTrace lines = loop defaultStepContext lines
  where 
   loop enclosing [] = []
   loop enclosing (line:tl) = 
---     let parsed = tryParse (traceline enclosing) line
      let parsed = Just$ doParse (traceline enclosing) line
 	 rest = case parsed of 
 		   Just (StartStep nametag) -> loop nametag tl
@@ -104,50 +108,56 @@ tagline = preface ++ version ++ "\n"
 
 -- NOTE: Could strip the PARSEFAIL entries upon packing.
 --       Something to think about...
-packCncTrace :: [CncTraceEvent] -> B.ByteString 
+packCncTrace :: [CncTraceEvent] -> BL.ByteString 
 packCncTrace trace =
- B.append (B.pack tagline)
+ BL.append (BL.pack tagline)
           (compress (encode trace))
 
-unpackCncTrace :: B.ByteString -> [CncTraceEvent]
+unpackCncTrace :: BL.ByteString -> [CncTraceEvent]
 unpackCncTrace bstr = 
    -- tail chops off the '\n' character:
-   decode$ decompress$ B.tail rest 
+   decode$ decompress$ BL.tail rest 
  where 
-  (fst,rest) = B.break (=='\n') bstr
+  (fst,rest) = BL.break (=='\n') bstr
 
 
 -- | Check the first bytes in the stream to tell if its a CnC trace:
-isPackedTrace :: B.ByteString -> Bool
-isPackedTrace = B.isPrefixOf (B.pack preface)
+isPackedTrace :: BL.ByteString -> Bool
+isPackedTrace = BL.isPrefixOf (BL.pack preface)
   
 
 --------------------------------------------------------------------------------
 -- Helpers:
 
-doParse :: Parser CncTraceEvent -> String -> CncTraceEvent
+-- doParse :: Parser CncTraceEvent -> String -> CncTraceEvent
+doParse :: Parser CncTraceEvent -> B.ByteString -> CncTraceEvent
 doParse p input
   = case (parse p "" input) of
       Left err -> PARSEFAIL input
       Right x  -> x
 
-
+cnc_identifier :: Parser Atom
 cnc_identifier = 
    do name <- many1 (letter <|> digit <|> oneOf "_")
       return$ toAtom name
 
 traceline :: NameTag -> Parser CncTraceEvent
 traceline stepctxt = 
- let nametag open close = 
+ let nametag :: Char -> Char -> Parser NameTag
+     nametag open close = 
        do name <- cnc_identifier
           char ':'; whitespc
           -- Then we grab EVERYTHING up until the ">" that ends things
           --tag <- many1 (noneOf end)
 	  tag <- balanced_nest open close
-	  return (name,tag)
+	  return (name, tag)
 
-     ruletemplate str open close fn = 
-       try (do string (str++" "++[open]); whitespc
+     ruletemplate (str :: B.ByteString) open close fn = 
+--       try (do string (str++" "++[open]); whitespc
+       try (do 
+	       --string (str `B.append` B.pack [' ',open])
+	       string (B.unpack str ++ [' ',open])
+	       whitespc
                pr <- nametag open close
                return$ fn pr)
  in
@@ -162,18 +172,16 @@ traceline stepctxt =
        step <- cnc_identifier
        return (Prescribe tags step)
 
-
-
-
 -- This is any old text but it must be balanced in the delimeters of interest: e.g. () <> []
-balanced_nest :: Char -> Char -> Parser String
+balanced_nest :: Char -> Char -> Parser B.ByteString
 balanced_nest open close = loop [] 0
+ -- This is pretty inefficent because it goes character by character...
  where 
   loop acc n = 
        do c<-noneOf [open,close]; loop (c:acc) n
    <|> do c<-char open;           loop (c:acc) (n+1)
    <|> do c<-char close; 
-          if n==0 then return (reverse acc)
+          if n==0 then return (B.reverse$ B.pack acc)
   	   else loop (c:acc) (n-1)
 
 
@@ -186,19 +194,23 @@ balanced_nest open close = loop [] 0
 
 
 runPr prs str = print (run prs str)
-run :: Show a => Parser a -> String -> a
+run :: Show a => Parser a -> B.ByteString -> a
 run p input
-        = case (parse p "" input) of
+        = case (P.parse p "" input) of
             Left err -> error ("parse error at "++ show err)
             Right x  -> x
 
 
-tryParse :: Parser a -> String -> Maybe a
+-- tryParse :: Parser a -> String -> Maybe a
+tryParse :: Parser a -> B.ByteString -> Maybe a
 tryParse p input
-  = case (parse p "" input) of
+  = case (P.parse p "" input) of
       Left err -> Nothing
 --      Left err -> Just (PARSEFAIL input)
       Right x  -> Just x
+
+stoA :: String -> Atom
+stoA = toAtom 
 
 test_traceVacuum = 
  testSet "TraceVacuum" $ 
@@ -209,11 +221,11 @@ test_traceVacuum =
      isfail _ = False
      tC = testCase ""
  in
- [ tC "traceline1: parse one line"$ Just (StartStep (toAtom "fib_step","0"))           ~=? tP "Start step (fib_step: 0)"
- , tC "traceline2: parse one line"$ Just (PutT (toAtom special_environment_name,"") 
-					  (toAtom "tags","10")) ~=? tP "Put tag <tags: 10>"
+ [ tC "traceline1: parse one line"$ Just (StartStep (stoA "fib_step","0"))           ~=? tP "Start step (fib_step: 0)"
+ , tC "traceline2: parse one line"$ Just (PutT (stoA special_environment_name,"") 
+					  (stoA "tags","10")) ~=? tP "Put tag <tags: 10>"
  , tC "traceline3: parse one line"$ Nothing                                            ~=? tP "__Put tag <tags: 10>"
- , tC "traceline4: parse one line"$ Just (Prescribe (toAtom "control_S1") (toAtom "kj_compute"))
+ , tC "traceline4: parse one line"$ Just (Prescribe (stoA "control_S1") (stoA "kj_compute"))
                                       ~=? tP  "Prescribe control_S1 kj_compute"
 
  , tC "sample trace: #fail"   $    0 ~=? length (filter isfail sample)

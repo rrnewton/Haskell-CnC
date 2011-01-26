@@ -16,6 +16,7 @@ import qualified Data.Graph.Inductive as G
 import Data.Graph.Inductive.Query.DFS
 import Data.Maybe
 import Data.Char
+import qualified Data.ByteString.Char8 as B
 import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import qualified Data.Set as S
@@ -332,7 +333,7 @@ traceToGUI trace =
       AddV envpr : ChangeV envpr defaultEnvAttr :
       loop emptyGUIState trace
  where 
-  envpr = (toAtom special_environment_name, "")
+  envpr = (toAtom special_environment_name, B.pack "")
   loop _ [] = []
   loop state0@GS{..} (hd:tl) = 
     let -- When drawing step collections we may "pump them up" as we get more instances:
@@ -359,7 +360,7 @@ traceToGUI trace =
 	-- When drawing
 	if full_dynamic_graph
 	then loop state1 tl
-	else AddV (step,"") : loop state1 tl
+	else AddV (step, B.pack "") : loop state1 tl
 
       ------------------------------------------------------------
       StartStep pr@(nm,tg) -> 
@@ -477,7 +478,8 @@ playback state fwd =
                 case hd of 
   	         AddV pr@(atom, tag) -> 
 		  do id <- newVertex
- 		     setVAttr (VLabel$ fromAtom atom ++" "++ tag) id 
+-- 		     setVAttr (VLabel$ B.concat [fromAtom atom, B.pack " ", tag]) id 
+ 		     setVAttr (VLabel$ fromAtom atom ++ " " ++ B.unpack tag) id 
 		     return$  M.insert pr id idmap
 
   	         ChangeV pr updates -> 
@@ -514,7 +516,8 @@ playback state fwd =
 		 (error "no state atm") --(updateState state hd) 
   		 (error "no rev action") --(buildRevAction state hd : rvrs) 
 		 (tail fwd)
-   loop (M.fromList [((toAtom special_environment_name,""), envID)]) state [] fwd
+   loop (M.fromList [((toAtom special_environment_name, B.pack ""), envID)])
+	state [] fwd
 
 -- This simply needs to not conflict with the auto-assigned Ubigraph ids:
 envID = 1
