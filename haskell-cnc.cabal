@@ -36,7 +36,9 @@ source-repository head
 
 
 library
-  build-depends:  base, mtl, containers, time, random, array, ghc-prim, extensible-exceptions, HUnit, MissingH, HSH, unix
+  build-depends:  base, mtl, containers, time, random, array, ghc-prim, 
+                  extensible-exceptions, HUnit, MissingH, HSH, unix,
+                  bytestring
   -- QuickCheck -- I haven't got quickcheck working under 6.13.xx right now.
   -- Needed for the scaling.hs plotting script:
   --   HSH, gnuplot
@@ -84,11 +86,14 @@ Executable haskell-cnc-runTests
 Executable cnc
   Main-is:           Intel/Cnc/Spec/Main.hs
   Build-Depends:     base >= 3 && < 5, directory, process, prettyclass, pretty
-                     , stringtable-atom, filepath, split, graphviz
-                     , parsec >= 3.1.0
-                     , hubigraph, haxr, HTTP, network
-                     , hscurses, ansi-terminal
-                     , fgl, Graphalyze 
+                   , stringtable-atom, filepath, split, graphviz
+                   , parsec >= 3.1.0
+                   , hubigraph, haxr, HTTP, network
+                   , hscurses, ansi-terminal
+                   , fgl, Graphalyze 
+                   , zlib, binary
+-- , ghc-binary
+
   cpp-options: -DCNCVIZ
 -- interpolatedstring-qq, genericserialize, -- [2010.07.23] Removing for now
 -- happy, alex 

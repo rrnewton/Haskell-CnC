@@ -74,6 +74,12 @@ Translation:
 
  (*) Frank had a good idea to make the generated header READ ONLY.
 
+ (*) Make specs "executable" by generating a main.cpp as well as
+     header.  Include all info from spec.
+     (*) Also can look at generating Makefile and other boilerplate
+         for MIC targetting.
+ 
+
 Even more experimental / future-workish:
 
  (*) Integrate wih Parallel Advisor, adapting it so that it can
@@ -81,4 +87,12 @@ Even more experimental / future-workish:
 
 
  (*) Fix lexSpan so that it gets the whole token not just its start.
+
+
+Melanie requested:
+------------------------------------------------------------
+
+1.  A way to specify serialization/marshalling method—either bitwise
+    serializable or providing a user written serializer
+2.  A way to specify a user written hash compare
 
