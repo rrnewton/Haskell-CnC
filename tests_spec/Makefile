@@ -7,23 +7,136 @@ EXES= tagfun_checking_valid.exe tagfun_depends.exe \
       reduction_test.exe reduction_test2.exe
 
 ERRONEOUS = legacy/test001.cnc \
-            legacy/test004.cnc \
+            legacy/test005.cnc \
+            legacy/test006.cnc \
             legacy/test007.cnc \
             legacy/test008.cnc \
             legacy/test009.cnc \
             legacy/test010.cnc \
             legacy/test011.cnc \
             legacy/test013.cnc \
-            legacy/test014.cnc \
-
+            legacy/test021.cnc \
+            legacy/test026.cnc \
+            legacy/test030.cnc \
+            legacy/test034.cnc \
+            legacy/test035.cnc \
+            legacy/test036.cnc \
+            legacy/test038.cnc \
+            legacy/test039.cnc \
+            legacy/test045.cnc \
+            legacy/test047.cnc \
+            legacy/test053.cnc \
+            legacy/test054.cnc \
+            legacy/test055.cnc \
+            legacy/test056.cnc \
+            legacy/test059.cnc \
+            legacy/test060.cnc \
+            legacy/test061.cnc \
+            legacy/test062.cnc \
+            legacy/test063.cnc \
+            legacy/test064.cnc \
+            legacy/test065.cnc \
+            legacy/test066.cnc \
+            legacy/test067.cnc \
+            legacy/test068.cnc \
+            legacy/test069.cnc \
+            legacy/test070.cnc \
+            legacy/test071.cnc \
+            legacy/test072.cnc \
+            legacy/test073.cnc \
+            legacy/test074.cnc \
+            legacy/test075.cnc \
+            legacy/test076.cnc \
+            legacy/test077.cnc \
+            legacy/test078.cnc \
+            legacy/test079.cnc \
+            legacy/test080.cnc \
+            legacy/test081.cnc \
+            legacy/test082.cnc \
+            legacy/test083.cnc \
+            legacy/test084.cnc \
+            legacy/test085.cnc \
+            legacy/test086.cnc \
+            legacy/test088.cnc \
+            legacy/test089.cnc \
+            legacy/test090.cnc \
+            legacy/test091.cnc \
+            legacy/test092.cnc \
+            legacy/test093.cnc \
+            legacy/test094.cnc \
+            legacy/test095.cnc \
+            legacy/test096.cnc \
+            legacy/test097.cnc \
+            legacy/test098.cnc \
+            legacy/test099.cnc \
+            legacy/test101.cnc \
+            legacy/test102.cnc \
+            legacy/test103.cnc \
+            legacy/test104.cnc \
+            legacy/test105.cnc \
+            legacy/test106.cnc \
+            legacy/test107.cnc \
+            legacy/test108.cnc \
+            legacy/test109.cnc \
+            legacy/test110.cnc \
+            legacy/test111.cnc \
+            legacy/test112.cnc \
+            legacy/test113.cnc \
+            legacy/test114.cnc \
+            legacy/test115.cnc \
+            legacy/test116.cnc \
+            legacy/test117.cnc \
+            legacy/testencoder.cnc \
 
 WELLFORMED = legacy/test002.cnc \
              legacy/test003.cnc \
-             legacy/test005.cnc \
-             legacy/test006.cnc \
+             legacy/test004.cnc \
              legacy/test012.cnc \
+             legacy/test014.cnc \
              legacy/test015.cnc \
+             legacy/test016.cnc \
+             legacy/test017.cnc \
+             legacy/test018.cnc \
+             legacy/test019.cnc \
+             legacy/test020.cnc \
+             legacy/test022.cnc \
+             legacy/test023.cnc \
+             legacy/test024.cnc \
+             legacy/test025.cnc \
+             legacy/test027.cnc \
+             legacy/test028.cnc \
+             legacy/test029.cnc \
              legacy/test031.cnc \
+             legacy/test032.cnc \
+             legacy/test033.cnc \
+             legacy/test037.cnc \
+             legacy/test040.cnc \
+             legacy/test041.cnc \
+             legacy/test042.cnc \
+             legacy/test043.cnc \
+             legacy/test044.cnc \
+             legacy/test046.cnc \
+             legacy/test048.cnc \
+             legacy/test049.cnc \
+             legacy/test050.cnc \
+             legacy/test051.cnc \
+             legacy/test052.cnc \
+             legacy/test057.cnc \
+             legacy/test058.cnc \
+             legacy/test087.cnc \
+             legacy/testblackscholes.cnc \
+             legacy/testcholesky.cnc \
+             legacy/testcholesky_priorities.cnc \
+             legacy/testdivconq.cnc \
+             legacy/testfacedetector.cnc \
+             legacy/testfindprimes.cnc \
+             legacy/testgenIter.cnc \
+             legacy/testMatrixInvert.cnc \
+             legacy/testnq_cnc.cnc \
+             legacy/testpartstr.cnc \
+             legacy/testprodcons.cnc \
+             legacy/testredRows.cnc \
+             legacy/testsearchinsortedtree.cnc \
 
 
 ifeq (Darwin,$(shell uname))
