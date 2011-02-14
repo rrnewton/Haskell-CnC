@@ -7,8 +7,6 @@ EXES= tagfun_checking_valid.exe tagfun_depends.exe \
       reduction_test.exe reduction_test2.exe
 
 ERRONEOUS = legacy/test001.cnc \
-            legacy/test005.cnc \
-            legacy/test006.cnc \
             legacy/test007.cnc \
             legacy/test008.cnc \
             legacy/test009.cnc \
@@ -18,12 +16,7 @@ ERRONEOUS = legacy/test001.cnc \
             legacy/test021.cnc \
             legacy/test026.cnc \
             legacy/test030.cnc \
-            legacy/test034.cnc \
-            legacy/test035.cnc \
-            legacy/test036.cnc \
             legacy/test038.cnc \
-            legacy/test039.cnc \
-            legacy/test045.cnc \
             legacy/test047.cnc \
             legacy/test053.cnc \
             legacy/test054.cnc \
@@ -88,27 +81,56 @@ ERRONEOUS = legacy/test001.cnc \
             legacy/test117.cnc \
             legacy/testencoder.cnc \
 
+# These are things that used to be accepted by the old version but now are NOT.
+DISCREPANCIES = \
+            legacy/test004.cnc \
+            legacy/test014.cnc \
+            legacy/test016.cnc \
+	    legacy/test017.cnc \
+	    legacy/test018.cnc \
+	    legacy/test019.cnc \
+	    legacy/test020.cnc \
+	    legacy/test022.cnc \
+	    legacy/test023.cnc \
+	    legacy/test024.cnc \
+	    legacy/test025.cnc \
+	    legacy/test027.cnc \
+	    legacy/test028.cnc \
+	    legacy/test029.cnc \
+            legacy/test033.cnc \
+            legacy/test048.cnc \
+             legacy/test049.cnc \
+             legacy/test051.cnc \
+             legacy/test052.cnc \
+             legacy/test057.cnc \
+             legacy/test058.cnc \
+             legacy/test087.cnc \
+             legacy/testcholesky_priorities.cnc \
+             legacy/testMatrixInvert.cnc \
+             legacy/testnq_cnc.cnc \
+             legacy/testsearchinsortedtree.cnc \
+
+# Reasons:
+#   004 - prescription is no longer bidirectional.
+#   014 - duplicate declarations no longer allowed.
+#   16-29,048,49,51,52,57,58 - tag components not supported in legacy syntax
+#       I ported 87 to 87B though... it's a useful test without the tag components.
+#   33 - capitalized ENV is not a keyword.
+#   34/35/39 - so called "complicated relations" are supported now.
+#   36 -- ok this one should be at least a warning due to DUPLICATED relations
+#   45 -- rule about environment using items, more of a style guide than language def.
+#
+#  testcholesky_priorities - no support for this yet, need arbitrary property lists.
+#  testMatrixInvert - no support for tuners either.
+#  testnq_cnc.cnc -- no tag collection -> env edges!
+#  testsearchinsortedtree -- DITTO
+
 WELLFORMED = legacy/test002.cnc \
              legacy/test003.cnc \
-             legacy/test004.cnc \
              legacy/test012.cnc \
-             legacy/test014.cnc \
              legacy/test015.cnc \
-             legacy/test016.cnc \
-             legacy/test017.cnc \
-             legacy/test018.cnc \
-             legacy/test019.cnc \
-             legacy/test020.cnc \
-             legacy/test022.cnc \
-             legacy/test023.cnc \
-             legacy/test024.cnc \
-             legacy/test025.cnc \
-             legacy/test027.cnc \
-             legacy/test028.cnc \
-             legacy/test029.cnc \
              legacy/test031.cnc \
              legacy/test032.cnc \
-             legacy/test033.cnc \
              legacy/test037.cnc \
              legacy/test040.cnc \
              legacy/test041.cnc \
@@ -116,27 +138,27 @@ WELLFORMED = legacy/test002.cnc \
              legacy/test043.cnc \
              legacy/test044.cnc \
              legacy/test046.cnc \
-             legacy/test048.cnc \
-             legacy/test049.cnc \
              legacy/test050.cnc \
-             legacy/test051.cnc \
-             legacy/test052.cnc \
-             legacy/test057.cnc \
-             legacy/test058.cnc \
-             legacy/test087.cnc \
+             legacy/test087B.cnc \
              legacy/testblackscholes.cnc \
              legacy/testcholesky.cnc \
-             legacy/testcholesky_priorities.cnc \
              legacy/testdivconq.cnc \
              legacy/testfacedetector.cnc \
              legacy/testfindprimes.cnc \
              legacy/testgenIter.cnc \
-             legacy/testMatrixInvert.cnc \
-             legacy/testnq_cnc.cnc \
              legacy/testpartstr.cnc \
              legacy/testprodcons.cnc \
              legacy/testredRows.cnc \
-             legacy/testsearchinsortedtree.cnc \
+\
+             legacy/test005.cnc \
+             legacy/test006.cnc \
+             legacy/test034.cnc \
+             legacy/test035.cnc \
+             legacy/test036.cnc \
+             legacy/test039.cnc \
+             legacy/test045.cnc \
+
+# TODO: Put a warning on test036!!
 
 
 ifeq (Darwin,$(shell uname))
@@ -173,9 +195,10 @@ good: check_good
 check_good: 
 	$(MAKE) $(WELLFORMED:.cnc=.h)
 
-
-CNCTOOL="../build/cnc"
-# CNCTOOL="../cnc.sh"
+# Here we have a little "search path" for the cnc executable, which
+# may have been built in different ways or not built in binary
+# executable form at all.
+CNCTOOL=$(shell ./first_existing.sh ../build/cnc ../dist/build/cnc/cnc ../cnc.sh)
 
 #============================================================
 # Currently we give a separate rules for some tests that have

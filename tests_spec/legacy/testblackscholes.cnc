@@ -26,14 +26,14 @@
 //********************************************************************************
 
 // declarations
-<int tags>;
+<int mytags>;
 [ParameterSet* data <int>];
 [fptype* prices <int>];
 
-<tags> ::  (compute);
+<mytags> ::  (compute);
 
 // program inputs and outputs
-env -> <tags>, [data]; 
+env -> <mytags>, [data]; 
 [prices] -> env;
 
 // producer/consumer relations

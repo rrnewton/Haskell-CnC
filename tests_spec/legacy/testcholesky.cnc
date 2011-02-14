@@ -26,7 +26,8 @@
 //********************************************************************************
 
 // Declarations
-[double** Lkji <triple>: k,j,i];    // The input/result matrix
+// [double** Lkji <triple>: k,j,i];    // The input/result matrix
+[double** Lkji <triple>];    // The input/result matrix
 
 [int p <int>];              // Tile loop end value
 [int b <int>];              // Tile size 

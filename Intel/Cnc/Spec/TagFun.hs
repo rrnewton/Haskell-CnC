@@ -18,7 +18,7 @@ import Intel.Cnc.Spec.AST
 ------------------------------------------------------------
 -- Type definition.
 ------------------------------------------------------------
--- Tag expressions are distinct from Exp (in AST) and much more
+-- Tag expressions are distinct from Exp (in AST.hs) and much more
 -- restrictive.  (For example, conditionals are not allowed.)
 
 data TagExp var = 

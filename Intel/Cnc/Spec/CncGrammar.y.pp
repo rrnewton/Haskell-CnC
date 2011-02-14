@@ -10,6 +10,7 @@ import Intel.Cnc.Spec.SrcLoc
 import StringTable.Atom
 --import Data.Data
 import Text.PrettyPrint.HughesPJClass
+import Debug.Trace
 
 }
 -- (Based on example from Simon Marlow.)
@@ -253,7 +254,14 @@ Exp : var	             	{ Var (lexSpan $1) (tAL $1) }
     | int	             	{ Lit (lexSpan $1) (LitInt $ read (lexStr $1)) }
     | '(' Exp ')'               { $2 }
 
--- Including explicit productions for arithmetic just to handle precedence/associativity:
+    -- Function application:
+    | var '(' TagExps ')'       { App (combineSrcSpans (lexSpan $1) (getDecor (last $3)))
+				      (Var (lexSpan $1) (tAL $1)) $3 }
+
+    -- Tuples? *** TODO ***.
+    
+
+    -- Including explicit productions for arithmetic just to handle precedence/associativity:
     | Exp '+' Exp	        { App (combExpSpans $1 $3) (Var DD (toAtom "+")) [$1, $3] }
     | Exp '-' Exp	        { App (combExpSpans $1 $3) (Var DD (toAtom "-")) [$1, $3] }
     | Exp '*' Exp	        { App (combExpSpans $1 $3) (Var DD (toAtom "*")) [$1, $3] }

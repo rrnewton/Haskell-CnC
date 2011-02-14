@@ -2,14 +2,16 @@
 
 # WARNING: This Makefile is largely redundant with the .cabal file and will be deleted at some point.
 
-#====================================================================================================
+# It has some crufty shortcuts used by the developers.
 
+#====================================================================================================
 
 all: runtime 
 #all: runtime trans
 
-clean: cleanruntime cleantrans
-	runhaskell ./Setup.hs clean
+ifeq (,$(GHC))
+  GHC= ghc
+endif
 
 #====================================================================================================
 # FIrst, some entrypoints that help build the runtime
@@ -20,9 +22,9 @@ clean: cleanruntime cleantrans
 default: 
         # This target builds CnC as precompiled modules:
         # Pick default schedulers as well:
-	ghc --make -c -cpp                   Intel/CncUtil.hs
-	ghc --make -c -cpp -DCNC_SCHEDULER=2 Intel/CncPure.hs
-	ghc --make -c -cpp -DCNC_SCHEDULER=5 Intel/Cnc.hs
+	$(GHC) --make -c -cpp                   Intel/CncUtil.hs
+	$(GHC) --make -c -cpp -DCNC_SCHEDULER=2 Intel/CncPure.hs
+	$(GHC) --make -c -cpp -DCNC_SCHEDULER=5 Intel/Cnc.hs
 
 runtime:
 	runhaskell ./Setup.hs configure
@@ -80,12 +82,6 @@ doc:
 	ls Intel/*.hs | xargs -i HsColour -html {} -ohtml_doc/url/{}
 	haddock  --source-base=url/ --source-module=url/%F -o html_doc -html --optghc -cpp Intel/Cnc.hs Intel/CncPure.hs
 
-
-cleanruntime:
-	rm -f Intel/*.o Intel/*.hi Intel/*~ 
-	rm -f *.aux little*.log 
-	(cd examples; $(MAKE) clean)
-
 distclean: clean
 	rm -rf distro_20*
 # DO NOT DELETE: Beginning of Haskell dependencies
@@ -139,7 +135,9 @@ HSOURCE=SrcLoc.hs Main.hs GatherGraph.hs AST.hs Codegen/CppOld.hs Codegen/Haskel
         CncGraph.hs CncViz.hs TraceVacuum.hs Curses.hs Util.hs \
         Passes/ReadHarch.hs Passes/ReadCnC.hs Passes/TypeDefs.hs
 
-BUILDDIR= ./build/
+ifeq (,$(BUILDDIR))
+  BUILDDIR= ./build/
+endif
 #BUILDDIR= ./
 HCNCNAME=cnc
 
@@ -154,6 +152,9 @@ install:
 	$(MAKE) Intel/Cnc/Spec/Version.hs release
 	if [ -e ../../distro/ ]; then mkdir -p ../../distro/bin/$(CNC_ARCH_PLATFORM)/; fi
 	if [ -e ../../distro/ ]; then cp $(BUILDDIR)/$(HCNCNAME).release ../../distro/bin/$(CNC_ARCH_PLATFORM)/cnc; fi
+
+trans_inplace:
+	GHCFLAGS="$(GHCFLAGS) -c" BUILDDIR=./ $(MAKE) ./$(HCNCNAME)
 
 trans: 
 	@echo 
@@ -179,12 +180,12 @@ $(BUILDDIR)/$(HCNCNAME).stripped: viz
 
 $(BUILDDIR)/$(HCNCNAME): $(BUILDDIR) preproc buildtrans
 buildtrans: 
-	ghc $(GHCFLAGS) --make Intel/Cnc/Spec/Main.hs -odir $(BUILDDIR) -o $(BUILDDIR)/$(HCNCNAME) -fwarn-unused-imports
+	$(GHC) $(GHCFLAGS) --make Intel/Cnc/Spec/Main.hs -odir $(BUILDDIR) -o $(BUILDDIR)/$(HCNCNAME) -fwarn-unused-imports
 
 viz: $(BUILDDIR) $(BUILDDIR) preproc
-#	ghc $(GHCFLAGS) -c Intel/Cnc/Spec/CncLexer.hs 
-	ghc             -odir $(BUILDDIR) -c Intel/Cnc/Spec/CncLexer.hs 
-	ghc $(GHCFLAGS) -DCNCVIZ --make Intel/Cnc/Spec/Main.hs -odir $(BUILDDIR) -o $(BUILDDIR)/$(HCNCNAME)
+#	$(GHC) $(GHCFLAGS) -c Intel/Cnc/Spec/CncLexer.hs 
+	$(GHC)             -odir $(BUILDDIR) -c Intel/Cnc/Spec/CncLexer.hs 
+	$(GHC) $(GHCFLAGS) -DCNCVIZ --make Intel/Cnc/Spec/Main.hs -odir $(BUILDDIR) -o $(BUILDDIR)/$(HCNCNAME)
 
 preproc: Intel/Cnc/Spec/CncLexer.hs Intel/Cnc/Spec/CncGrammar.hs
 
@@ -204,13 +205,25 @@ wctrans:
 	(cd Intel/Cnc/Spec/; ln -f -s CncGrammar.y.pp CncGrammar.temp.hs)
 	(cd Intel/Cnc/Spec/; cloc-1.08.pl --by-file CncLexer.temp.hs CncGrammar.temp.hs $(HSOURCE))
 
+#====================================================================================================
+
+clean: cleanruntime cleantrans
+	runhaskell ./Setup.hs clean
+
+cleanruntime:
+	rm -f ./Intel/*.o ./Intel/*.hi Intel/*~ 
+	rm -f ./Intel/Cnc/*.o Intel/Cnc/*.hi 
+	rm -f $(BUILDDIR)/Intel/*.o      $(BUILDDIR)/Intel/*.hi 
+	rm -f $(BUILDDIR)/Intel/Cnc/*.o  $(BUILDDIR)/Intel/Cnc/*.hi 
+	rm -f *.aux little*.log 
+	(cd examples; $(MAKE) clean)
+
 cleantrans:
 	rm -rf $(BUILDDIR)/$(HCNCNAME)  $(BUILDDIR)/$(HCNCNAME).* 
-	(cd Intel/Cnc/Spec/;         rm -f CncGrammar.hs CncLexer.hs *.hi)
-	(cd Intel/Cnc/Spec/Codegen;  rm -f  *.hi)
-	(cd $(BUILDDIR)/Intel/Cnc/Spec/;        rm -f *.o )
-	(cd $(BUILDDIR)/Intel/Cnc/Spec/Codegen; rm -f *.o )
-
+	(cd $(BUILDDIR)/Intel/Cnc/Spec;  find -name "*.o" | xargs -i rm {} )
+	(cd $(BUILDDIR)/Intel/Cnc/Spec;  find -name "*.hi" | xargs -i rm {} )
+	(cd ./Intel/Cnc/Spec;  find -name "*.o" | xargs -i rm {} )
+	(cd ./Intel/Cnc/Spec;  find -name "*.hi" | xargs -i rm {} )
 
 
 #====================================================================================================

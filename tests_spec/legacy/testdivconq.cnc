@@ -41,14 +41,17 @@ env -> [divideItem: rootTag], <divideTag: rootTag>;
 
 // Step Executions
 [divideItem: tag] -> (divide: tag);
-(divide: tag)    -> [divideItem: leftChild(tag)], 
-                    [divideItem: rightChild(tag)], 
-                    <divideTag: leftChild(tag)>, 
-                    <divideTag: rightChild(tag)>,
-                    [conquerItem: tag], 
-                    <conquerTag: parent(tag)>; 
-[conquerItem: leftChild(tag)], [conquerItem: rightChild(tag)] -> (conquer: tag);
-(conquer: tag) -> [conquerItem: tag], <conquerTag: parent(tag)>; 
+
+// (divide: tag)    -> [divideItem: leftChild(tag)], 
+//                     [divideItem: rightChild(tag)], 
+//                     <divideTag: leftChild(tag)>, 
+//                     <divideTag: rightChild(tag)>,
+//                     [conquerItem: tag], 
+//                     <conquerTag: parent(tag)>; 
+// [conquerItem: leftChild(tag)], [conquerItem: rightChild(tag)] -> (conquer: tag);
+
+// (conquer: tag) -> [conquerItem: tag], <conquerTag: parent(tag)>; 
+(conquer: tag) -> [conquerItem: foo(tag)], <conquerTag: tag>; 
 
 // Return to the caller
 [conquerItem: rootTag] -> env;

@@ -27,9 +27,9 @@ You can also rerun the primes executable directly after that
 
 
 
-------------------------------------------------------------
+--------------------------------------------------------------------------------
 Installing Haskell CnC 
-------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 You need a working installation of "ghc" and "cabal".  The easiest way
 to accomplish this is with the Haskell Platform.  With those
@@ -40,11 +40,9 @@ the web with:
 
 Building from source, including installing all dependencies:
 
-  darcs clone http://code.haskell.org/haskell-cnc/
-OR (backup mirror)
-  darcs clone http://people.csail.mit.edu/newton/haskell-cnc/
+  git clone git://github.com/rrnewton/Haskell-CnC.git
 
-  cd haskell-cnc
+  cd Haskell-CnC
   cabal update
   cabal install
   
@@ -62,10 +60,26 @@ Otherwise make sure that ~/.cabal/bin/ is in your path.
   cabal install happy
   cabal install 
 
+          ------------------------------------
+          A GUIDE TO CABAL DEPENDENCY PROBLEMS
+          ------------------------------------
 
-------------------------------------------------------------a
+Because the Haskell CnC package exists in an ecosystem of
+ever-changing packages and compiler versions (cabal), and itself has
+many dependencies.  Often these will get broken.  However, the
+intrepid hacker can usually work around most problems.  Here, I will
+try to make an account of the hacks that are needed to overcome
+obstacles.
+
+
+  [2011.02.14] DRBG dependency broke on hackage due to tagged-0.2
+               Fixed now.
+  
+
+
+--------------------------------------------------------------------------------
 Running Haskell CnC, Method (1): Normal method.
-------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 CnC for Haskell can be used as a regular Haskell module.  
 Look at "hello_world.hs" in the examples directory.

@@ -26,10 +26,11 @@
 //********************************************************************************
 
 // Declarations
-[double** Lkji: int, int, int];        // The input/result matrix
+// [double** Lkji: int, int, int];        // The input/result matrix
+[double** Lkji <triple>];        // The input/result matrix
 
-[int p];             // Tile loop end value
-[int b];			 // Tile size 
+[int p <foo>];             // Tile loop end value
+[int b <bar>];			 // Tile size 
 
 // Tags
 <singleton>;		

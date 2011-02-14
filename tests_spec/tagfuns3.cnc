@@ -24,3 +24,5 @@ items<dense (int,int), Foo> I;
 steps                 S;
 
 T prescribes S; 
+
+S(i) -> I[ fn(i,i) ];

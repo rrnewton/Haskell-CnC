@@ -29,8 +29,8 @@ Cabal-Version: >=1.6
 build-type: Simple
 
 source-repository head
-  type:     darcs
-  location: http://code.haskell.org/haskell-cnc/
+  type:     git
+  location: git://github.com/rrnewton/Haskell-CnC.git
 
 --Data-Files: ntimes ntimes_minmedmax README.txt haskell_cnc.h Makefile install_environment_vars.sh 
 
