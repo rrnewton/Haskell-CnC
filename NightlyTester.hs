@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, ScopedTypeVariables #-}
+{-# LANGUAGE RecordWildCards, ScopedTypeVariables, DeriveDataTypeable #-}
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
 module NightlyTester 
@@ -6,7 +6,7 @@ module NightlyTester
    NightlyConfig(..),
    mkDefaultConfig, runNightlyTest,
    section, newline,
-   mrun, mprint, publish, 
+   mrun, mprint, publish,  group,
 
    reportMachineInfo, gitReportHead
  )
@@ -22,10 +22,12 @@ import System.Locale
 import System.FilePath
 import System.Info
 import Data.Time
-import Data.Maybe
+-- import Data.Maybe
 import Control.Monad
 import Control.Concurrent
+import Control.Exception
 import Data.IORef
+import Data.Typeable
 import System.IO.Unsafe(unsafePerformIO)
 import GHC.IO.Handle
 import HSH
@@ -59,21 +61,64 @@ mkDefaultConfig reponame emails =
 passed     = unsafePerformIO$ newIORef True
 currentCfg = unsafePerformIO$ newIORef (error "currentCfg uninitialized!!")
 
+failureLog = unsafePerformIO$ newIORef []
+
+sectionLog :: IORef [(String,[String])]
+sectionLog = unsafePerformIO$ newIORef []
+inGroup    = unsafePerformIO$ newIORef False
+currentSec = unsafePerformIO$ newIORef ""
+
+rootDir    = unsafePerformIO$ newIORef (error "rootDir uninitialized!")
+
+
+padR n str = 
+  let len = length str in
+  if len < n
+  then str ++ (take (n - len) (repeat ' ')) 
+  else str
+
+padL n str = 
+  let len = length str in
+  if len < n
+  then (take (n - len) (repeat ' ')) ++ str
+  else str
+
+
 publish = do 
   NC{..} <- readIORef currentCfg
   p      <- readIORef passed
   let victory = if p then "PASSED" else "FAILED"
       rev     = maybe "" id revID
-                -- case revID of 
-		--   Nothing -> ""
-		--   Just x  -> x
+
+  newline
+  mprint$ "SUMMARY:"
+--  mprint$ "________________________________________________________________________________"
+  mprint$ "+------------------------------------------------------------------------------+"
+  log <- readIORef sectionLog
+  forM_ (reverse log) $ \ pr -> 
+    case pr of 
+     ("",[])     -> return ()
+     (sec,[])    -> do mprint$ (padR 65 $ "| "++sec++ ": ") ++ (padL 13 "passed") ++ " |"
+     (sec,[_])   -> do mprint$ (padR 65 $ "| "++sec++ ": ") ++ (padL 13$ "1 failure") ++ " |"
+     (sec,fails) -> do mprint$ (padR 65 $ "| "++sec++ ": ") ++ (padL 13$ show (length fails) ++" failure(s)") ++ " |"
+  mprint$ "|______________________________________________________________________________|"
+--  mprint$ "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+  newline
+  newline
+
   mprint$ "Done with all regression testing ("++ victory ++").  Next publishing results."
+
+  b <- doesDirectoryExist publishDir
+  when (not b) $ do
+    mprint$ "Publishing destination "++show publishDir++" does not exist, attempting to create..."
+    mrun$ "mkdir -p "++show publishDir
 
   utc      <- getCurrentTime
   timezone <- getCurrentTimeZone
   let local = utcToLocalTime timezone utc
       tstr = formatTime defaultTimeLocale "%Y_%m_%d_%H:%M" local
       finaldest = publishDir </> tstr ++"_"++rev++"_"++ victory ++ ".log"
+ 
 
   putStrLn$ chatterTag++" Copying "++ logFile ++"  "++ finaldest
   copyFile logFile finaldest
@@ -104,8 +149,13 @@ mprintWTag tag str =
      withFile logFile AppendMode $ \ h -> do 
        hPutStrLn h tagged
 
-newline = mprintWTag "" ""
 
+-- Could use ContT monad here... but this is quick and dirty.
+data AbortGroup = AbortGroup
+  deriving (Show, Typeable)
+instance Exception AbortGroup
+
+newline = mprintWTag "" ""
   
 mrun cmd = 
   do 
@@ -124,19 +174,24 @@ mrun cmd =
        Just code <- getProcessExitCode phand
        case code of 
          ExitSuccess   -> return ()
-	 ExitFailure n -> do writeIORef passed False
+	 ExitFailure n -> do 
 			     hClose logh
 			     mprint$ "ERROR: subprocess exited with code: "++show n
-			     exitWith (ExitFailure n)
+			     writeIORef passed False
+			     modifyIORef failureLog (cmd:)
+			     ing <- readIORef inGroup
+			     when (ing) (throw AbortGroup)
 
 runNightlyTest cfg@NC{..} action = 
   do 
      writeIORef currentCfg cfg
+     curdir <- getCurrentDirectory
+     writeIORef rootDir curdir
 
      -- Initialization:
      b <- doesFileExist logFile
      when b $ do 
-       putStrLn$ chatterTag++"Logfile already exists, deleting."
+       putStrLn$ chatterTag++"Logfile "++ logFile ++" already exists, deleting."
        removeFile logFile
        putStrLn$ chatterTag++"Deleted"
 
@@ -144,15 +199,49 @@ runNightlyTest cfg@NC{..} action =
      mprint$ "Reporting results to email addresses: "++ show emails
 
      action
+     endSection -- Cap the final section.
      publish
 
 -- TODO: This should log things per-section to report a SUMMARY
 section title = 
- do newline
+ do endSection -- End the previous section.
+    writeIORef currentSec title
+    writeIORef failureLog []
+    -- Every section starts out in the root directory.
+    returnToRootDir
+    newline
     newline 
     mprint "============================================================"
     mprint ("  "++title)
     mprint "============================================================"
+
+endSection = 
+ do prev  <- readIORef currentSec
+    fails <- readIORef failureLog
+    modifyIORef sectionLog ((prev,fails):)
+
+returnToRootDir = 
+ do root <- readIORef rootDir
+    setCurrentDirectory root
+
+-- A series of commands that must be executed together, if one fails,
+-- the group must be aborted.
+group :: IO () -> IO ()
+group action = do
+ -- This currently catches ANY exception:
+  writeIORef inGroup True
+  let fail e = 
+       do mprint$ "Group of commands failed with exception:\n  "++show (e::SomeException)
+          writeIORef passed False
+	  mprint$ "Continuing after failed group..."
+	  returnToRootDir
+
+  -- Catch AbortGroup specifically and other exceptions generally:
+  handle (\e -> do fail (toException (e::SomeException))
+	           modifyIORef failureLog ("HaskellException":)) $ 
+    handle (\ AbortGroup -> fail (toException AbortGroup))
+	   action
+  writeIORef inGroup False
 
 
 --------------------------------------------------------------------------------
@@ -174,6 +263,7 @@ reportMachineInfo = do
   mprint "  Machine information:"
   mprint "============================================================"
   mrun "hostname"
+  mrun "date"
   when (os == "linux") $ do
     mrun "cat /etc/issue"
     mrun "cat /proc/cpuinfo | head -n 50"
