@@ -1,5 +1,9 @@
 {-# LANGUAGE RecordWildCards #-}
 
+{-| 
+  A Curses-based user interface. 
+ -}
+
 module Intel.Cnc.Spec.Curses where
 
 --import System.IO

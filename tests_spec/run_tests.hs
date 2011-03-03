@@ -85,11 +85,15 @@ test_cases numthreads tests =
 
 each_test numthreads (name, project) = 
   testCase "" ("Running, " ++ numthreads ++" thread(s): "++ name ) $ test $
-     do out <- run$ setenv [("CNC_NUM_THREADS", numthreads)] $
- 	            ("./"++ name ++".exe") -|- tee [name++".out"]
+     do 
+        -- Gather the stdout output from the test run:
+        -- (TODO NOTE: Any good way to capture stderr here?)
+        output <- run$ setenv [("CNC_NUM_THREADS", numthreads)] $
+ 	               ("./"++ name ++".exe") -|- tee [name++".out"]
 	expected <- readFile$ name ++ ".cmpr"
 
-        let s1 = S.fromList $ map project $ lines out
+        -- Convert the outputs to sets and do unordered comparison:
+        let s1 = S.fromList $ map project $ lines output
 	    s2 = S.fromList $ map project $ lines expected 
 	    set_eq = s1 == s2
 
@@ -98,7 +102,8 @@ each_test numthreads (name, project) =
 	      d2 = S.difference s2 s1
 
           putStrLn$ " FAIL: "
-	  putStrLn$ "   Output string length "++ show (length (out::String)) ++", expected length " ++ show (length expected)
+	  putStrLn$ "   Output string length "++ show (length (output::String)) 
+		    ++", expected length " ++ show (length expected)
 	  -- putStrLn$ "   Output/expected equal? "++ show (out == expected)
 	  -- putStrLn$ "   Output/expected lines set-equal? "++ show set_eq
 
@@ -178,6 +183,6 @@ trans file =
      putStrLn$ "\nTranslating .cnc file: "++ file
      putStrLn$ "================================================================================"
      let cmd = cnc ++ " trans " ++ dubquote file
-     putStrLn$ "Running command: " ++ cmd
+     putStrLn$ "/Running command: " ++ cmd
      runIO$ cmd
 

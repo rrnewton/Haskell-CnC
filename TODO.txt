@@ -35,7 +35,7 @@ Things to work on:
 Tag functions:
 
  (*) Generate tag-function-correctess-enforcing code for all gets and puts. 
-     (Generalize this functionality and put it in a plugin.)
+     [partially done] NEXT: Generalize this functionality and put it in a plugin.
 
 Correctness checking: 
 

@@ -207,7 +207,7 @@ wctrans:
 
 #====================================================================================================
 
-clean: cleanruntime cleantrans
+clean: cleanruntime cleantrans cleantests
 	runhaskell ./Setup.hs clean
 
 cleanruntime:
@@ -224,6 +224,9 @@ cleantrans:
 	(cd $(BUILDDIR)/Intel/Cnc/Spec;  find -name "*.hi" | xargs -i rm {} )
 	(cd ./Intel/Cnc/Spec;  find -name "*.o" | xargs -i rm {} )
 	(cd ./Intel/Cnc/Spec;  find -name "*.hi" | xargs -i rm {} )
+
+cleantests:
+	(cd tests_spec; $(MAKE) clean)
 
 
 #====================================================================================================

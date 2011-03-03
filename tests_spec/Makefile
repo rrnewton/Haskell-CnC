@@ -1,10 +1,20 @@
 
-FLAGS= -I$(CNC_INSTALL_DIR)/include -L$(CNC_INSTALL_DIR)/lib/$(CNC_ARCH_PLATFORM) -ltbbmalloc -ltbb -lcnc 
+# Use "make" and "make test"
 
+FLAGS= -I$(CNC_INSTALL_DIR)/include -L$(CNC_INSTALL_DIR)/lib/$(CNC_ARCH_PLATFORM) -I. \
+       -ltbbmalloc -ltbb -lcnc 
 
-EXES= tagfun_checking_valid.exe tagfun_depends.exe \
-      simple_cycle.exe bigger_cycle.exe two_cycles.exe \
-      reduction_test.exe reduction_test2.exe
+CC=g++
+
+# These main tests are the ones for which we have full (.cpp) programs
+# as well as just specs to translate.
+MAINTESTS= tagfun_checking_valid.cnc tagfun_depends.cnc \
+           simple_cycle.cnc bigger_cycle.cnc two_cycles.cnc \
+           reduction_test.cnc reduction_test2.cnc
+
+MAINEXES= $(MAINTESTS:.cnc=.exe)
+
+OTHERTESTS= cholesky.cnc mandel.cnc eigensolver.cnc
 
 ERRONEOUS = legacy/test001.cnc \
             legacy/test007.cnc \
@@ -165,7 +175,8 @@ ifeq (Darwin,$(shell uname))
   FLAGS+= -m32 
 endif
 
-all: $(EXES)
+all: mainexes
+mainexes: $(MAINEXES)
 
 test: run
 run:
@@ -181,15 +192,20 @@ run:
 	@$(MAKE) check_bad
 	@echo
 	@echo 
-	@$(MAKE) all
-	@echo
 	@echo "Running full system tests (code and spec):" 
 	@echo "================================================================================"
+	@$(MAKE) maintests
+
+maintests:
+	@$(MAKE) mainexes
+	@echo
 	runhaskell ./run_tests.hs
 
 bad: check_bad
 check_bad:
 	./run_erroneous.sh $(ERRONEOUS:.cnc=.h)
+	@echo 
+	@echo "All tests that should fail did fail."
 
 good: check_good
 check_good: 
@@ -207,6 +223,9 @@ CNCTOOL=$(shell ./first_existing.sh ../build/cnc ../dist/build/cnc/cnc ../cnc.sh
 tagfun_checking_valid.h: tagfun_checking_valid.cnc  
 	$(CNCTOOL) trans --autodonedbg --debug $<
 
+tagfun_checking_invalid.exe: tagfun_checking_invalid.cpp tagfun_checking_valid.h
+	time $(CC) $(FLAGS) $< -o $@ 
+
 tagfun_depends.h: tagfun_depends.cnc
 	$(CNCTOOL) trans --autodonedbg --depends $<
 
@@ -217,11 +236,14 @@ tagfun_depends.h: tagfun_depends.cnc
 #============================================================
 
 %.exe : %.cpp %.h
-	time g++ $(FLAGS) $< -o $@ 
+	time $(CC) $(FLAGS) $< -o $@ 
 	@echo
 	@echo
 
 clean:
-	rm -f *.o *.exe tagfun_checking_valid.h tagfun_depends.h simple_cycle.h bigger_cycle.h
-	rm -f $(ERRONEOUS:.cnc=.h)  $(WELLFORMED:.cnc=.h)
+	rm -f *.o *.exe run_tests
+	rm -f $(MAINTESTS:.cnc=.h) $(OTHERTESTS:.cnc=.h) 
+#tagfun_checking_valid.h tagfun_depends.h simple_cycle.h bigger_cycle.h
+	rm -f $(ERRONEOUS:.cnc=.h)  $(WELLFORMED:.cnc=.h)o $(DISCREPANCIES:.cnc=.h)
+	rm -f *.ERR legacy/*.ERR
 
