@@ -318,8 +318,10 @@ mainWithArgStrings argv = do
 
   when (Version `elem` common_opts) $  do printHeader; exitSuccess
   when (SelfTest `elem` common_opts) $ 
-    do cncRunAllTests
-       exitSuccess
+    do (Counts{errors,failures},_) <- cncRunAllTests
+       if errors+failures == 0 
+        then exitSuccess
+	else exitWith (ExitFailure (errors+failures))
 
   when (null argv) $ defaultErr ""$ "First argument to "++hcnc_name++" must specify a mode!\n"
   
@@ -663,6 +665,7 @@ all_unit_tests =
  , tests_gathergraph
  ]
 
+cncRunAllTests :: IO (Counts, ())
 cncRunAllTests = 
  --    runTestText (putTextToHandle stdout True) all_unit_tests
     runTestText (PutText myPut ()) all_unit_tests

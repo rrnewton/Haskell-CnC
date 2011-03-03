@@ -1,5 +1,9 @@
 #!/usr/bin/env runhaskell 
 
+-- A testing script that drives the execution of (spec-based) CnC
+-- programs and compares their output to what's expected (using
+-- various means of sorting and preprocessing the output).
+
 import Data.List
 import Control.Monad
 import HSH

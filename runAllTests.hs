@@ -1,4 +1,6 @@
 
+-- Run all tests for the Haskell CnC Runtime System.
+
 import System.Directory
 import qualified Intel.Cnc
 import qualified Intel.CncPure

@@ -159,7 +159,7 @@ trans_inplace:
 trans: 
 	@echo 
 	@echo ================================================================================
-	@echo   Building Translator.
+	@echo   Building Spec Translator/Compiler.
 	@echo ================================================================================
 	$(MAKE) $(BUILDDIR)/$(HCNCNAME)
 
