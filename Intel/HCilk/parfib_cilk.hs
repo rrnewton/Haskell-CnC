@@ -88,6 +88,8 @@ Why don't I get a count of "sparks converted"?
      user    0m0.220s
      sys     0m0.050s
 
+  [The above must have been on wasp, a 4 core nehalem desktop.]
+
 But it still takes 14.5 seconds for fib(40)... and looks like it's
 using about 200% cpu.  So it's not in the ballpark of the native
 parfib (6.6s for fib(42)), understandably.
@@ -98,6 +100,7 @@ Trying with unsafeDupable:
 ----------------------------------------
 Well... that's interesting... on fib(42) it takes 16.5 seconds and 81% productivity.
 That's 4X better than the non-dupable version.
+
 
 -}
 

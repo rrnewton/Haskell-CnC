@@ -440,7 +440,7 @@ cncFor :: Int -> Int -> (Int -> StepCode ()) -> StepCode ()
 -- 
 -- It may be nice under some schedulers to use forkOnIO to explicitly
 -- disseminate the ranges to processors.  This alas wouldn't work well
--- with nested cncFor loops.  But if we disencourage those and
+-- with nested cncFor loops.  But if we discourage those and
 -- explicitly provide cncFor2D etc...
 -- 
 cncFor start end body = 
