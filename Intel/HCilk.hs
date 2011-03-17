@@ -5,7 +5,7 @@ module Intel.HCilk
       HCilk, Future 
     , runCilk
     , spawn, spawnDupable
-    , sync
+    , sync, get
     )
 where 
 

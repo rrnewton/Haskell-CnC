@@ -3,23 +3,56 @@ import Data.Int
 import System.Environment
 import GHC.Conc
 
---import Intel.HCilk.HCilk_Sparks
+import Intel.HCilk.HCilk_Sparks
 --import Intel.HCilk.HCilk_Threads
-import Intel.HCilk
+-- import Intel.HCilk 
 
 ----------------------------------------------------------------------------------------------------
-parfib :: Int64 -> HCilk Int64
-parfib n | n < 2 = return 1 
-parfib n = 
+type FibType = Int64
+--type FibType = Int
+
+----------------------------------------------------------------------------------------------------
+parfib0 :: FibType -> HCilk FibType
+parfib0 n | n < 2 = return 1 
+parfib0 n = 
   do --lift$ putStrLn ("parfib " ++ show n)
-     xf <- spawn$ parfib (n-1)
-     y  <- parfib (n-2)  
-     x  <- sync xf
-     return (x+y)
+     xf <- spawn$ parfib0 (n-1)
+     y  <- parfib0 (n-2)  
+     return (get xf + y)
+--     x  <- get xf
+--     return (get x + y)
+
+parfib1 :: FibType -> HCilk FibType
+parfib1 n | n < 2 = return 1 
+parfib1 n = 
+  do --lift$ putStrLn ("parfib " ++ show n)
+     xf <- spawn$ parfib1 (n-1)
+     y  <- parfib1 (n-2)  
+     syncAll
+     return (get xf + y)
+
+
+parfib2 :: FibType -> HCilk FibType
+parfib2 n | n < 2 = return 1 
+parfib2 n = 
+  do --lift$ putStrLn ("parfib " ++ show n)
+     xf <- spawnDupable$ parfib2 (n-1)
+     y  <- parfib2 (n-2)  
+--     syncAll
+     return (get xf + y)
 
 
 main = do [n] <- getArgs
-	  x <- runCilk$ parfib (read n)
+
+          -- putStrLn "Running parfib without sync:"
+	  -- x <- runCilk$ parfib0 (read n)
+
+          -- putStrLn "Running parfib with sync:"
+          -- x <- runCilk$ parfib1 (read n)
+
+          putStrLn "Running parfib without sync, with spawnDupable:"
+          x <- runCilk$ parfib2 (read n)
+
 	  print x
 
 
@@ -101,6 +134,95 @@ Trying with unsafeDupable:
 Well... that's interesting... on fib(42) it takes 16.5 seconds and 81% productivity.
 That's 4X better than the non-dupable version.
 
-
 -}
+
+
+
+--------------------------------------------------------------------------------
+-- Running again after changing sync/get and with GHC 7.0.1
+--------------------------------------------------------------------------------
+{- 
+  First, trying to reproduce the above... 
+  On wasp it's using 400% cpu and negligable memory... 31% productivity and taking a long time.
+
+  I'm using GHC 7.0.1.  I also changed the former "get" into a "sync" and made it non-monadic.
+
+
+ wasp, real/user, WITHOUT syncAll, nonmonadic get, int64 type:
+ -------------------------------------------------  
+
+  1 thread:  fib(40)  28.629s 28.420s 94%   productivity, 54.9Gb allocated 
+  2 thread:  fib(40)  14.992s 29.640s 48.3% productivity, 54.9Gb allocated 
+  4 threads: fib(40)  7.922s  31.300s 24%   productivity, 54gb allocated
+
+  4 threads: fib(42)  19.0s 15.6s  
+
+
+ wasp, real/user, WITH syncAll, nonmonadic get, Int64 type:
+ -------------------------------------------------  
+
+  1 thread:  fib(40)  31.784s 31.530s 93.8% productivity 59GB
+  2 thread:  fib(40)  16.484s 32.570s 
+  4 threads: fib(40)  9.357s m36.820s 24%   productivity 59GB
+
+     Running parfib with sync:
+     165580141
+       59,001,266,456 bytes allocated in the heap
+	  123,249,872 bytes copied during GC
+	      202,256 bytes maximum residency (20 sample(s))
+	      322,680 bytes maximum slop
+		    4 MB total memory in use (0 MB lost due to fragmentation)
+
+       Generation 0: 31034 collections, 31033 parallel, 27.07s,  1.07s elapsed
+       Generation 1:    20 collections,    20 parallel,  0.02s,  0.00s elapsed
+
+       Parallel GC work balance: 3.42 (15219256 / 4452808, ideal 4)
+
+			     MUT time (elapsed)       GC time  (elapsed)
+       Task  0 (worker) :   23.62s    (  8.27s)      13.20s    (  0.54s)
+       Task  1 (worker) :   36.82s    (  8.28s)       0.00s    (  0.00s)
+       Task  2 (bound)  :   32.32s    (  8.28s)       4.50s    (  0.17s)
+       Task  3 (worker) :   31.91s    (  8.28s)       4.91s    (  0.20s)
+       Task  4 (worker) :   36.82s    (  8.28s)       0.00s    (  0.00s)
+       Task  5 (worker) :   32.34s    (  8.28s)       4.48s    (  0.17s)
+
+       SPARKS: 165580140 (373 converted, 165438162 pruned)
+
+       INIT  time    0.00s  (  0.00s elapsed)
+       MUT   time    9.73s  (  8.28s elapsed)
+       GC    time   27.09s  (  1.08s elapsed)
+       EXIT  time    0.00s  (  0.00s elapsed)
+       Total time   36.82s  (  9.35s elapsed)
+
+       %GC time      73.6%  (11.5% elapsed)
+
+       Alloc rate    6,063,850,612 bytes per MUT second
+
+       Productivity  26.4% of total user, 104.0% of total elapsed
+
+     gc_alloc_block_sync: 25429
+     whitehole_spin: 0
+     gen[0].sync_large_objects: 89
+     gen[1].sync_large_objects: 495
+
+
+ wasp, real/user, without syncAll, with spawnDUPABLE, Int64 type:
+ ----------------------------------------------------------------
+
+  1 thread:  fib(40)  17.182s 17.060s
+  2 thread:  fib(40)  9.623s  19.040s
+  4 threads: fib(40)  5.216s  20.520s
+
+SMT 8 threads: fib(40) 4.534s 33.370s
+
+ NOTES: -qm helped a tiny bit... -qa didn't
+
+  4 threads: fib(42)  12.8s 50.8s
+
+And with Int type instead of Int64:
+
+  4 threads: fib(42)  12.9s 51.2
+
+
+ -}
 

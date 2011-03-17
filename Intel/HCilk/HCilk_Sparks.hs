@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 
 --------------------------------------------------------------------------------
 -- Cilk interface in Haskell.
@@ -22,7 +23,7 @@ module Intel.HCilk.HCilk_Sparks
       HCilk, Future 
     , runCilk
     , spawn, spawnDupable
-    , sync
+    , get, syncAll
     )
 where
 
@@ -53,10 +54,10 @@ newtype HiddenState = HiddenState [()]
 -- | Run a Cilk computation in parallel and then return control to the calling thread.
 runCilk :: HCilk a -> IO a
 runCilk hc = 
-      do (v, HiddenState ls) <- S.runStateT hc (HiddenState [])
-         -- Sync all child computations that were created.
-         -- We may be racing to fill these in with other threads.
-	 (foldl' pseq () ls) `pseq` return v
+    do x <- S.runStateT comp (HiddenState [])
+       return (fst x)
+ where 
+   comp = do x <- hc; syncAll; return x
 
 {-# INLINE spawn_core #-}
 spawn_core unsafe hc = 
@@ -75,8 +76,23 @@ spawn = spawn_core unsafePerformIO
 spawnDupable :: HCilk a -> HCilk (Future a)
 spawnDupable = spawn_core unsafeDupablePerformIO
 
-{-# INLINE sync #-}
--- | Synchronize only a single outstanding spawned computation and return its result.
-sync :: Future a -> HCilk a 
-sync (Future thunk) = thunk `pseq` return thunk
+syncAll :: HCilk ()
+syncAll = 
+   do 
+      HiddenState ls <- S.get 
+      S.put$ HiddenState []
+      -- Sync all child computations that were created.
+      -- We may be racing with other threads to fill these in.
+      (foldl' pseq () ls) `pseq` return ()
 
+-- get doesn't need to be monadic in this implementation, but in other implementations it might...
+{-# INLINE get #-}
+get :: Future a -> a 
+get (Future !thunk) = thunk
+
+-- get :: Future a -> HCilk a 
+-- get (Future !thunk) = return thunk
+
+-- | Synchronize only a single outstanding spawned computation and return its result.
+-- sync :: Future a -> HCilk a 
+-- sync (Future thunk) = thunk `pseq` return thunk
