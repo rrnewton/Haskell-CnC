@@ -142,6 +142,8 @@ That's 4X better than the non-dupable version.
 -- Running again after changing sync/get and with GHC 7.0.1
 --------------------------------------------------------------------------------
 {- 
+[2011.03]
+
   First, trying to reproduce the above... 
   On wasp it's using 400% cpu and negligable memory... 31% productivity and taking a long time.
 

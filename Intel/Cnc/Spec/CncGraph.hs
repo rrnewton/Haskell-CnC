@@ -25,31 +25,40 @@ import StringTable.AtomSet as AS
 import Text.PrettyPrint.HughesPJClass hiding (Style)
 import Data.Graph.Inductive as G
 
--- The total "Spec" includes the graph and other metadata.
--- Collect a global set of all collection names.
+-- | The total "Spec" includes the graph and other metadata.
 data CncSpec = CncSpec {
+  -- | steps, tags, items include all top-level collections in the graph.
   steps :: AtomSet,
   tags  :: AtomMap (Maybe Type),
   items :: AtomMap (Maybe (Type,Type)),
   reductions :: AtomMap (Atom, Exp (), Maybe (Type,Type)), -- Contains 'op' and type.
 
   graph :: CncGraph,
+
+  -- | appname is metadata, usually corresponding to the name of the .cnc file.
   appname :: String,
   -- Might as well cache this after it is extracted, used by FGL calls:
   nodemap :: NodeMap CncGraphNode,
   -- Annoyingly, FGL nodemaps are essentially unreadable and useless, hence this:
   realmap :: Map CncGraphNode Node,
+
   -- We store the graph in a "flat" form and separately keep a tree of partitions:
   harchtree :: ()
 }
 -- deriving (Eq, Ord)
 
+-- | The CnCGraph is a raw graph object without additional metadata and indexes.
+-- 
+--   NOTE: If a step peforms multiple gets/puts those are treated as
+--   SEPARATE EDGES in the graph currently.  (There is no notion of a
+--   TagFun returning a set of tags, but that may change.)
 type CncGraph = (Gr CncGraphNode (Maybe TagFun))
 
 type ColName = Atom
 
 builtinSteps = [toAtom special_environment_name]
 
+-- | The name of a collection, together with the type of collection (step/item/etc).
 data CncGraphNode  = 
     CGSteps      ColName 
   | CGTags       ColName 
@@ -94,6 +103,22 @@ verifySpec spec =
    -- All steps are prescribed.
    -- All tags/items have types (for now, for C++)
    -- 
+
+----------------------------------------------------------------------------------------------------
+
+
+-- | Go over all the edges from a step collection and collect their
+--   contributions to getcounts of neighboring item collections.
+stepGetCountContributions :: CncSpec -> ColName -> Map ColName Int
+--   For now getcounts are simple (static) numbers.  Dynamically
+--   valued getcounts may be a useful feature in the future.
+stepGetCountContributions spec stepC =
+  let 
+      nbrs = L.filter isItemC $ 
+             upstreamNbrs spec (CGSteps stepC)
+  in 
+  undefined
+
 
 -- Get the name of the tag collection that prescribes a given step.
 getStepPrescriber :: CncSpec -> ColName -> ColName

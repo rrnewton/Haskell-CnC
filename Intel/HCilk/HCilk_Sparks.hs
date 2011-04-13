@@ -96,3 +96,11 @@ get (Future !thunk) = thunk
 -- | Synchronize only a single outstanding spawned computation and return its result.
 -- sync :: Future a -> HCilk a 
 -- sync (Future thunk) = thunk `pseq` return thunk
+
+
+
+
+-- TODO: An interesting idea would be to force the series-parallel /
+-- strictly-nested model by, on each get, syncing ALL outstanding
+-- spawns that are more recent than the target.  That way it's
+-- strictly nested but exposes the same API...

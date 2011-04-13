@@ -89,11 +89,6 @@ fi
   else MAXTHREADS=2
   fi 
 
-if [ "$THREADSETTINGS" == "" ]; then 
-  THREADSETTINGS=$MAXTHREADS
-  #for ((i=1; i <= $MAX; i++)); do THREADSETTINGS="$THREADSETTINGS $i"; done 
-fi
-
 
 # ================================================================================
 echo "# TestName Variant Scheduler NumThreads HashHackEnabled MinTime MedianTime MaxTime" > $RESULTS

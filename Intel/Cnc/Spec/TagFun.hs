@@ -21,10 +21,14 @@ import Intel.Cnc.Spec.AST
 -- Tag expressions are distinct from Exp (in AST.hs) and much more
 -- restrictive.  (For example, conditionals are not allowed.)
 
+-- Tag expressions are parameterized by the type of variable references.
 data TagExp var = 
    TEVar var
  | TEInt Int -- Is there any conceivable need for arbitrary precision here?
  | TEApp Atom [TagExp var]
+
+-- TODO: Add optionality (maybe) to tag functions.
+-- TODO: Possible adapt tag functions to return sets of tags.
  deriving (Eq,Ord,Show,Data,Typeable)
 
 ------------------------------------------------------------
@@ -97,8 +101,7 @@ mkTagFun ctxtmsg exps1 exps2 =
 		" - Presently the tag expressions indexing step collections must be simple variables." 
 
 
-
--- Substititution on tag expressions.
+-- Substititution on tag expression's variables.
 substTagExp :: Eq a => a -> a -> TagExp a -> TagExp a
 substTagExp old new exp = 
   case exp of 
@@ -134,3 +137,13 @@ checkConvertTF e =
     App _ (Var _ name) rands -> TEApp name (Prelude.map checkConvertTF rands)
     App s _ _  -> locErr s "Only very simple function applications allowed in tag functions presently."
     If s _ _ _ -> locErr s "Conditionals disallowed in tag functions."
+
+-- | Compute the getcount contribution of a single tag function.
+getCountTF :: TagFun -> Maybe Int
+getCountTF (TF formals body) = 
+  case body of
+   -- UNFINISHED
+    _ -> Nothing
+ where 
+  
+

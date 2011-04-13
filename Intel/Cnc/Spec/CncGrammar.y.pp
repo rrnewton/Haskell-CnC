@@ -87,6 +87,8 @@ import Debug.Trace
 
 	type            { L _ LReservedId "type" }
 
+-- FUTURE WORK: Reserving space in the grammar for presently
+-- unimplemented features [2011.04.12]:
 	constrain       { L _ LReservedId "constrain" }
 
         eof             { L _ LEOF _ }
