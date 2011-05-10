@@ -75,7 +75,8 @@ data HooksTable = HooksTable
       -- plugins more clunky to use, and makes the below combineHooks
       -- function harder to write.  Besides, there is a sensible
       -- default hook -- it emits nothing.
-      
+
+      -- Add a top-level binding to the resulting header file:
       addTopLevel :: EasyEmit (),
 
       -- Declare & initialize (respectively) global state for a collection, stored in global context.
