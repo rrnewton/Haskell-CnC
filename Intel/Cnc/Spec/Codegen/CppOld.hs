@@ -570,6 +570,7 @@ generate_wrapper_context (CodeGenConfig{gendebug})
 -- FIXME FIXME TODO TODO: Factor this to merge it with Item collections.
 	   forM_ (AM.toList tags) $ \ (tgC, Just ty) -> 
 	     --var (TRef TTemplate "CnC::tag_collection" ty) (atomToSyn tgC)
+
 	     -- Unwrapped option, just a reference:
 	     --putD$ text "CnC::tag_collection" <> angles (cppType ty) <> t" & " <> textAtom tgC <> semi
              let wrapper = textAtom tgC <> t"_wrapper"
@@ -753,7 +754,7 @@ wrap_item_or_reduction_collection which colName ty1 ty2 classname stp plug_map f
 
 		       inlineFunDef retty (s nm) (map (doc2Ty . fst) args) $ \ (args::[Syntax]) -> 
                          do 
-#if 1
+#if 0
 			    putD$ (if gendebug -- Optionally include debugging assertions.
 				   then checkTagFun stp ((if isReduction then CGReductions else CGItems) colName) 
 						    (if isPut then lpre' else lsuc') 
