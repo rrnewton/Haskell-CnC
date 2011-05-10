@@ -16,6 +16,7 @@ module Intel.Cnc.Spec.Codegen.CppOld where
 
 import Intel.Cnc.Spec.Codegen.CodegenShared
 import Intel.Cnc.Spec.Codegen.Plugins
+import Intel.Cnc.Spec.Codegen.Plugins.Depends
 
 import Intel.Cnc.Spec.AST 
 import Intel.Cnc.Spec.TagFun
@@ -87,14 +88,6 @@ maybeComment ls mnd =
 
 ----------------------------------------------------------------------------------------------------
 
--- This predicate determines whether we can successfully determine all
--- the data dependencies of a step, for example to generate a depends function.
-all_tagfuns_tractible :: CncGraph -> Atom -> Bool
-all_tagfuns_tractible graph step =
-  True
- -- FIXME -- TODO -- FINISH THIS!!!
-
-
 -- Name for a private context:
 privcontext stp = textAtom stp <> t"_context"
 
@@ -149,8 +142,6 @@ emitCpp (config@CodeGenConfig{..}) (spec @ CncSpec{appname, steps, tags, items, 
 
        privcontext_member stp = t"m_priv_" <> privcontext stp 
        tls_key stp = privcontext stp <> t"_tls_key"
-
-       tuner_name stp = toDoc stp <> t"_tuner"
 
 
    --------------------------------------------------------------------------------
@@ -314,16 +305,15 @@ emitCpp (config@CodeGenConfig{..}) (spec @ CncSpec{appname, steps, tags, items, 
      -- ]
 
 
-
-
    ------------------------------------------------------------
    -- Top level bindings (such as tuners):
    ------------------------------------------------------------   
 
    maybeComment [t"", t"Plugin-generated top-level bindings:"]$
      forM_ (AM.toList plug_map) $ \ (stp, methodtables) -> do
-       sequence_ $ map addTopLevel methodtables
-
+       sequence_ $ 
+          map (\fn -> fn (Syn$t usercontext, Syn maincontext) ()) $
+          map addTopLevel methodtables
 
    --------------------------------------------------------------------------------
    -- Emit private contexts for each step.  This means building wrappers.
@@ -732,7 +722,7 @@ wrap_item_or_reduction_collection which colName ty1 ty2 classname stp plug_map f
 
 		       inlineFunDef retty (s nm) (map (doc2Ty . fst) args) $ \ (args::[Syntax]) -> 
                          do 
-#if 0
+#if 1
 			    putD$ (if gendebug -- Optionally include debugging assertions.
 				   then checkTagFun stp ((if isReduction then CGReductions else CGItems) colName) 
 						    (if isPut then lpre' else lsuc') 

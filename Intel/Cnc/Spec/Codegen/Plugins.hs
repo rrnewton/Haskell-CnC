@@ -77,7 +77,7 @@ data HooksTable = HooksTable
       -- default hook -- it emits nothing.
 
       -- Add a top-level binding to the resulting header file:
-      addTopLevel :: EasyEmit (),
+      addTopLevel :: Hook GrCtxt1 (),
 
       -- Declare & initialize (respectively) global state for a collection, stored in global context.
       addGlobalState :: (EasyEmit (), EasyEmit ()),
@@ -135,7 +135,7 @@ defaultHooksTable =
   let twoarg   =        const$ const$ return ()
   in HooksTable
   {
-      addTopLevel       = return (), 
+      addTopLevel       = twoarg,
       addGlobalState    = (return (), return ()),
       addLocalState     = (return (), return ()),
 
