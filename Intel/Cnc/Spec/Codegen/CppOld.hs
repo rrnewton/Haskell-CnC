@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, QuasiQuotes, NamedFieldPuns, ScopedTypeVariables #-}
+{-# LANGUAGE RecordWildCards, QuasiQuotes, NamedFieldPuns, ScopedTypeVariables, CPP #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 -- OverloadedStrings -- TODO: currently causes ambiguities with toDoc
 
@@ -742,41 +742,41 @@ wrap_item_or_reduction_collection which colName ty1 ty2 classname stp plug_map f
 		--  but it has too many arguments and is poorly abstracted.)
 	        wrapGP doret retty nm args isPut = 
 		       -- First let's put together the function's arguments:
-                       let -- args' = map (\ (tyD,v) -> tyD <+> text v) args 
-			   -- decls = commacat args'
-			   -- vars  = commacat $ map (text . snd) args
+                       let 
 			   doplugs project = execEasyEmit$ 
 			       -- FIXME: HACK:
 			       when (length args Prelude.>= 2) $
 		               forM_ (AM.findWithDefault [] stp plug_map) $ \ hooks ->
-				   project hooks (Syn$ t$ snd$ head args, Syn$ t$ snd$ head$tail args, colName)
-					         (Syn$ t$ snd$ head args, Syn$ t$ snd$ head$tail args)
+				   project hooks (Syn$ t$ snd$ head args, Syn$ t$ snd$ head$ tail args, colName)
+					         (Syn$ t$ snd$ head args, Syn$ t$ snd$ head$ tail args)
 		       in
 
 		       inlineFunDef retty (s nm) (map (doc2Ty . fst) args) $ \ (args::[Syntax]) -> 
 			    putD$ 
 				 (-- CHECK TAG FUNCTIONS
 				  --------------------------------------------------------------------------------
+#if 1
 				  (if gendebug -- Optionally include debugging assertions.
         	  	            then checkTagFun stp ((if isReduction then CGReductions else CGItems) colName) 
                                                      (if isPut then lpre' else lsuc') 
 				                     fprintf stderr abort tagty args realmap graph
 				    else empty) $$
+#endif
 				  --------------------------------------------------------------------------------
 				  -- TODO: Factor tagfun correctness into a Plugin
 				  --------------------------------------------------------------------------------
 				  -- Execute plugin hooks:
 				  -- FIXME: This should be put OR get..
 				  (if isPut 
-				   then doplugs (if isReduction then beforeItemPut else beforeItemPut)
-				   else doplugs (if isReduction then beforeItemGet else beforeItemGet)) $$
+				   then doplugs (if isReduction then beforeReducerPut else beforeItemPut)
+				   else doplugs (if isReduction then beforeReducerPut else beforeItemGet)) $$
 				  --------------------------------------------------------------------------------
 				  (if doret then t"return " else t"") <>
 				  t "m_"<> textAtom colName <> t"." <> t nm <> parens (commacat$ map deSyn args) <> semi $$
 				  --------------------------------------------------------------------------------
 				  (if isPut 
-				   then doplugs (if isReduction then afterItemPut else afterItemPut)
-				   else doplugs (if isReduction then afterItemGet else afterItemGet))
+				   then doplugs (if isReduction then afterReducerPut else afterItemPut)
+				   else doplugs (if isReduction then afterReducerPut else afterItemGet))
 				 )
 
                 -- Basic get or put:
