@@ -22,6 +22,7 @@ import Intel.Cnc.Spec.Codegen.CodegenShared
 import Intel.Cnc.Spec.Codegen.Plugins
 import Intel.Cnc.Spec.Codegen.Plugins.ReductionDone
 import Intel.Cnc.Spec.Codegen.Plugins.TagFunCorrectness
+import Intel.Cnc.Spec.Codegen.Plugins.Depends
 
 import qualified  Intel.Cnc.EasyEmit as EE -- TEMPTOGGLE
 
@@ -592,7 +593,8 @@ translateCommand verbosity opts_set files =
 #endif
          Debug       -> return cfg{ gendebug=True, wrapall=True }
          GenTracing  -> return cfg{ gentracing=True } 
-         GenDepends  -> return cfg{ gendepends=True } 
+         GenDepends  -> return cfg{ gendepends=True
+				  , plugins = dependsPlugin : plugins cfg } 
 
          AutoDone    -> return cfg{ done_plugins= reductionDonePlugin : done_plugins cfg }
          AutoDoneDbg -> return cfg{ done_plugins= reductionDonePlugin : done_plugins cfg

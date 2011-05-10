@@ -1,6 +1,5 @@
 {-# LANGUAGE CPP, NamedFieldPuns, ScopedTypeVariables #-}
 
-
 module Intel.Cnc.Spec.Codegen.Plugins.TagFunCorrectness
   (
    tagfunCorrectnessPlugin

@@ -75,6 +75,8 @@ data HooksTable = HooksTable
       -- plugins more clunky to use, and makes the below combineHooks
       -- function harder to write.  Besides, there is a sensible
       -- default hook -- it emits nothing.
+      
+      addTopLevel :: EasyEmit (),
 
       -- Declare & initialize (respectively) global state for a collection, stored in global context.
       addGlobalState :: (EasyEmit (), EasyEmit ()),
@@ -132,6 +134,7 @@ defaultHooksTable =
   let twoarg   =        const$ const$ return ()
   in HooksTable
   {
+      addTopLevel       = return (), 
       addGlobalState    = (return (), return ()),
       addLocalState     = (return (), return ()),
 

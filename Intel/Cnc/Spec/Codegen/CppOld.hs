@@ -313,38 +313,16 @@ emitCpp (config@CodeGenConfig{..}) (spec @ CncSpec{appname, steps, tags, items, 
      --   -- 	t"delete " <> (t$ step_obj$ fromAtom stp) <> semi)
      -- ]
 
+
+
+
    ------------------------------------------------------------
-   -- Emit the tuner for each step collection:
+   -- Top level bindings (such as tuners):
    ------------------------------------------------------------   
 
-   maybeComment [t"", t"Automatically generated tuners, where possible."]$
-     when gendepends $ 
-       forM_ stepls_with_types $ \ (stp,ty) -> 
-	 when (AS.member stp tractible_depends_steps) $
-	    cppStruct (Syn$ tuner_name stp)
-		      (Syn$ t"public CnC::default_tuner< "  <>
-			    cppType ty <> t", "<> 
-			    maincontext <> t" >")
-	     (do putS "bool preschedule() const { return false; }"
-	         putS "template< class dependency_consumer >" 
-		 constFunDef voidTy (s"depends") 
-			[TConst$ TRef$ ty, 
-			 TRef$ TSym$ toAtom$ render maincontext, 
-			 TRef$ TSym$ toAtom$ "dependency_consumer"] $ 
-			\ (Syn tag, contextref, deps) -> do
-			  let dep = function$ Syn$t$ synToStr$ deps `dot` s"depends"
-			  -- Now iterate through all data collections connected to the step collection:
-			  forM_ (lpre graph$ realmap M.! (CGSteps stp)) $ \ (nd, tgfn) -> 
-			    case lab graph nd of 
-			     Just (CGItems itC) -> do
-			       comm$ "Dependency on collection "++ (graphNodeName$ fromJust$ lab graph nd) ++", tagfun " ++ show tgfn
-			       case tgfn of 
-				 Just fn -> forM_ (applyTagFun fn tag) $ \ resulttag -> 
-					      EE.app dep [contextref `dot` Syn (toDoc itC), Syn resulttag]
-				 Nothing -> comm "Ack.. tag function not available..."
-			     _ -> return ()
-                 return ()
-	       )
+   maybeComment [t"", t"Plugin-generated top-level bindings:"]$
+     forM_ (AM.toList plug_map) $ \ (stp, methodtables) -> do
+       sequence_ $ map addTopLevel methodtables
 
 
    --------------------------------------------------------------------------------
