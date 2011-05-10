@@ -45,6 +45,11 @@ import qualified Prelude as P
 -- It returns a methodtable full of hooks IF the plugin applies to the given step, and Nothing otherwise.
 type CodeGenPlugin = CncSpec -> ColName -> Maybe HooksTable
 
+-- DESIGN NOTE: We could have created a type class for plugins and
+-- used existential types to pass around "objects" with their method
+-- tables.  But the below record-based approach is more explicit and
+-- doesn't complicate the types; so sticking with it for now.
+
 -- Each hook takes two groups of argument:
 --  (1) Graph context: names of relevant collections (other than the host step)
 --                     PLUS two bits of syntax that refer to the private/main contexts.
@@ -53,10 +58,11 @@ type Hook grphCtxt args = grphCtxt -> args -> EasyEmit ()
 
 -- It's very hard to keep all these pieces of "Syntax" straight.  To
 -- help a little we wrap them in new types.
+--   UNFINISHED!!! Haven't applied these new types yet!
 newtype PrivCtxtPtr = PrivCtxtPtr Syntax
 newtype MainCtxtRef = MainCtxtRef Syntax 
 
--- Graph context aliases:
+-- Graph context aliases: What information does a hook need about the graph?
 -- First two Syntax arguments are the names of the private/main context respectively
 type GrCtxt1 = (Syntax, Syntax)
 type GrCtxt2 = (Syntax, Syntax, ColName) -- Includes destination collection name.
@@ -66,7 +72,7 @@ data HooksTable = HooksTable
       -- I vacillated on whether or not to put all of these hooks
       -- (functions) inside a Maybe.  That would make it more clear
       -- what a plugin DOESN'T implement, but I think it makes the
-      -- plugins more clunky to use, and makes the belowe combineHooks
+      -- plugins more clunky to use, and makes the below combineHooks
       -- function harder to write.  Besides, there is a sensible
       -- default hook -- it emits nothing.
 
@@ -97,8 +103,6 @@ data HooksTable = HooksTable
       --       "addLocalState" before.
       --   (3) name of a variable holding a reference to the main
       --       context -- containing the state added by "addGlobalState"
---      beforeStepExecute :: Hook GrCtxt1 (Syntax,Syntax,Syntax),
---      afterStepExecute  :: Hook GrCtxt1 (Syntax,Syntax,Syntax),
      beforeStepExecute :: Hook GrCtxt1 (Syntax,Syntax,Syntax),
      afterStepExecute  :: Hook GrCtxt1 (Syntax,Syntax,Syntax),
 
@@ -205,29 +209,35 @@ testplugin spec stpC =
 --  DONE propogation plugins:
 -- -------------------------------------------------------------------------------------------------
 
--- Used in this file only:
-countername :: Int -> Syntax
-countername num = Syn$t$ "done_counter" ++ show num
-
+-- Done-plugins are a second kind of plugin that attaches an action
+-- when collections in the graph are all finished.  Done plugins
+-- essentially depend on a single, shared service of
+-- in-flight-instance-tracking.  Therefore, while more than one
+-- done-plugin may be used, but they must all be *combined* into a
+-- single regular plugin (together with the shared service).
 
 -- 'Done' plugins are composable with one another.
 -- A done plugin is both a predicate and a codegenerator that contributes to the "whenDone" method.
 -- The additional bool argument is a debug-mode flag.
 newtype  DonePlugin = DonePlugin (Bool -> CncGraphNode -> Maybe (EasyEmit ()))
 
+
 -- All the DonePlugins used in a run of the translator should be
 -- composed together before conversion into a regular plugin.
 composeDonePlugins :: DonePlugin -> DonePlugin -> DonePlugin 
 convertDonePlugin :: Bool -> DonePlugin -> CodeGenPlugin
 
+-- Used in this file only:
+countername :: Int -> Syntax
+countername num = Syn$t$ "done_counter" ++ show num
+
+--------------------------------------------------------------------------------
+-- autodone: Most basic done-plugin.
+--------------------------------------------------------------------------------
+
 -- | The autodone plugin introduces counters for step collections and
 -- | tracks when they are completely finished ("done").
 autodonePlugin      :: DonePlugin
-
---------------------------------------------------------------------------------
--- autodone: Most basic done plugin.
---------------------------------------------------------------------------------
-
 -- This is a basic plugin that tracks done-ness but doesn't actually DO anything.
 -- See other files in the Plugins/ directory for more meaningful Done functionality.
 autodonePlugin = DonePlugin $ 
@@ -237,7 +247,7 @@ autodonePlugin = DonePlugin $
 		    else Nothing
 
 --------------------------------------------------------------------------------
--- Composing and Converting done plugins.
+-- Composing and Converting done-plugins.
 --------------------------------------------------------------------------------
 
 composeDonePlugins (DonePlugin dp1) (DonePlugin dp2) = DonePlugin$ 
@@ -402,76 +412,8 @@ convertDonePlugin debug_autodone (DonePlugin dpgfun)
 
 
 
---------------------------------------------------------------------------------
--- Reduction-Done plugin:
---------------------------------------------------------------------------------
-{-
-__reduction debug_autodone 
-           BasicCycleAnalysis {upstream_map}
-            (spec@CncSpec{graph, steps, items, reductions, nodemap}) =
-  let 
-      autodone_plug = autodonePlugin debug_autodone spec
-      countername x = strToSyn$ "reduction_depcounter_" ++ show x
 
-      upstream_lookup redC = 
-	  case AM.lookup redC upstream_map of
-	     Nothing -> error$ "reductionDonePlugin: internal error, could not find upstream for reduction collection " ++ show redC
-	     Just x -> x      
-
-      -- Count number of upstreams for each reduction collection.
-      reduction_upstreams = AM.mapWithKey (\ redC (_,_,_) -> upstream_lookup redC) reductions
-      reduction_upstream_counts = AM.map S.size reduction_upstreams
-  in 
-  \ stpC ->
-  let is_maincontext = (stpC P.== toAtom special_environment_name) in
-  case autodone_plug stpC of 
-    Nothing -> Nothing
-    Just autodone_hooks -> Just $ 
-     autodone_hooks
-     { 
-       addGlobalState = 
-        let (lft,rht) = addGlobalState autodone_hooks in
-	-- This only happens ONCE, not per step-collection, and it adds ALL the counters/flag:
-	if is_maincontext
-	then ( do lft
-		  comm "[reduction_done] Additionally maintain counters for reduction collections:"
-	          -- Unlike step collections these track ONLY upstream dependencies, not instances.
-	          forM_ (AM.toList reductions) $ \ (redC, _) ->
-		     var (TSym "tbb::atomic<int>") (countername redC)
-	     , do rht
-		  comm "[reduction_done] Likewise initialize reduction_collection counters:"
-	          forM_ (AM.toList reductions) $ \ (redC, (op, init, ty)) -> do
--- 	             set (countername redC) (strToSyn$show$ reduction_upstream_counts AM.! redC)
--- FIXME!!! TAKE INTO ACCOUNT CYClES!!!!
-                     let upstrm = upstreamNbrs spec (CGReductions redC)
-	             comm$ "   reduction collection "++ show redC ++" depends on "++ show upstrm ++ ":"
- 	             set (countername redC) (strToSyn$show$ length upstrm)
---		  forM_ (zip [0..num_counters] allnodesets) $ \ (ind, ndset) -> do
-
-	     )
-	else (lft, rht)
-
-     , afterStepExecute = \ cxt x@(tag,priv,main) -> 
-	 do afterStepExecute autodone_hooks cxt x
-	    if_ (constant "done_transition")
-		(forM_ (filter isReductionC $ downstreamNbrs spec (CGSteps stpC)) $ \ (CGReductions redC) -> do
-		   let counter = main `dot` countername redC
-		   x <- tmpvar TInt 
-		   set x ((function (counter `dot` "fetch_and_increment")) [])
-		   if_ (x == 1)
-		       (do comm "[reduction_done] When the dependencies of a reduction collection are done, signal all_done() on it"
-			   when debug_autodone$
-			     app (function "printf") [stringconst$ " [reduction_done] Signaling all_done() for "++ show redC ++".\n"]
-		           app (function (main `dot` atomToSyn redC `dot` "all_done")) [])
-		       (return ())
-		   )		
-		(return ())
-
-     , whenDone = \ set -> do
-	  return () 
-
-     }
--}
+-- OTHER PLUGINS TO CONSIDER WRITING:
 
 ----------------------------------------------------------------------------------------------------
 -- Dead-Item-Collection plugin:
