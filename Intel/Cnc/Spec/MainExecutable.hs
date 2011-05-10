@@ -21,6 +21,7 @@ import Intel.Cnc.Spec.Codegen.CppOld
 import Intel.Cnc.Spec.Codegen.CodegenShared
 import Intel.Cnc.Spec.Codegen.Plugins
 import Intel.Cnc.Spec.Codegen.Plugins.ReductionDone
+import Intel.Cnc.Spec.Codegen.Plugins.TagFunCorrectness
 
 import qualified  Intel.Cnc.EasyEmit as EE -- TEMPTOGGLE
 

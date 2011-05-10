@@ -568,7 +568,6 @@ generate_wrapper_context (CodeGenConfig{gendebug})
 	   comm "Wrappers for tag collections:" 
 
 -- FIXME FIXME TODO TODO: Factor this to merge it with Item collections.
-	   --putD$ t"// Tag collections are simply aliases to the parents' (NO WRAPPING YET):" 
 	   forM_ (AM.toList tags) $ \ (tgC, Just ty) -> 
 	     --var (TRef TTemplate "CnC::tag_collection" ty) (atomToSyn tgC)
 	     -- Unwrapped option, just a reference:
@@ -690,7 +689,44 @@ generate_wrapper_context (CodeGenConfig{gendebug})
 
 ------------------------------------------------------------------------------------------------------------------------
 
--- HACK: TEMPORARY: This needs refactoring
+-- HACK: TEMPORARY: This needs refactoring.
+-- It has been factored out here, but clearly the interface is hugely complex:
+
+
+checkTagFun stp target getnbrs     fprintf stderr abort tagty args realmap graph =  
+      -- TODO INSERT CORRECTNESS CHECKING HERE:
+      let stpnd  = realmap M.! (CGSteps stp)
+	  itemnd = realmap M.! target
+	  gctxt  = context graph itemnd
+	  lnhbrs = getnbrs gctxt-- lpre' gctxt ++ lsuc' gctxt
+	  ls =  filter (\ (nd,lab) -> nd == stpnd) lnhbrs
+	  -- [(_,tf)] = filter (\ (nd,lab) -> nd == stpnd)$  lpre' gctxt				            
+	  --[(_,tf)] = trace (" LENGTH "++ show (length ls) ++" "++ show stpnd ++" "++ show itemnd++" "++ show lnhbrs) ls
+      in 
+	 execEasyEmit$
+	 case ls of 
+	   -- If we have no relationship to that collection its an error to access it:
+
+	   [] -> do let str = printf " [tagfun_check] CnC graph violation: should not access collection '%s' from '%s'" 
+				     (graphNodeName target :: String) (show stp) 
+		    EE.app fprintf [stderr, stringconst$ str]
+		    EE.app abort[]
+
+	   [(_,Nothing)] -> comm " [tagfun_check] No tag function to check..."
+
+	   --((_,Just (TF args exps)) : []) -> 
+
+	   ((_,Just (TF tfargs exps)) : tl) -> -- TEMPTOGGLE ... permissive, ignoring additional tag functions!
+	     case (tfargs,exps) of  
+	       ([arg], [exp]) -> 
+		  do comm (" [tagfun_check] Checking tag function "++ show arg ++" -> "++ show exp)
+		     -- TODO: use normal variable decl here:
+		     putD$ tagty <+> (fromAtom arg) <+> t"=" <+> t"* m_context->tag" <> semi
+		     when (not$ null args)$ assert (head args EE.== Syn (pPrint exp)) -- FIXME -- afer factoring fix this head args
+	       _ -> error "internal error: tag function correctness not fully implemented yet.  Finish me."
+
+	   _ -> error$ "internal error: tag function correctness codegen: \n w"++show ls
+
 
 wrap_item_or_reduction_collection which colName ty1 ty2 classname stp plug_map fprintf stderr abort maincontext realmap gendebug graph = 
            (
@@ -721,43 +757,10 @@ wrap_item_or_reduction_collection which colName ty1 ty2 classname stp plug_map f
 			    putD$ 
 				 (-- CHECK TAG FUNCTIONS
 				  --------------------------------------------------------------------------------
-				  let checkTagFun stp target getnbrs = 
-				        -- TODO INSERT CORRECTNESS CHECKING HERE:
-				        let stpnd  = realmap M.! (CGSteps stp)
-				            itemnd = realmap M.! target
-				            gctxt  = context graph itemnd
-				            lnhbrs = getnbrs gctxt-- lpre' gctxt ++ lsuc' gctxt
-				            ls =  filter (\ (nd,lab) -> nd == stpnd) lnhbrs
-	 			            -- [(_,tf)] = filter (\ (nd,lab) -> nd == stpnd)$  lpre' gctxt				            
-				            --[(_,tf)] = trace (" LENGTH "++ show (length ls) ++" "++ show stpnd ++" "++ show itemnd++" "++ show lnhbrs) ls
-				        in 
-				           execEasyEmit$
-				           case ls of 
-				             -- If we have no relationship to that collection its an error to access it:
-
-				             [] -> do let str = printf " [tagfun_check] CnC graph violation: should not access collection '%s' from '%s'" 
-							               (graphNodeName target :: String) (show stp) 
-						      EE.app fprintf [stderr, stringconst$ str]
-				                      EE.app abort[]
-
-				             [(_,Nothing)] -> comm " [tagfun_check] No tag function to check..."
-
-				             --((_,Just (TF args exps)) : []) -> 
-					     
-				             ((_,Just (TF tfargs exps)) : tl) -> -- TEMPTOGGLE ... permissive, ignoring additional tag functions!
-					       case (tfargs,exps) of  
-					         ([arg], [exp]) -> 
-						    do comm (" [tagfun_check] Checking tag function "++ show arg ++" -> "++ show exp)
-						       -- TODO: use normal variable decl here:
-						       putD$ tagty <+> (fromAtom arg) <+> t"=" <+> t"* m_context->tag" <> semi
-						       when (not$ null args)$ assert (head args EE.== Syn (pPrint exp)) -- FIXME -- afer factoring fix this head args
-						 _ -> error "internal error: tag function correctness not fully implemented yet.  Finish me."
-
-				             _ -> error$ "internal error: tag function correctness codegen: \n w"++show ls
-				  in				  
 				  (if gendebug -- Optionally include debugging assertions.
         	  	            then checkTagFun stp ((if isReduction then CGReductions else CGItems) colName) 
                                                      (if isPut then lpre' else lsuc') 
+				                     fprintf stderr abort tagty args realmap graph
 				    else empty) $$
 				  --------------------------------------------------------------------------------
 				  -- TODO: Factor tagfun correctness into a Plugin
@@ -820,15 +823,11 @@ wrap_item_or_reduction_collection which colName ty1 ty2 classname stp plug_map f
 
 
 
-
-------------------------------------------------------------------------------------------------------------------------
--- Tag function correctness checking code.
-------------------------------------------------------------------------------------------------------------------------
-
-
 ------------------------------------------------------------------------------------------------------------------------
 -- CODING HINTS GENERATION
 ------------------------------------------------------------------------------------------------------------------------
+
+-- UNFINISHED
 
 codingHints :: StringBuilder m => Bool -> CncSpec -> m ()
 
@@ -838,6 +837,7 @@ codingHints old_05_api (spec @ CncSpec{..}) =
        (t"foo") 4 (t"baz")
        )
     
+
 --------------------------------------------------------------------------------
 -- EXAMPLE: OLD CODING HINTS:
 
