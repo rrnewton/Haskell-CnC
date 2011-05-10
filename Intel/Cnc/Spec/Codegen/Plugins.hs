@@ -225,7 +225,12 @@ newtype  DonePlugin = DonePlugin (Bool -> CncGraphNode -> Maybe (EasyEmit ()))
 -- All the DonePlugins used in a run of the translator should be
 -- composed together before conversion into a regular plugin.
 composeDonePlugins :: DonePlugin -> DonePlugin -> DonePlugin 
-convertDonePlugin :: Bool -> DonePlugin -> CodeGenPlugin
+convertDonePlugin  :: Bool -> DonePlugin -> CodeGenPlugin
+-- | The autodone plugin introduces counters for step collections and
+-- | tracks when they are completely finished ("done").
+autodonePlugin      :: DonePlugin
+
+instance Show DonePlugin where show _ = "DonePlugin"
 
 -- Used in this file only:
 countername :: Int -> Syntax
@@ -235,9 +240,6 @@ countername num = Syn$t$ "done_counter" ++ show num
 -- autodone: Most basic done-plugin.
 --------------------------------------------------------------------------------
 
--- | The autodone plugin introduces counters for step collections and
--- | tracks when they are completely finished ("done").
-autodonePlugin      :: DonePlugin
 -- This is a basic plugin that tracks done-ness but doesn't actually DO anything.
 -- See other files in the Plugins/ directory for more meaningful Done functionality.
 autodonePlugin = DonePlugin $ 
@@ -266,7 +268,8 @@ isActiveCollection = isStepC -- For now only step collections are ACTIVE.
 -- Don't know why this isn't in the standard lib.
 set_any pred = S.fold (\ a b -> b || pred a) False 
 
--- Conversion from done plugin to a normal plugin.
+
+-- | Conversion from done plugin to a normal plugin.  The first argument is a debug flag.
 -- TODO: Currently debug mode is set for ALL done plugins.  We may want finer grained control.
 convertDonePlugin debug_autodone (DonePlugin dpgfun)
 		  (spec@CncSpec{graph, steps, items, reductions, nodemap}) 

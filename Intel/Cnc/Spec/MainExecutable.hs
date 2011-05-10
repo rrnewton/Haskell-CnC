@@ -579,7 +579,7 @@ translateCommand verbosity opts_set files =
 	   error$ "translate: cannot activate --autodone and --autodonedbg at the same time"
 
       -- Process options for this mode:
-      config <- foldM (\ cfg opt -> do 
+      protoconfig <- foldM (\ cfg opt -> do 
        case opt of 
          Help        -> return cfg
 #ifdef CNCVIZ
@@ -593,15 +593,24 @@ translateCommand verbosity opts_set files =
          GenTracing  -> return cfg{ gentracing=True } 
          GenDepends  -> return cfg{ gendepends=True } 
 
--- TODO: In the future all the activated DonePlugins will need to be combined.  For now, there's only one.
-         AutoDone    -> return cfg{ plugins= convertDonePlugin False reductionDonePlugin  : plugins cfg } 
-         AutoDoneDbg -> return cfg{ plugins= convertDonePlugin True reductionDonePlugin  : plugins cfg } 
+         AutoDone    -> return cfg{ done_plugins= reductionDonePlugin : done_plugins cfg }
+         AutoDoneDbg -> return cfg{ done_plugins= reductionDonePlugin : done_plugins cfg
+				  , debug_autodone = True } 
          NoStepDefs  -> return cfg{ genstepdefs=False } 
 
 	 m | codegenmode_option m -> return cfg
 	 o -> simpleErr mode ("Internal error: Currently unhandled option: "++ show o ++"\n")
        ) default_codegen_config opts
 
+      -- Finally, squish all done plugins into one and add them into the main plugin list:
+      let config = case done_plugins protoconfig of 
+		    [] -> config
+		    ls -> protoconfig 
+			  { done_plugins = [],
+			    plugins = let all_dones = foldl1 composeDonePlugins ls in 
+			              convertDonePlugin (debug_autodone protoconfig) all_dones 
+			               : plugins protoconfig
+			  }
 
       -- Now do the actual translation (if we get to here):
       ------------------------------------------------------------

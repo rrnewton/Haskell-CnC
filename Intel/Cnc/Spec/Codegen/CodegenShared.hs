@@ -30,6 +30,11 @@ data CodeGenConfig = CodeGenConfig
       , gendebug    :: Bool
       , wrapall     :: Bool -- wrap ALL collections no matter what
       , plugins     :: [CodeGenPlugin]
+      , done_plugins :: [DonePlugin]
+
+      -- Debug flags:
+      , debug_autodone :: Bool
+      -- , debug_* :: Bool
       }
   deriving Show
 
@@ -42,9 +47,7 @@ default_codegen_config =
       , gendepends  = False
       , gendebug    = False
       , wrapall     = False
+      , done_plugins = []
       , plugins     = []
---      , plugins     = [testplugin]
---      , plugins     = [autodonePlugin]
---      , plugins     = []
+      , debug_autodone = False 
      }
-
