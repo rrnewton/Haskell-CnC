@@ -1,0 +1,18 @@
+Running with tagfun checking.
+ [autodone] Initializing done counters...
+ [autodone] env: Incrementing S1 refcount to 2
+ [autodone] env: Incrementing S1 refcount to 3
+ [autodone] env: Incrementing S1 refcount to 4
+ [autodone] env: Incrementing S1 refcount to 5
+ [autodone] env: Incrementing S1 refcount to 6
+ [autodone] Environment waiting, considered done.
+ [autodone] Decremented (env) to 0
+ [autodone] Node(s) done [env], upstream deps met: []
+ [autodone] Decremented (S1) to 5
+ [autodone] env NOT DONE
+Step1 exec with tag 4
+ [autodone] S1: Incrementing S2 refcount to 2
+ [autodone] Decremented (S1) to 4
+ [autodone] env NOT DONE
+Step2 exec with tag 4
+Step2 VIOLATES TAG FUNCTION HERE: +2 instead of +1:

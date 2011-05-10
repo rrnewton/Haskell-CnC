@@ -13,7 +13,7 @@ int S1::execute( const int & tag, ctxt & c) const {
 template < class ctxt > 
 int S2::execute( const int & tag, ctxt & c) const {
     printf("Step2 exec with tag %d\n", tag);
-    // VIOLATE THE TAG FUNCTION HERE, +2 instead of +1:
+    printf("Step2 VIOLATES TAG FUNCTION HERE: +2 instead of +1:\n");
     c.I.put(tag + 2, (tag * 3.33)); 
     return CnC::CNC_Success;    
 }

@@ -91,9 +91,6 @@ import Debug.Trace
 -- unimplemented features [2011.04.12]:
  constrain { L _ LReservedId "constrain" }
 
- cnc_graph { L _ LReservedId "cnc_graph" }
- step { L _ LReservedId "step" }
-
         eof { L _ LEOF _ }
 
 -- comment { L _ LComment _ }
