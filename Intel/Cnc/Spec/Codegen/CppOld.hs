@@ -752,32 +752,25 @@ wrap_item_or_reduction_collection which colName ty1 ty2 classname stp plug_map f
 		       in
 
 		       inlineFunDef retty (s nm) (map (doc2Ty . fst) args) $ \ (args::[Syntax]) -> 
-			    putD$ 
-				 (-- CHECK TAG FUNCTIONS
-				  --------------------------------------------------------------------------------
+                         do 
 #if 1
-				  (if gendebug -- Optionally include debugging assertions.
-        	  	            then checkTagFun stp ((if isReduction then CGReductions else CGItems) colName) 
-                                                     (if isPut then lpre' else lsuc') 
-				                     fprintf stderr abort tagty args realmap graph
-				    else empty) $$
+			    putD$ (if gendebug -- Optionally include debugging assertions.
+				   then checkTagFun stp ((if isReduction then CGReductions else CGItems) colName) 
+						    (if isPut then lpre' else lsuc') 
+						    fprintf stderr abort tagty args realmap graph
+				   else empty)
 #endif
-				  --------------------------------------------------------------------------------
-				  -- TODO: Factor tagfun correctness into a Plugin
-				  --------------------------------------------------------------------------------
-				  -- Execute plugin hooks:
-				  -- FIXME: This should be put OR get..
-				  (if isPut 
+                            -- Execute plugin hooks:
+                            putD$ (if isPut 
 				   then doplugs (if isReduction then beforeReducerPut else beforeItemPut)
-				   else doplugs (if isReduction then beforeReducerPut else beforeItemGet)) $$
-				  --------------------------------------------------------------------------------
-				  (if doret then t"return " else t"") <>
-				  t "m_"<> textAtom colName <> t"." <> t nm <> parens (commacat$ map deSyn args) <> semi $$
-				  --------------------------------------------------------------------------------
-				  (if isPut 
+				   else doplugs (if isReduction then beforeReducerGet else beforeItemGet))
+			    --------------------------------------------------------------------------------
+			    putD$ (if doret then t"return " else t"") <>
+				  t "m_"<> textAtom colName <> t"." <> t nm <> parens (commacat$ map deSyn args) <> semi 
+			    --------------------------------------------------------------------------------
+			    putD$ (if isPut 
 				   then doplugs (if isReduction then afterReducerPut else afterItemPut)
-				   else doplugs (if isReduction then afterReducerPut else afterItemGet))
-				 )
+				   else doplugs (if isReduction then afterReducerGet else afterItemGet))
 
                 -- Basic get or put:
 		basicGP nm isPut = wrapGP False voidTy nm 
