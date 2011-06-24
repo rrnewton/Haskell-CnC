@@ -607,7 +607,7 @@ translateCommand verbosity opts_set files =
 
       -- Finally, squish all done plugins into one and add them into the main plugin list:
       let config = case done_plugins protoconfig of 
-		    [] -> config
+		    [] -> protoconfig
 		    ls -> protoconfig 
 			  { done_plugins = [],
 			    plugins = let all_dones = foldl1 composeDonePlugins ls in 
