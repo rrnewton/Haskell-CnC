@@ -122,9 +122,10 @@ Preprocessor variables:
 
 
 ------------------------------------------------------------
-Notes on running a full benchmark suite
+  Testing and Benchmarking
 ------------------------------------------------------------
 
+Notes on running a full benchmark suite:
 
 To compile with profiling support (for threadscope)
 
@@ -136,32 +137,5 @@ To run and generate a .eventlog:
 
 Will generate mandel.exe.eventlog
 
-
-
-
-----------------------------------------------------------------------------------------------------
- < Building and running the Haskell CnC Spec Compiler/Translator >
-----------------------------------------------------------------------------------------------------
-
-The main entrypoint for the Spec tool is Intel/Cnc/Spec/Main.hs.
-
-
-
-------------------------------------------------------------
-Unit and system tests.
-------------------------------------------------------------
-
-Once you have built the "cnc" executable, you can run unit tests with: 
-
-    cnc --selftest
-
-The system tests are under the ./tests_spec/ directory.  That
-directory contains its own Makefile which supports building and
-running:
-
-    make 
-    make run
-
-You may also refer to the README in that directory.
 
 

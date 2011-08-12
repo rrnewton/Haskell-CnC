@@ -55,7 +55,7 @@ interactIO:
 	ghci -cpp -DCNC_SCHEDULER=5 Intel/Cnc.hs
 
 test: 
-	THREADS=1 ./run_all_tests.sh
+	THREADS=1 ./run_all_examples.sh
 
 longtest: 
 	TRIALS=3 NONSTRICT=1 LONGRUN=1 THREADSETTINGS=="0 1 2 3 4 8" ./run_all_examples.sh &> /dev/stdout | tee all_tests.log
