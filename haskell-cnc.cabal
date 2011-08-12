@@ -1,15 +1,7 @@
 Name:           haskell-cnc
 
-Version:        0.1.3.108
--- [2010.11.10] 0.1.3.100 Bumping slightly after change to CNC_ASSUME_TR1
--- [2010.11.10] 0.1.3.101 New scheme for extracting version from cabal file.
--- [2010.12.06] 0.1.3.102 Bumped for recent translator plugin rearchitecture.
--- [2010.12.06] 0.1.3.103 Bumped for completion of autodone facility.
--- [2010.12.06] 0.1.3.104 Bumped for fix of autodone to remove item collections re: cycles.
--- [2010.12.06] 0.1.3.105 Bumped for done-signalling for reductions.
--- [2011.01.25] 0.1.3.106 Bumped for signifcant work in various areas.
--- [2011.01.25] 0.1.3.107 Bumped for new binary trace recording.
--- [2011.01.25] 0.1.3.108 Bumped for new binary trace format.
+Version:        0.1.3.200
+-- [2011.08.12] 0.1.3.200     Bumped after removing translator / spec compiler.
 
 License: BSD3
 License-file:   LICENSE
@@ -68,7 +60,6 @@ library
                     Intel/Cnc.hs Intel/CncPure.hs Intel/Cnc3.hs Intel/Cnc4.hs Intel/Cnc5.hs Intel/Cnc6.hs Intel/Cnc7.hs
                     Intel/Cnc8.hs Intel/Cnc10.hs
 		    
-
   -- This seems to be completly ignored by cabal currently:
   -- Test testit
   --   type: library-1
@@ -82,23 +73,3 @@ Executable haskell-cnc-runTests
   GHC-Options: -O2 -threaded 
 --  cpp-options: -DUSE_GMAP
 
-
-Executable cnc
-  Main-is:           Intel/Cnc/Spec/Main.hs
-  Build-Depends:     base >= 3 && < 5, directory, process, prettyclass, pretty
-                   , stringtable-atom, filepath, split, graphviz
-                   , parsec >= 3.1.0
-                   , hubigraph, haxr, HTTP, network
-                   , hscurses, ansi-terminal
-                   , fgl, Graphalyze 
-                   , zlib, binary
--- , ghc-binary
-
-  cpp-options: -DCNCVIZ
--- interpolatedstring-qq, genericserialize, -- [2010.07.23] Removing for now
--- happy, alex 
-
-  other-modules:  Intel.Cnc.Spec.AST    Intel.Cnc.Spec.CncLexer    Intel.Cnc.Spec.CncGrammar
-                  Intel.Cnc.Spec.SrcLoc Intel.Cnc.Spec.GatherGraph Intel.Cnc.Spec.Codegen.CppOld
-  extensions: 
-  GHC-Options: -O2 -threaded 
